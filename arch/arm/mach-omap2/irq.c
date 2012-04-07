@@ -198,6 +198,7 @@ void __init ti81xx_init_irq(void)
 	omap_init_irq(OMAP34XX_IC_BASE, 128);
 }
 
+extern int just_woke;
 static inline void omap_intc_handle_irq(void __iomem *base_addr, struct pt_regs *regs)
 {
 	u32 irqnr;
@@ -225,9 +226,14 @@ out:
 		irqnr = readl_relaxed(base_addr + INTCPS_SIR_IRQ_OFFSET);
 		irqnr &= ACTIVEIRQ_MASK;
 
+		if (just_woke && irqnr) printk("just_woke: irq %d\n", irqnr);
 		if (irqnr)
 			handle_IRQ(irqnr, regs);
 	} while (irqnr);
+	if (just_woke) {
+		printk("just_woke: done\n");
+		just_woke = 0;
+	}
 }
 
 asmlinkage void __exception_irq_entry omap2_intc_handle_irq(struct pt_regs *regs)

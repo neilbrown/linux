@@ -479,6 +479,7 @@ restore:
 	return ret;
 }
 
+int just_woke;
 static int omap3_pm_enter(suspend_state_t unused)
 {
 	int ret = 0;
@@ -492,6 +493,7 @@ static int omap3_pm_enter(suspend_state_t unused)
 		ret = -EINVAL;
 	}
 
+	just_woke = 1;
 	return ret;
 }
 

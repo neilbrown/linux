@@ -80,6 +80,8 @@ static void omap_prcm_events_filter_priority(unsigned long *events,
  * dispatched accordingly. Clearing of the wakeup events should be
  * done by the SoC specific individual handlers.
  */
+extern int just_woke;
+int just_woke_prcm;
 static void omap_prcm_irq_handler(unsigned int irq, struct irq_desc *desc)
 {
 	unsigned long pending[OMAP_PRCM_MAX_NR_PENDING_REG];
@@ -103,6 +105,10 @@ static void omap_prcm_irq_handler(unsigned int irq, struct irq_desc *desc)
 		prcm_irq_setup->suspend_save_flag = true;
 	}
 
+	if (just_woke) {
+		printk("just_woke_prcm: %d\n", prcm_irq_setup->suspended);
+		just_woke_prcm = 1;
+	}
 	/*
 	 * Loop until all pending irqs are handled, since
 	 * generic_handle_irq() can cause new irqs to come
@@ -122,13 +128,21 @@ static void omap_prcm_irq_handler(unsigned int irq, struct irq_desc *desc)
 		 */
 
 		/* Serve priority events first */
-		for_each_set_bit(virtirq, priority_pending, nr_irqs)
+		for_each_set_bit(virtirq, priority_pending, nr_irqs) {
+			if (just_woke_prcm) printk("just_woke_prcm priority %d\n",
+						   prcm_irq_setup->base_irq + virtirq);
 			generic_handle_irq(prcm_irq_setup->base_irq + virtirq);
+		}
 
 		/* Serve normal events next */
-		for_each_set_bit(virtirq, pending, nr_irqs)
+		for_each_set_bit(virtirq, pending, nr_irqs) {
+			if (just_woke_prcm) printk("just_woke_prcm normal %d\n",
+						   prcm_irq_setup->base_irq + virtirq);
 			generic_handle_irq(prcm_irq_setup->base_irq + virtirq);
+		}
 	}
+	if (!prcm_irq_setup->suspended)
+		just_woke_prcm = 0;
 	if (chip->irq_ack)
 		chip->irq_ack(&desc->irq_data);
 	if (chip->irq_eoi)
