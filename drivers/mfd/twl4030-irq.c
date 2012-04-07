@@ -298,13 +298,16 @@ static irqreturn_t handle_twl4030_pih(int irq, void *devid)
 		pr_warning("twl4030: I2C error %d reading PIH ISR\n", ret);
 		return IRQ_NONE;
 	}
+	pr_debug("TWL PIH %d: %x\n", irq, pih_isr);
 
 	/* these handlers deal with the relevant SIH irq status */
 	for (module_irq = twl4030_irq_base;
 			pih_isr;
 			pih_isr >>= 1, module_irq++) {
-		if (pih_isr & 0x1)
+		if (pih_isr & 0x1) {
+			pr_debug("TWL PIH calling %d\n", module_irq);
 			handle_nested_irq(module_irq);
+		}
 	}
 
 	return IRQ_HANDLED;
@@ -606,14 +609,17 @@ static irqreturn_t handle_twl4030_sih(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 
+	pr_debug("TWL SIH %d: %x\n", irq, isr);
+
 	while (isr) {
 		irq = fls(isr);
 		irq--;
 		isr &= ~BIT(irq);
 
-		if (irq < sih->bits)
+		if (irq < sih->bits) {
+			pr_debug("TWL nested irq %d\n", agent->irq_base + irq);
 			handle_nested_irq(agent->irq_base + irq);
-		else
+		} else
 			pr_err("twl4030: %s SIH, invalid ISR bit %d\n",
 				sih->name, irq);
 	}
