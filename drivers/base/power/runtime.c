@@ -623,6 +623,7 @@ static int rpm_resume(struct device *dev, int rpmflags)
 
 		/* Wait for the operation carried out in parallel with us. */
 		for (;;) {
+			long x;
 			prepare_to_wait(&dev->power.wait_queue, &wait,
 					TASK_UNINTERRUPTIBLE);
 			if (dev->power.runtime_status != RPM_RESUMING
@@ -631,7 +632,10 @@ static int rpm_resume(struct device *dev, int rpmflags)
 
 			spin_unlock_irq(&dev->power.lock);
 
-			schedule();
+			printk("%s: wait while status = %d\n",
+			       dev_name(dev), dev->power.runtime_status);
+			x = schedule_timeout(15*HZ);
+			printk(" %ld -> %ld\n", 15L*HZ, x);
 
 			spin_lock_irq(&dev->power.lock);
 		}
