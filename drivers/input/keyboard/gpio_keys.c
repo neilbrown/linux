@@ -351,6 +351,8 @@ static void gpio_keys_work_func(struct work_struct *work)
 		container_of(work, struct gpio_button_data, work);
 
 	gpio_keys_report_event(bdata);
+	if (bdata->button->wakeup)
+		pm_relax(bdata->input->dev.parent);
 }
 
 static void gpio_keys_timer(unsigned long _data)
@@ -367,6 +369,9 @@ static irqreturn_t gpio_keys_isr(int irq, void *dev_id)
 
 	BUG_ON(irq != gpio_to_irq(button->gpio));
 	bdata->pending = true;
+
+	if (bdata->button->wakeup)
+		pm_stay_awake(bdata->input->dev.parent);
 	if (bdata->timer_debounce)
 		mod_timer(&bdata->timer,
 			jiffies + msecs_to_jiffies(bdata->timer_debounce));
