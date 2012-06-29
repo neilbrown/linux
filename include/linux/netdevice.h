@@ -1898,12 +1898,22 @@ static inline void netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 {
 #ifdef CONFIG_BQL
 	dql_queued(&dev_queue->dql, bytes);
-	if (unlikely(dql_avail(&dev_queue->dql) < 0)) {
-		set_bit(__QUEUE_STATE_STACK_XOFF, &dev_queue->state);
-		if (unlikely(dql_avail(&dev_queue->dql) >= 0))
-			clear_bit(__QUEUE_STATE_STACK_XOFF,
-			    &dev_queue->state);
-	}
+
+	if (likely(dql_avail(&dev_queue->dql) >= 0))
+		return;
+
+	set_bit(__QUEUE_STATE_STACK_XOFF, &dev_queue->state);
+
+	/*
+	 * The XOFF flag must be set before checking the dql_avail below,
+	 * because in netdev_tx_completed_queue we update the dql_completed
+	 * before checking the XOFF flag.
+	 */
+	smp_mb();
+
+	/* check again in case another CPU has just made room avail */
+	if (unlikely(dql_avail(&dev_queue->dql) >= 0))
+		clear_bit(__QUEUE_STATE_STACK_XOFF, &dev_queue->state);
 #endif
 }
 
@@ -1916,16 +1926,23 @@ static inline void netdev_tx_completed_queue(struct netdev_queue *dev_queue,
 					     unsigned pkts, unsigned bytes)
 {
 #ifdef CONFIG_BQL
-	if (likely(bytes)) {
-		dql_completed(&dev_queue->dql, bytes);
-		if (unlikely(test_bit(__QUEUE_STATE_STACK_XOFF,
-		    &dev_queue->state) &&
-		    dql_avail(&dev_queue->dql) >= 0)) {
-			if (test_and_clear_bit(__QUEUE_STATE_STACK_XOFF,
-			     &dev_queue->state))
-				netif_schedule_queue(dev_queue);
-		}
-	}
+	if (unlikely(!bytes))
+		return;
+
+	dql_completed(&dev_queue->dql, bytes);
+
+	/*
+	 * Without the memory barrier there is a small possiblity that
+	 * netdev_tx_sent_queue will miss the update and cause the queue to
+	 * be stopped forever
+	 */
+	smp_mb();
+
+	if (dql_avail(&dev_queue->dql) < 0)
+		return;
+
+	if (test_and_clear_bit(__QUEUE_STATE_STACK_XOFF, &dev_queue->state))
+		netif_schedule_queue(dev_queue);
 #endif
 }
 
@@ -1938,6 +1955,7 @@ static inline void netdev_completed_queue(struct net_device *dev,
 static inline void netdev_tx_reset_queue(struct netdev_queue *q)
 {
 #ifdef CONFIG_BQL
+	clear_bit(__QUEUE_STATE_STACK_XOFF, &q->state);
 	dql_reset(&q->dql);
 #endif
 }
@@ -2582,8 +2600,6 @@ extern void		net_disable_timestamp(void);
 extern void *dev_seq_start(struct seq_file *seq, loff_t *pos);
 extern void *dev_seq_next(struct seq_file *seq, void *v, loff_t *pos);
 extern void dev_seq_stop(struct seq_file *seq, void *v);
-extern int dev_seq_open_ops(struct inode *inode, struct file *file,
-			    const struct seq_operations *ops);
 #endif
 
 extern int netdev_class_create_file(struct class_attribute *class_attr);
