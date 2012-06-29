@@ -44,6 +44,7 @@ static irqreturn_t powerbutton_irq(int irq, void *_pwr)
 	if (!err)  {
 		int val = !!(value & PWR_PWRON_IRQ);
 
+		pm_wakeup_event(pwr->dev.parent, 0);
 		/* We got an interrupt, so we must see a change.
 		 * Because the TWL4030 queues pending interrupts to a depth
 		 * of 2, we end up seeing twl keep presses as there can
