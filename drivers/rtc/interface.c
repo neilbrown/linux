@@ -569,6 +569,7 @@ enum hrtimer_restart rtc_pie_update_irq(struct hrtimer *timer)
 void rtc_update_irq(struct rtc_device *rtc,
 		unsigned long num, unsigned long events)
 {
+	pm_stay_awake(rtc->dev.parent);
 	schedule_work(&rtc->irqwork);
 }
 EXPORT_SYMBOL_GPL(rtc_update_irq);
@@ -852,6 +853,7 @@ again:
 			timerqueue_add(&rtc->timerqueue, &timer->node);
 		}
 	}
+	pm_relax(rtc->dev.parent);
 
 	/* Set next alarm */
 	if (next) {
