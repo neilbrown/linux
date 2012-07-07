@@ -1141,9 +1141,11 @@ static struct omap_board_mux board_mux[] __initdata = {
 	{ .reg_offset = OMAP_MUX_TERMINATOR },
 };
 
+struct wakeup_source *wake_3g;
 static irqreturn_t wake_3G_irq(int irq, void *handle)
 {
 	printk("3G Wakeup\n");
+	__pm_wakeup_event(wake_3g, 0);
 	return IRQ_HANDLED;
 }
 
@@ -1161,6 +1163,8 @@ static int __init wake_3G_init(void)
 	gpio_export(WO3G_GPIO, 0);
 	gpio_set_debounce(WO3G_GPIO, 350);
 	irq_set_irq_wake(OMAP_GPIO_IRQ(WO3G_GPIO), 1);
+
+	wake_3g = wakeup_source_register("3g");
 
 	err = request_irq(OMAP_GPIO_IRQ(WO3G_GPIO),
 			  wake_3G_irq, IRQF_SHARED|IRQF_TRIGGER_RISING,
