@@ -145,6 +145,7 @@ static void omap2430_musb_set_vbus(struct musb *musb, int is_on)
 
 	if (is_on) {
 		if (musb->xceiv->state == OTG_STATE_A_IDLE) {
+			int loops = 100;
 			/* start the session */
 			devctl |= MUSB_DEVCTL_SESSION;
 			musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
@@ -156,7 +157,8 @@ static void omap2430_musb_set_vbus(struct musb *musb, int is_on)
 
 				cpu_relax();
 
-				if (time_after(jiffies, timeout)) {
+				if (time_after(jiffies, timeout)
+				    || loops-- <= 0) {
 					dev_err(musb->controller,
 					"configured as A device timeout");
 					ret = -EINVAL;
