@@ -2511,6 +2511,7 @@ CONFIG_IIO_CONSUMERS_PER_TRIGGER=2
 # CONFIG_ADIS16130 is not set
 # CONFIG_ADIS16260 is not set
 # CONFIG_ADXRS450 is not set
+CONFIG_ITG3200=y
 
 #
 # Network Analyzer, Impedance Converters

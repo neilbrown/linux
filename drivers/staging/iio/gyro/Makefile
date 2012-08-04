@@ -20,3 +20,6 @@ obj-$(CONFIG_ADIS16251) += adis16251.o
 
 adxrs450-y             := adxrs450_core.o
 obj-$(CONFIG_ADXRS450) += adxrs450.o
+
+itg3200-y		:= itg3200_core.o
+obj-$(CONFIG_ITG3200)	+= itg3200.o

@@ -46,4 +46,10 @@ config ADXRS450
 	  This driver can also be built as a module.  If so, the module
 	  will be called adxrs450.
 
+config ITG3200
+	tristate "InvenSence ITG3200 3-axis gyroscope"
+	depends on I2C
+	help
+	  Support for 3-axis gyroscope as IIO device
+
 endmenu
