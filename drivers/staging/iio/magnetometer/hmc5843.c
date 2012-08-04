@@ -272,7 +272,7 @@ static ssize_t hmc5843_set_measurement_configuration(struct device *dev,
 {
 	struct iio_dev *indio_dev = dev_get_drvdata(dev);
 	struct i2c_client *client = to_i2c_client(indio_dev->dev.parent);
-	struct hmc5843_data *data = i2c_get_clientdata(client);
+	struct hmc5843_data *data = iio_priv(indio_dev);
 	unsigned long meas_conf = 0;
 	int error = strict_strtoul(buf, 10, &meas_conf);
 	if (error)
@@ -515,6 +515,7 @@ static int hmc5843_detect(struct i2c_client *client,
 	if (0 != strncmp(id_str, HMC5843_ID_STRING, HMC5843_ID_REG_LENGTH))
 		return -ENODEV;
 
+	strlcpy(info->type, "hmc5843", I2C_NAME_SIZE);
 	return 0;
 }
 
@@ -619,6 +620,7 @@ static struct i2c_driver hmc5843_driver = {
 	.address_list	= normal_i2c,
 	.suspend	= hmc5843_suspend,
 	.resume		= hmc5843_resume,
+	.class		= I2C_CLASS_HWMON,
 };
 
 static int __init hmc5843_init(void)
