@@ -47,7 +47,10 @@
 #include <linux/init.h>
 #include <linux/i2c.h>
 #include <linux/slab.h>
-#include <linux/delay.h>
+#include <linux/interrupt.h>
+#include <linux/completion.h>
+#include <linux/gpio.h>
+#include <linux/i2c/bmp085.h>
 
 
 #define BMP085_I2C_ADDRESS		0x77
@@ -89,8 +92,18 @@ struct bmp085_data {
 	unsigned char oversampling_setting;
 	u32 last_temp_measurement;
 	s32 b6; /* calculated temperature correction coefficient */
+	int irq;
+	int gpio;
+	struct completion done;
 };
 
+
+static irqreturn_t bmp085_eoc_isr(int irq, void *devid)
+{
+	struct bmp085_data *data = devid;
+	complete(&data->done);
+	return IRQ_HANDLED;
+}
 
 static s32 bmp085_read_calibration_data(struct i2c_client *client)
 {
@@ -128,6 +141,7 @@ static s32 bmp085_update_raw_temperature(struct bmp085_data *data)
 	s32 status;
 
 	mutex_lock(&data->lock);
+	init_completion(&data->done);
 	status = i2c_smbus_write_byte_data(data->client, BMP085_CTRL_REG,
 						BMP085_TEMP_MEASUREMENT);
 	if (status != 0) {
@@ -135,7 +149,8 @@ static s32 bmp085_update_raw_temperature(struct bmp085_data *data)
 			"Error while requesting temperature measurement.\n");
 		goto exit;
 	}
-	msleep(BMP085_TEMP_CONVERSION_TIME);
+	wait_for_completion_timeout(&data->done, msecs_to_jiffies(
+					    BMP085_TEMP_CONVERSION_TIME));
 
 	status = i2c_smbus_read_i2c_block_data(data->client,
 		BMP085_CONVERSION_REGISTER_MSB, sizeof(tmp), (u8 *)&tmp);
@@ -162,6 +177,7 @@ static s32 bmp085_update_raw_pressure(struct bmp085_data *data)
 	s32 status;
 
 	mutex_lock(&data->lock);
+	init_completion(&data->done);
 	status = i2c_smbus_write_byte_data(data->client, BMP085_CTRL_REG,
 		BMP085_PRESSURE_MEASUREMENT + (data->oversampling_setting<<6));
 	if (status != 0) {
@@ -171,8 +187,8 @@ static s32 bmp085_update_raw_pressure(struct bmp085_data *data)
 	}
 
 	/* wait for the end of conversion */
-	msleep(2+(3 << data->oversampling_setting));
-
+	wait_for_completion_timeout(&data->done, msecs_to_jiffies(
+					    2+(3 << data->oversampling_setting)));
 	/* copy data into a u32 (4 bytes), but skip the first byte. */
 	status = i2c_smbus_read_i2c_block_data(data->client,
 			BMP085_CONVERSION_REGISTER_MSB, 3, ((u8 *)&tmp)+1);
@@ -406,6 +422,7 @@ static int __devinit bmp085_probe(struct i2c_client *client,
 			 const struct i2c_device_id *id)
 {
 	struct bmp085_data *data;
+	struct bmp085_platform_data *pdata = client->dev.platform_data;
 	int err = 0;
 
 	data = kzalloc(sizeof(struct bmp085_data), GFP_KERNEL);
@@ -419,19 +436,49 @@ static int __devinit bmp085_probe(struct i2c_client *client,
 
 	i2c_set_clientdata(client, data);
 
+	init_completion(&data->done);
+
+	if (pdata && gpio_is_valid(pdata->gpio)) {
+		err = gpio_request(pdata->gpio, "bmp085_eoc_irq");
+		if (err)
+			goto exit_free;
+		err = gpio_direction_input(pdata->gpio);
+		if (err)
+			goto exit_free_gpio;
+		data->irq = gpio_to_irq(pdata->gpio);
+		data->gpio = pdata->gpio;
+	} else {
+		if (pdata)
+			data->irq = pdata->irq;
+		else
+			data->irq = 0;
+		data->gpio = -EINVAL;
+	}
+	if (data->irq > 0) {
+		err = request_any_context_irq(data->irq, bmp085_eoc_isr,
+					      IRQF_TRIGGER_RISING, "bmp085", data);
+		if (err < 0)
+			goto exit_free_gpio;
+	} else
+		data->irq = 0;
+
 	/* Initialize the BMP085 chip */
 	err = bmp085_init_client(client);
 	if (err != 0)
-		goto exit_free;
+		goto exit_free_irq;
 
 	/* Register sysfs hooks */
 	err = sysfs_create_group(&client->dev.kobj, &bmp085_attr_group);
 	if (err)
-		goto exit_free;
+		goto exit_free_irq;
 
 	dev_info(&data->client->dev, "Successfully initialized bmp085!\n");
 	goto exit;
 
+exit_free_irq:
+	free_irq(data->irq, data);
+exit_free_gpio:
+	gpio_free(data->gpio);
 exit_free:
 	kfree(data);
 exit:
@@ -440,8 +487,13 @@ exit:
 
 static int __devexit bmp085_remove(struct i2c_client *client)
 {
+	struct bmp085_data *data = i2c_get_clientdata(client);
+	if (data->irq)
+		free_irq(data->irq, data);
+	if (gpio_is_valid(data->gpio))
+		gpio_free(data->gpio);
 	sysfs_remove_group(&client->dev.kobj, &bmp085_attr_group);
-	kfree(i2c_get_clientdata(client));
+	kfree(data);
 	return 0;
 }
 
@@ -461,7 +513,8 @@ static struct i2c_driver bmp085_driver = {
 	.remove		= __devexit_p(bmp085_remove),
 
 	.detect		= bmp085_detect,
-	.address_list	= normal_i2c
+	.address_list	= normal_i2c,
+	.class		= I2C_CLASS_HWMON,
 };
 
 static int __init bmp085_init(void)
