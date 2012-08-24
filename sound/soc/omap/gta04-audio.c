@@ -145,20 +145,63 @@ static struct {
 	struct delayed_work jack_work;
 	struct snd_soc_codec *codec;
 	int open;
+	/* When any jack is present, we:
+	 * - poll more quickly to catch button presses
+	 * - assume a 'short' is 'button press', not 'headset has
+	 *   no mic
+	 * 'present' stores SND_JACK_HEADPHONE and SND_JACK_MICROPHONE
+	 * indication what we thing is present.
+	 */
+	int present;
 } jack;
 
 static void gta04_audio_jack_work(struct work_struct *work)
 {
 	long val;
+	long delay = msecs_to_jiffies(500);
+	int jackbits;
+
+	/* choose delay *before* checking presence so we still get
+	 * one long delay on first insertion to help with debounce.
+	 */
+	if (jack.present)
+		delay = msecs_to_jiffies(50);
 
 	val = twl4030_get_madc_conversion(7);
-	if (val < 100)
-		snd_soc_jack_report(&jack.hs_jack, 0, SND_JACK_HEADSET);
-	else
-		snd_soc_jack_report(&jack.hs_jack, SND_JACK_HEADSET,
-				     SND_JACK_HEADSET);
+	/* On my device:
+	 * open circuit = around 20
+	 * short circuit = around 800
+	 * microphone   = around 830-840 !!!
+	 */
+	if (val < 100) {
+		/* open circuit */
+		jackbits = 0;
+		jack.present = 0;
+		/* debounce */
+		delay = msecs_to_jiffies(500);
+	} else if (val < 820) {
+		/* short */
+		if (jack.present == 0) {
+			/* Inserted headset with no mic */
+			jack.present = SND_JACK_HEADPHONE;
+			jackbits = jack.present;
+		} else if (jack.present & SND_JACK_MICROPHONE) {
+			/* mic shorter == button press */
+			jackbits = SND_JACK_BTN_0 | jack.present;
+		} else {
+			/* headphones still present */
+			jackbits = jack.present;
+		}
+	} else {
+		/* There is a microphone there */
+		jack.present = SND_JACK_HEADSET;
+		jackbits = jack.present;
+	}
+	snd_soc_jack_report(&jack.hs_jack, jackbits,
+			    SND_JACK_HEADSET | SND_JACK_BTN_0);
+
 	if (jack.open)
-		schedule_delayed_work(&jack.jack_work, msecs_to_jiffies(500));
+		schedule_delayed_work(&jack.jack_work, delay);
 }
 
 static int gta04_audio_suspend(struct snd_soc_card *card)
@@ -237,7 +280,8 @@ static int omap3gta04_init(struct snd_soc_pcm_runtime *runtime)
 	 * but we need to poll :-(
 	 */
 	ret = snd_soc_jack_new(codec, "Headset Jack",
-			       SND_JACK_HEADSET, &jack.hs_jack);
+			       SND_JACK_HEADSET | SND_JACK_BTN_0,
+			       &jack.hs_jack);
 	if (ret)
 		return ret;
 	INIT_DELAYED_WORK(&jack.jack_work, gta04_audio_jack_work);
