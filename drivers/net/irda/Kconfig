@@ -407,5 +407,14 @@ config SH_IRDA
 	help
 	  Say Y here if your want to enable SuperH IrDA devices.
 
+config OMAP_IR
+	tristate "OMAP IrDA(SIR/MIR/FIR)"
+	depends on IRDA && ARCH_OMAP
+        help
+	  Say Y here if you want to build support for the Texas Instruments
+	  OMAP IrDA device driver, which supports SIR/MIR/FIR. This driver
+	  relies on platform specific helper routines so available capabilities
+	  may vary from one OMAP target to another.
+
 endmenu
 
