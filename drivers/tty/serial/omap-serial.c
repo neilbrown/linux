@@ -44,6 +44,7 @@
 #include <plat/dma.h>
 #include <plat/dmtimer.h>
 #include <plat/omap-serial.h>
+#include <plat/irda.h>
 
 #define UART_BUILD_REVISION(x, y)	(((x) << 8) | (y))
 
@@ -1597,6 +1598,34 @@ static int serial_omap_probe(struct platform_device *pdev)
 
 	pm_runtime_put(&pdev->dev);
 	platform_set_drvdata(pdev, up);
+
+	if (omap_up_info->has_IrDA) {
+		/* Register irda as a child device which can
+		 * also access the mem region, DMA resources, and
+		 * interrupt.
+		 * The IrDA device gets exclusive access when it is
+		 * active.  It gains this by calling the
+		 * get_access callback
+		 */
+		struct omap_irda_config oic;
+		struct platform_device *ipdev;
+
+		ipdev = platform_device_alloc("omapirda", -1);
+		ipdev->dev.parent = pdev->dev;
+		platform_device_add_resources(ipdev, irq, 1);
+		oic.transceiver_cap = omap_up_info->transceiver_cap;
+		oic.transceiver_mode = NULL;
+		oic.select_irda = omap_serial_select_irda;
+		oic.rx_channel = dma_rx->start;
+		oic.tx_channel = dma_tx->start;
+		oic.dest_start = mem->start;
+		oic.src_start = mem->start;
+		oic.tx_trigger = dma_tx->start;
+		oic.rx_trigger = dma_rx->start;
+		oic.membase = up->port.membase;
+		platform_device_add_data(ipdev, &oic, sizeof(oic));
+		platform_device_add(ipdev);
+	}
 	return 0;
 
 err_add_port:

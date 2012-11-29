@@ -131,24 +131,15 @@ struct omap_irda {
 #define OMAP2_L4_IO_OFFSET      0xb2000000
 #define OMAP2_L4_IO_ADDRESS(pa) IOMEM((pa) + OMAP2_L4_IO_OFFSET)
 
-static inline void uart_reg_out(int idx, u8 val)
+static inline void uart_reg_out(struct omap_irda *omap_ir, int idx, u8 val)
 {
-	writeb(val, base + idx);
+	writeb(val, omap_ir->pdata->membase + idx);
 }
 
-static inline u8 uart_reg_in(int idx)
+static inline u8 uart_reg_in(struct omap_irda *omap_ir, int idx)
 {
-	u8 b = readb(base + idx);
+	u8 b = readb(omap_ir->pdata->membase + idx);
 	return b;
-}
-static inline void omap_writel(u32 v, u32 pa)
-{
-        __raw_writel(v, OMAP2_L4_IO_ADDRESS(pa));
-}
-
-static inline u32 omap_readl(u32 pa)
-{
-        return __raw_readl(OMAP2_L4_IO_ADDRESS(pa));
 }
 
 /* forward declarations */
@@ -157,19 +148,22 @@ static int omap_irda_set_speed(struct net_device *dev, int speed);
 static void omap_irda_start_rx_dma(struct omap_irda *omap_ir)
 {
 	/* Configure DMA */
-	omap_set_dma_src_params(omap_ir->rx_dma_channel, 0x3, 0x0,
+	omap_set_dma_src_params(omap_ir->rx_dma_channel, 0x3,
+				OMAP_DMA_AMODE_CONSTANT,
 				omap_ir->pdata->src_start,
 				0, 0);
 
 	omap_enable_dma_irq(omap_ir->rx_dma_channel, 0x01);
 
-	omap_set_dma_dest_params(omap_ir->rx_dma_channel, 0x0, 0x1,
+	omap_set_dma_dest_params(omap_ir->rx_dma_channel, 0x0,
+				 OMAP_DMA_AMODE_POST_INC,
 				omap_ir->rx_buf_dma_phys,
 				0, 0);
 
-	omap_set_dma_transfer_params(omap_ir->rx_dma_channel, 0x0,
-				IRDA_SKB_MAX_MTU, 0x1,
-				0x0, omap_ir->pdata->rx_trigger, 0);
+	omap_set_dma_transfer_params(omap_ir->rx_dma_channel,
+				     OMAP_DMA_DATA_TYPE_S8,
+				     IRDA_SKB_MAX_MTU, 0x1,
+				     0x0, omap_ir->pdata->rx_trigger, 0);
 
 	omap_start_dma(omap_ir->rx_dma_channel);
 }
@@ -177,17 +171,21 @@ static void omap_irda_start_rx_dma(struct omap_irda *omap_ir)
 static void omap_start_tx_dma(struct omap_irda *omap_ir, int size)
 {
 	/* Configure DMA */
-	omap_set_dma_dest_params(omap_ir->tx_dma_channel, 0x03, 0x0,
+	omap_set_dma_dest_params(omap_ir->tx_dma_channel, 0x03,
+				 OMAP_DMA_AMODE_CONSTANT,
 				omap_ir->pdata->dest_start, 0, 0);
 
 	omap_enable_dma_irq(omap_ir->tx_dma_channel, 0x01);
 
-	omap_set_dma_src_params(omap_ir->tx_dma_channel, 0x0, 0x1,
+	omap_set_dma_src_params(omap_ir->tx_dma_channel, 0x0,
+				OMAP_DMA_AMODE_POST_INC,
 				omap_ir->tx_buf_dma_phys,
 				0, 0);
 
-	omap_set_dma_transfer_params(omap_ir->tx_dma_channel, 0x0, size, 0x1,
-				0x0, omap_ir->pdata->tx_trigger, 0);
+	omap_set_dma_transfer_params(omap_ir->tx_dma_channel,
+				     OMAP_DMA_DATA_TYPE_S8,
+				     size, 0x1,
+				     0x0, omap_ir->pdata->tx_trigger, 0);
 
 	/* Start DMA */
 	omap_start_dma(omap_ir->tx_dma_channel);
@@ -204,11 +202,11 @@ static void omap_irda_rx_dma_callback(int lch, u16 ch_status, void *data)
 	printk(KERN_ERR "RX Transfer error or very big frame\n");
 
 	/* Clear interrupts */
-	uart_reg_in(UART3_IIR);
+	uart_reg_in(omap_ir, UART3_IIR);
 
 	omap_ir->stats.rx_frame_errors++;
 
-	uart_reg_in(UART3_RESUME);
+	uart_reg_in(omap_ir, UART3_RESUME);
 
 	/* Re-init RX DMA */
 	omap_irda_start_rx_dma(omap_ir);
@@ -234,70 +232,60 @@ static int omap_irda_startup(struct net_device *dev)
 
 	/* FIXME: use clk_* apis for UART3 clock*/
 	/* Enable UART3 clock and set UART3 to IrDA mode */
-	if (machine_is_omap_h2() || machine_is_omap_h3())
-		omap_writel(omap_readl(MOD_CONF_CTRL_0) | (1 << 31) | (1 << 15),
-				MOD_CONF_CTRL_0);
+	/* FIXME!! */
 
-	/* Only for H2?
-	 */
-	if (omap_ir->pdata->transceiver_mode && machine_is_omap_h2()) {
-		/* Is it select_irda on H2 ? */
-		omap_writel(omap_readl(FUNC_MUX_CTRL_A) | 7,
-					FUNC_MUX_CTRL_A);
-		omap_ir->pdata->transceiver_mode(omap_ir->dev, IR_SIRMODE);
-	}
 
-	uart_reg_out(UART3_MDR1, UART3_MDR1_RESET);	/* Reset mode */
+	uart_reg_out(omap_ir, UART3_MDR1, UART3_MDR1_RESET);	/* Reset mode */
 
 	/* Clear DLH and DLL */
-	uart_reg_out(UART3_LCR, UART3_LCR_DIVEN);
+	uart_reg_out(omap_ir, UART3_LCR, UART3_LCR_DIVEN);
 
-	uart_reg_out(UART3_DLL, 0);
-	uart_reg_out(UART3_DLH, 0);
-	uart_reg_out(UART3_LCR, 0xbf);	/* FIXME: Add #define */
+	uart_reg_out(omap_ir, UART3_DLL, 0);
+	uart_reg_out(omap_ir, UART3_DLH, 0);
+	uart_reg_out(omap_ir, UART3_LCR, 0xbf);	/* FIXME: Add #define */
 
-	uart_reg_out(UART3_EFR, UART3_EFR_EN);
-	uart_reg_out(UART3_LCR, UART3_LCR_DIVEN);
+	uart_reg_out(omap_ir, UART3_EFR, UART3_EFR_EN);
+	uart_reg_out(omap_ir, UART3_LCR, UART3_LCR_DIVEN);
 
 	/* Enable access to UART3_TLR and UART3_TCR registers */
-	uart_reg_out(UART3_MCR, UART3_MCR_EN_TCR_TLR);
+	uart_reg_out(omap_ir, UART3_MCR, UART3_MCR_EN_TCR_TLR);
 
-	uart_reg_out(UART3_SCR, 0);
+	uart_reg_out(omap_ir, UART3_SCR, 0);
 	/* Set Rx trigger to 1 and Tx trigger to 1 */
-	uart_reg_out(UART3_TLR, 0);
+	uart_reg_out(omap_ir, UART3_TLR, 0);
 
 	/* Set LCR to 8 bits and 1 stop bit */
-	uart_reg_out(UART3_LCR, 0x03);
+	uart_reg_out(omap_ir, UART3_LCR, 0x03);
 
 	/* Clear RX and TX FIFO and enable FIFO */
 	/* Use DMA Req for transfers */
-	uart_reg_out(UART3_FCR, UART3_FCR_CONFIG);
+	uart_reg_out(omap_ir, UART3_FCR, UART3_FCR_CONFIG);
 
-	uart_reg_out(UART3_MCR, 0);
+	uart_reg_out(omap_ir, UART3_MCR, 0);
 
-	uart_reg_out(UART3_SCR, UART3_SCR_TX_TRIG1 |
+	uart_reg_out(omap_ir, UART3_SCR, UART3_SCR_TX_TRIG1 |
 			UART3_SCR_RX_TRIG1);
 
 	/* Enable UART3 SIR Mode,(Frame-length method to end frames) */
-	uart_reg_out(UART3_MDR1, UART3_MDR1_SIR);
+	uart_reg_out(omap_ir, UART3_MDR1, UART3_MDR1_SIR);
 
 	/* Set Status FIFO trig to 1 */
-	uart_reg_out(UART3_MDR2, 0);
+	uart_reg_out(omap_ir, UART3_MDR2, 0);
 
 	/* Enables RXIR input */
 	/* and disable TX underrun */
 	/* SEND_SIP pulse */
-	uart_reg_out(UART3_ACREG, UART3_ACERG_SD_MODE_LOW |
+	uart_reg_out(omap_ir, UART3_ACREG, UART3_ACERG_SD_MODE_LOW |
 			UART3_ACERG_TX_UNDERRUN_DIS);
 
 	/* Enable EOF Interrupt only */
-	uart_reg_out(UART3_IER, UART3_IER_CTS | UART3_IER_EOF);
+	uart_reg_out(omap_ir, UART3_IER, UART3_IER_CTS | UART3_IER_EOF);
 
 	/* Set Maximum Received Frame size to 2048 bytes */
-	uart_reg_out(UART3_RXFLL, 0x00);
-	uart_reg_out(UART3_RXFLH, 0x08);
+	uart_reg_out(omap_ir, UART3_RXFLL, 0x00);
+	uart_reg_out(omap_ir, UART3_RXFLH, 0x08);
 
-	uart_reg_in(UART3_RESUME);
+	uart_reg_in(omap_ir, UART3_RESUME);
 
 	return 0;
 }
@@ -309,19 +297,19 @@ static int omap_irda_shutdown(struct omap_irda *omap_ir)
 	local_irq_save(flags);
 
 	/* Disable all UART3 Interrupts */
-	uart_reg_out(UART3_IER, 0);
+	uart_reg_out(omap_ir, UART3_IER, 0);
 
 	/* Disable UART3 and disable baud rate generator */
-	uart_reg_out(UART3_MDR1, UART3_MDR1_RESET);
+	uart_reg_out(omap_ir, UART3_MDR1, UART3_MDR1_RESET);
 
 	/* set SD_MODE pin to high and Disable RX IR */
-	uart_reg_out(UART3_ACREG, (UART3_ACERG_DIS_IR_RX |
+	uart_reg_out(omap_ir, UART3_ACREG, (UART3_ACERG_DIS_IR_RX |
 			~(UART3_ACERG_SD_MODE_LOW)));
 
 	/* Clear DLH and DLL */
-	uart_reg_out(UART3_LCR, UART3_LCR_DIVEN);
-	uart_reg_out(UART3_DLL, 0);
-	uart_reg_out(UART3_DLH, 0);
+	uart_reg_out(omap_ir, UART3_LCR, UART3_LCR_DIVEN);
+	uart_reg_out(omap_ir, UART3_DLL, 0);
+	uart_reg_out(omap_ir, UART3_DLH, 0);
 
 	local_irq_restore(flags);
 
@@ -339,10 +327,10 @@ omap_irda_irq(int irq, void *dev_id)
 	int w = 0;
 
 	/* Clear EOF interrupt */
-	status = uart_reg_in(UART3_IIR);
+	status = uart_reg_in(omap_ir, UART3_IIR);
 
 	if (status & UART3_IIR_TX_STATUS) {
-		u8 mdr2 = uart_reg_in(UART3_MDR2);
+		u8 mdr2 = uart_reg_in(omap_ir, UART3_MDR2);
 		if (mdr2 & UART3_MDR2_IRTX_UNDERRUN)
 			printk(KERN_ERR "IrDA Buffer underrun error\n");
 
@@ -361,11 +349,11 @@ omap_irda_irq(int irq, void *dev_id)
 	/* Stop DMA and if there are no errors, send frame to upper layer */
 	omap_stop_dma(omap_ir->rx_dma_channel);
 
-	status = uart_reg_in(UART3_SFLSR);	/* Take a frame status */
+	status = uart_reg_in(omap_ir, UART3_SFLSR);	/* Take a frame status */
 
 	if (status != 0) {	/* Bad frame? */
 		omap_ir->stats.rx_frame_errors++;
-		uart_reg_in(UART3_RESUME);
+		uart_reg_in(omap_ir, UART3_RESUME);
 	} else {
 		/* We got a frame! */
 		skb = dev_alloc_skb(IRDA_SKB_MAX_MTU);
@@ -426,7 +414,7 @@ static int omap_irda_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 		omap_ir->newspeed = speed;
 
 	if (xbofs) /* Set number of addtional BOFS */
-		uart_reg_out(UART3_EBLR, xbofs + 1);
+		uart_reg_out(omap_ir, UART3_EBLR, xbofs + 1);
 
 	/*
 	 * If this is an empty frame, we can bypass a lot.
@@ -449,8 +437,8 @@ static int omap_irda_hard_xmit(struct sk_buff *skb, struct net_device *dev)
 	omap_ir->stats.tx_bytes += skb->len;
 
 	/* Set frame length */
-	uart_reg_out(UART3_TXFLL, (skb->len & 0xff));
-	uart_reg_out(UART3_TXFLH, (skb->len >> 8));
+	uart_reg_out(omap_ir, UART3_TXFLL, (skb->len & 0xff));
+	uart_reg_out(omap_ir, UART3_TXFLH, (skb->len >> 8));
 
 	if (mtt > 1000)
 		mdelay(mtt / 1000);
@@ -646,6 +634,8 @@ static int omap_irda_stop(struct net_device *dev)
 		omap_ir->irlap = NULL;
 	}
 
+	omap_ir->pdata->select_irda(omap_ir->dev, 0);
+
 	omap_ir->open = 0;
 
 	/*
@@ -673,17 +663,17 @@ static int omap_irda_set_speed(struct net_device *dev, int speed)
 							IR_SIRMODE);
 
 		/* Set SIR mode */
-		uart_reg_out(UART3_MDR1, 1);
-		uart_reg_out(UART3_EBLR, 1);
+		uart_reg_out(omap_ir, UART3_MDR1, 1);
+		uart_reg_out(omap_ir, UART3_EBLR, 1);
 
 		divisor = 48000000 / (16 * speed);	/* Base clock 48 MHz */
 
-		uart_reg_out(UART3_LCR, UART3_LCR_DIVEN);
-		uart_reg_out(UART3_DLL, (divisor & 0xff));
-		uart_reg_out(UART3_DLH, (divisor >> 8));
-		uart_reg_out(UART3_LCR, 0x03);
+		uart_reg_out(omap_ir, UART3_LCR, UART3_LCR_DIVEN);
+		uart_reg_out(omap_ir, UART3_DLL, (divisor & 0xff));
+		uart_reg_out(omap_ir, UART3_DLH, (divisor >> 8));
+		uart_reg_out(omap_ir, UART3_LCR, 0x03);
 
-		uart_reg_out(UART3_MCR, 0);
+		uart_reg_out(omap_ir, UART3_MCR, 0);
 
 		local_irq_restore(flags);
 	} else if (speed <= 1152000) {
@@ -691,17 +681,17 @@ static int omap_irda_set_speed(struct net_device *dev, int speed)
 		local_irq_save(flags);
 
 		/* Set MIR mode, auto SIP */
-		uart_reg_out(UART3_MDR1, UART3_MDR1_MIR |
+		uart_reg_out(omap_ir, UART3_MDR1, UART3_MDR1_MIR |
 				UART3_MDR1_SIP_AUTO);
 
-		uart_reg_out(UART3_EBLR, 2);
+		uart_reg_out(omap_ir, UART3_EBLR, 2);
 
 		divisor = 48000000 / (41 * speed);	/* Base clock 48 MHz */
 
-		uart_reg_out(UART3_LCR, UART3_LCR_DIVEN);
-		uart_reg_out(UART3_DLL, (divisor & 0xff));
-		uart_reg_out(UART3_DLH, (divisor >> 8));
-		uart_reg_out(UART3_LCR, 0x03);
+		uart_reg_out(omap_ir, UART3_LCR, UART3_LCR_DIVEN);
+		uart_reg_out(omap_ir, UART3_DLL, (divisor & 0xff));
+		uart_reg_out(omap_ir, UART3_DLH, (divisor >> 8));
+		uart_reg_out(omap_ir, UART3_LCR, 0x03);
 
 		if (omap_ir->pdata->transceiver_mode)
 			omap_ir->pdata->transceiver_mode(omap_ir->dev,
@@ -712,7 +702,7 @@ static int omap_irda_set_speed(struct net_device *dev, int speed)
 		local_irq_save(flags);
 
 		/* FIR mode */
-		uart_reg_out(UART3_MDR1, UART3_MDR1_FIR |
+		uart_reg_out(omap_ir, UART3_MDR1, UART3_MDR1_FIR |
 				UART3_MDR1_SIP_AUTO);
 
 		if (omap_ir->pdata->transceiver_mode)
@@ -731,7 +721,7 @@ static int omap_irda_set_speed(struct net_device *dev, int speed)
 /*
  * Suspend the IrDA interface.
  */
-static int omap_irda_suspend(struct platform_device *pdev, pm_message_t state)
+static int omap_irda_suspend(struct device *dev)
 {
 	struct net_device *dev = platform_get_drvdata(pdev);
 	struct omap_irda *omap_ir = netdev_priv(dev);
@@ -809,18 +799,18 @@ static int omap_irda_probe(struct platform_device *pdev)
 	int irq = NO_IRQ;
 
 	if (!pdata) {
-		printk(KERN_ERR "IrDA Platform data not supplied\n");
-		return -ENOENT;
+		dev_err(&pdev->dev, "IrDA Platform data not supplied\n");
+		return -ENODEV;
 	}
 
 	if (!pdata->rx_channel || !pdata->tx_channel) {
-		printk(KERN_ERR "IrDA invalid rx/tx channel value\n");
+		dev_err(&pdev->dev, "IrDA invalid rx/tx channel value\n");
 		return -ENOENT;
 	}
 
 	irq = platform_get_irq(pdev, 0);
 	if (irq <= 0) {
-		printk(KERN_WARNING "no irq for IrDA\n");
+		dev_err(&pdev->dev, "no irq for IrDA\n");
 		return -ENOENT;
 	}
 
@@ -872,22 +862,22 @@ static int omap_irda_remove(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct dev_pm_ops omap_ir_dev_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(omap_irda_suspend, omap_irda_resume)
+};
+
 static struct platform_driver omapir_driver = {
 	.probe		= omap_irda_probe,
 	.remove		= omap_irda_remove,
-	.suspend	= omap_irda_suspend,
-	.resume		= omap_irda_resume,
 	.driver		= {
 		.name	= "omapirda",
+		.pm	= &omap_ir_dev_pm_ops,
 		.owner	= THIS_MODULE,
 	},
 };
 
-static char __initdata banner[] = KERN_INFO "OMAP IrDA driver initializing\n";
-
 static int __init omap_irda_init(void)
 {
-	printk(banner);
 	return platform_driver_register(&omapir_driver);
 }
 
@@ -902,4 +892,3 @@ module_exit(omap_irda_exit);
 MODULE_AUTHOR("MontaVista");
 MODULE_DESCRIPTION("OMAP IrDA Driver");
 MODULE_LICENSE("GPL");
-

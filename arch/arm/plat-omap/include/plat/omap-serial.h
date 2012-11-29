@@ -72,6 +72,8 @@ struct omap_uart_port_info {
 	int			DTR_gpio;
 	int			DTR_inverted;
 	int			DTR_present;
+	int			has_IrDA;
+	int			tranceiver_cap;
 
 	int (*get_context_loss_count)(struct device *);
 	void (*set_forceidle)(struct platform_device *);

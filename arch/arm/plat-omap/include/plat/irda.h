@@ -27,7 +27,8 @@ struct omap_irda_config {
 	unsigned long src_start;
 	int tx_trigger;
 	int rx_trigger;
-	int mode;
+	int mode; /* unused */
+	unsigned char __iomem *membase;
 };
 
 #endif
