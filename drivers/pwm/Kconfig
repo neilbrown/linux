@@ -177,6 +177,15 @@ config PWM_PCA9685
 	  To compile this driver as a module, choose M here: the module
 	  will be called pwm-pca9685.
 
+config PWM_OMAP
+	tristate "OMAP PWM support"
+	depends on ARCH_OMAP && OMAP_DM_TIMER
+	help
+	  Generic PWM framework driver for OMAP
+
+	  To compile this driver as a module, choose M here: the module
+	  will be called pwm-omap
+
 config PWM_PUV3
 	tristate "PKUnity NetBook-0916 PWM support"
 	depends on ARCH_PUV3
