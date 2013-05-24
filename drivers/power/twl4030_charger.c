@@ -252,20 +252,20 @@ static int twl4030_charger_set_max_current(int cur)
 	if (cur > 0x3ff)
 		return -EINVAL;
 	/* disable write protection for one write access for BCIIREF */
-	status = twl_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, 0xE7,
+	status = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0xE7,
 			TWL4030_BCIMFKEY);
 	if (status < 0)
 		return status;
-	status = twl_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE,
+	status = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE,
 			(cur & 0x100) ? 3 : 2, TWL4030_BCIIREF2);
 	if (status < 0)
 		return status;
 	/* disable write protection for one write access for BCIIREF */
-	status = twl_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, 0xE7,
+	status = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0xE7,
 			TWL4030_BCIMFKEY);
 	if (status < 0)
 		return status;
-	status = twl_i2c_write_u8(TWL4030_MODULE_MAIN_CHARGE, cur & 0xff,
+	status = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, cur & 0xff,
 			TWL4030_BCIIREF1);
 	return status;
 }
