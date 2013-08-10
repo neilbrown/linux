@@ -3028,9 +3028,12 @@ static int hso_suspend(struct usb_interface *iface, pm_message_t message)
 	for (i = 0; i < HSO_MAX_NET_DEVICES; i++) {
 		if (network_table[i] &&
 		    (network_table[i]->interface == iface)) {
-			result = hso_stop_net_device(network_table[i]);
-			if (result)
-				goto out;
+			struct hso_net *hso_net = dev2net(network_table[i]);
+			if (hso_net->flags & IFF_UP) {
+				result = hso_stop_net_device(network_table[i]);
+				if (result)
+					goto out;
+			}
 		}
 	}
 
