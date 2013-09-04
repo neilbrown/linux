@@ -35,7 +35,7 @@
 #define TWL4030_BCIIREF1	0x27
 #define TWL4030_BCIIREF2	0x28
 #define TWL4030_BCIMFKEY	0x11
-
+#define TWL4030_BCIMFTH2	0x17
 
 
 #define TWL4030_BCIMFSTS1	0x01
@@ -104,6 +104,7 @@ struct twl4030_bci {
 	int			irq_bci;
 	struct regulator	*usb_reg;
 	int			usb_enabled;
+	int			min_battery_mvolts;
 
 	unsigned long		event;
 };
@@ -271,6 +272,77 @@ static int twl4030_charger_set_max_current(int cur)
 }
 
 /*
+ * Set charge-start voltage.
+ * When battery voltage drops below BATOV4 the charging cycle
+ * will restart.
+ * The default is 3.95V which corresponds to about 75% charge on
+ * Openmoko battery.
+ * 4.0V is close to 90%
+ * Full charge is 4.2V. 4.11V is the highest possible setting.
+ * value can be from 0 to 15 which corresponds to
+ * 3.761V to 4.112V in steps of 0.0234V
+ *
+ * Set OV3 2 points below OV4.  I'm not sure exactly what this does,
+ * but the default is 2 points below....
+ *
+ */
+static int twl4030_charger_OV4(int mV)
+{
+	u8 TH2;
+	int ret = 0;
+
+	TH2 = mV << 4;
+	if (mV > 2)
+		mV -= 2;
+	else
+		mV = 0;
+	TH2 |= mV;
+	/* Enable write */
+	ret = ret ?: twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0x7F,
+				      TWL4030_BCIMFKEY);
+	ret = ret ?: twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, TH2,
+				      TWL4030_BCIMFTH2);
+	return ret;
+}
+
+static ssize_t
+twl4030_bci_mvolts_show(struct device *dev, struct device_attribute *attr,
+	char *buf)
+{
+	struct twl4030_bci *bci = dev_get_drvdata(dev);
+	return sprintf(buf, "%d\n", (bci->min_battery_mvolts * 234)/10 + 3761);
+}
+
+static ssize_t
+twl4030_bci_mvolts_store(struct device *dev, struct device_attribute *attr,
+		const char *buf, size_t n)
+{
+	struct twl4030_bci *bci = dev_get_drvdata(dev);
+	int mV;
+	int ret = kstrtoint(buf, 10, &mV);
+	if (ret)
+		return ret;
+	if (mV <= 0 || mV > 5000)
+		return -EINVAL;
+
+	/* Convert millivolts to setting for TWL4030 */
+	mV -= 3761;
+	if (mV < 0)
+		mV = 0;
+	mV = mV*10 / 234;
+	if (mV > 15)
+		mV = 15;
+
+	bci->min_battery_mvolts = mV;
+	ret = twl4030_charger_OV4(mV);
+	if (ret)
+		return ret;
+	return n;
+}
+static DEVICE_ATTR(min_battery_mvolts, 0644, twl4030_bci_mvolts_show,
+		   twl4030_bci_mvolts_store);
+
+/*
  * Enable/Disable USB Charge functionality.
  */
 static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
@@ -301,6 +373,8 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 		ret = twl4030_clear_set_boot_bci(0, TWL4030_BCIAUTOUSB);
 		if (ret < 0)
 			return ret;
+
+		ret = twl4030_charger_OV4(bci->min_battery_mvolts);
 
 		/* forcing USBFASTMCHG(BCIMFSTS4[2]) to 1 */
 		ret = twl4030_clear_set(TWL_MODULE_MAIN_CHARGE, 0,
@@ -664,6 +738,11 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	if (!pdata)
 		pdata = twl4030_bci_parse_dt(&pdev->dev);
 
+	/* Hardware default is 3950. Max is 4113.
+	 * We let's try 4070 - hopefully not too high
+	 */
+	bci->min_battery_mvolts = 0xC;
+
 	bci->dev = &pdev->dev;
 	bci->irq_chg = platform_get_irq(pdev, 0);
 	bci->irq_bci = platform_get_irq(pdev, 1);
@@ -745,6 +824,8 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 
 	if (device_create_file(&pdev->dev, &dev_attr_max_current))
 		dev_warn(&pdev->dev, "could not create sysfs file\n");
+	if (device_create_file(&pdev->dev, &dev_attr_min_battery_mvolts))
+		dev_warn(&pdev->dev, "could not create sysfs file\n");
 
 
 	twl4030_charger_enable_ac(true);
@@ -780,6 +861,7 @@ static int __exit twl4030_bci_remove(struct platform_device *pdev)
 {
 	struct twl4030_bci *bci = platform_get_drvdata(pdev);
 	device_remove_file(&pdev->dev, &dev_attr_max_current);
+	device_remove_file(&pdev->dev, &dev_attr_min_battery_mvolts);
 	twl4030_charger_enable_ac(false);
 	twl4030_charger_enable_usb(bci, false);
 	twl4030_charger_enable_backup(0, 0);
