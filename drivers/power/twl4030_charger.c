@@ -229,7 +229,7 @@ static int regval2ua(int regval, bool cgain)
 static int ua2regval(int ua, bool cgain)
 {
 	int ret;
-	if (cgain & TWL4030_CGAIN)
+	if (cgain)
 		ua /= 2;
 	ret = (ua * 10 + 850 * 10000) / 16618;
 	/* rounding problems */
@@ -248,7 +248,7 @@ static int twl4030_charger_set_max_current(int cur)
 	if (status < 0)
 		return status;
 	cur = ua2regval(cur, bcictl1 & TWL4030_CGAIN);
-	/* wie have only 10 bit */
+	/* we have only 10 bit */
 	if (cur > 0x3ff)
 		return -EINVAL;
 	/* disable write protection for one write access for BCIIREF */
