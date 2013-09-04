@@ -293,8 +293,8 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 			bci->usb_enabled = 1;
 		}
 
-		if (allow_usb)
-			twl4030_charger_set_max_current(600000);
+		if (allow_usb && default_usb_current < 500000)
+			twl4030_charger_set_max_current(500000);
 		else
 			twl4030_charger_set_max_current(default_usb_current);
 		/* forcing the field BCIAUTOUSB (BOOT_BCI[1]) to 1 */
