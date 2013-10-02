@@ -957,6 +957,12 @@ static int snd_soc_put_twl4030_opmode_enum_double(struct snd_kcontrol *kcontrol,
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
 	struct twl4030_priv *twl4030 = snd_soc_codec_get_drvdata(codec);
+	int val = ucontrol->value.integer.value[0];
+
+	if (!!(twl4030_read(codec, TWL4030_REG_CODEC_MODE)
+	       & TWL4030_OPTION_1) == !!val)
+		/* No change */
+		return 0;
 
 	if (twl4030->configured) {
 		dev_err(codec->dev,
