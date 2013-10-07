@@ -109,7 +109,8 @@ struct twl4030_bci {
 	int			irq_bci;
 	struct regulator	*usb_reg;
 	int			usb_enabled;
-	int			min_battery_mvolts;
+	int			min_battery_mvolts_ac;
+	int			min_battery_mvolts_usb;
 	int			mode; /* charging mode requested */
 #define	CHARGE_OFF	0
 #define	CHARGE_AUTO	1
@@ -314,19 +315,34 @@ static int twl4030_charger_OV4(int mV)
 	return ret;
 }
 
+static int twl4030_set_min_mvolts(struct twl4030_bci *bci)
+{
+	u8 s;
+	twl4030_bci_read(TWL4030_BCIMDEN, &s);
+	if (s & 1)
+		return twl4030_charger_OV4(bci->min_battery_mvolts_usb);
+	else
+		return twl4030_charger_OV4(bci->min_battery_mvolts_ac);
+}
+
 static ssize_t
 twl4030_bci_mvolts_show(struct device *dev, struct device_attribute *attr,
 	char *buf)
 {
-	struct twl4030_bci *bci = dev_get_drvdata(dev);
-	return sprintf(buf, "%d\n", (bci->min_battery_mvolts * 234)/10 + 3761);
+	struct twl4030_bci *bci = dev_get_drvdata(dev->parent);
+	int mv;
+	if (dev == bci->ac.dev)
+		mv = bci->min_battery_mvolts_ac;
+	else
+		mv = bci->min_battery_mvolts_usb;
+	return sprintf(buf, "%d\n", (mv * 234)/10 + 3761);
 }
 
 static ssize_t
 twl4030_bci_mvolts_store(struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t n)
 {
-	struct twl4030_bci *bci = dev_get_drvdata(dev);
+	struct twl4030_bci *bci = dev_get_drvdata(dev->parent);
 	int mV;
 	int ret = kstrtoint(buf, 10, &mV);
 	if (ret)
@@ -342,8 +358,12 @@ twl4030_bci_mvolts_store(struct device *dev, struct device_attribute *attr,
 	if (mV > 15)
 		mV = 15;
 
-	bci->min_battery_mvolts = mV;
-	ret = twl4030_charger_OV4(mV);
+	if (dev == bci->ac.dev)
+		bci->min_battery_mvolts_ac = mV;
+	else
+		bci->min_battery_mvolts_usb = mV;
+
+	ret = twl4030_set_min_mvolts(bci);
 	if (ret)
 		return ret;
 	return n;
@@ -383,10 +403,10 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 		if (bci->mode == CHARGE_AUTO) {
 			/* forcing the field BCIAUTOUSB (BOOT_BCI[1]) to 1 */
 			ret = twl4030_clear_set_boot_bci(0, TWL4030_BCIAUTOUSB);
-			ret = ret ?: twl4030_charger_OV4(bci->min_battery_mvolts);
 			if (ret < 0)
 				return ret;
 			twl4030_clear_set_boot_bci(0, TWL4030_BCIAUTOAC|TWL4030_CVENAC);
+			twl4030_set_min_mvolts(bci);
 		}
 
 		/* forcing USBFASTMCHG(BCIMFSTS4[2]) to 1 */
@@ -426,6 +446,7 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 			regulator_disable(bci->usb_reg);
 			bci->usb_enabled = 0;
 		}
+		twl4030_set_min_mvolts(bci);
 	}
 
 	return ret;
@@ -841,8 +862,11 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 
 	/* Hardware default is 3950. Max is 4113.
 	 * We let's try 4070 - hopefully not too high
+	 * For 'ac' it is likely to be plugged in continuously
+	 * so a lower minimum is OK.
 	 */
-	bci->min_battery_mvolts = 0xC;
+	bci->min_battery_mvolts_usb = 0xC;
+	bci->min_battery_mvolts_ac = 0x8;
 	bci->mode = CHARGE_AUTO;
 
 	bci->dev = &pdev->dev;
@@ -928,7 +952,9 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 		dev_warn(&pdev->dev, "could not create sysfs file\n");
 	if (device_create_file(bci->usb.dev, &dev_attr_mode))
 		dev_warn(&pdev->dev, "could not create sysfs file\n");
-	if (device_create_file(&pdev->dev, &dev_attr_min_battery_mvolts))
+	if (device_create_file(bci->usb.dev, &dev_attr_min_battery_mvolts))
+		dev_warn(&pdev->dev, "could not create sysfs file\n");
+	if (device_create_file(bci->ac.dev, &dev_attr_min_battery_mvolts))
 		dev_warn(&pdev->dev, "could not create sysfs file\n");
 
 	twl4030_charger_enable_ac(true);
