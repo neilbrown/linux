@@ -620,7 +620,7 @@ static DEVICE_ATTR(max_current, 0644, twl4030_bci_max_current_show,
 /*
  * sysfs charger enabled store
  */
-static char *modes[] = { "off", "auto", "linear" };
+static char *modes[] = { "off", "auto", "continuous" };
 static ssize_t
 twl4030_bci_mode_store(struct device *dev, struct device_attribute *attr,
 			  const char *buf, size_t n)
