@@ -23,6 +23,7 @@
 #include <linux/notifier.h>
 #include <linux/usb/otg.h>
 #include <linux/regulator/machine.h>
+#include <linux/i2c/twl4030-madc.h>
 
 #define TWL4030_BCIMDEN		0x00
 #define TWL4030_BCIMDKEY	0x01
@@ -121,7 +122,9 @@ struct twl4030_bci {
 	/* ichg values in uA. If any are 'large', we set CGAIN to
 	 * '1' which doubles the range for half the precision.
 	 */
-	int			ichg_eoc, ichg_lo, ichg_hi, ichg;
+	int			ichg_eoc, ichg_lo, ichg_hi;
+	int			usb_cur, ac_cur;
+	bool			ac_is_active;
 
 	unsigned long		event;
 };
@@ -288,6 +291,17 @@ static int twl4030_charger_update_current(struct twl4030_bci *bci)
 	unsigned reg;
 	u8 bcictl1, oldreg, fullreg;
 	int cgain = 0;
+	int cur = bci->usb_cur;
+
+	/* If VAC exceeds 4.5V (MADC 11) and ac is enabled, set current
+	 * for 'ac'
+	 */
+	if (bci->ac_mode != CHARGE_OFF &&
+	    twl4030_get_madc_conversion(11) > 4500) {
+		cur = bci->ac_cur;
+		bci->ac_is_active = 1;
+	} else
+		bci->ac_is_active = 0;
 
 	/* First, check thresholds and see if cgain is needed */
 	if (bci->ichg_eoc >= 200000)
@@ -296,7 +310,7 @@ static int twl4030_charger_update_current(struct twl4030_bci *bci)
 		cgain = 1;
 	if (bci->ichg_hi >= 820000)
 		cgain = 1;
-	if (bci->ichg > 852000)
+	if (cur > 852000)
 		cgain = 1;
 
 	if (!cgain) {
@@ -365,7 +379,7 @@ static int twl4030_charger_update_current(struct twl4030_bci *bci)
 	}
 
 	/* And finally, set the current */
-	twl4030_charger_set_max_current(bci->ichg, cgain);
+	twl4030_charger_set_max_current(cur, cgain);
 
 	if (cgain) {
 		status = twl4030_bci_read(TWL4030_BCICTL1, &bcictl1);
@@ -559,9 +573,10 @@ static int twl4030_charger_enable_ac(struct twl4030_bci *bci, bool enable)
 	if (bci->ac_mode == CHARGE_OFF)
 		enable = false;
 
-	if (enable)
+	twl4030_charger_update_current(bci);
+	if (enable) {
 		ret = twl4030_clear_set_boot_bci(0, TWL4030_BCIAUTOAC);
-	else
+	} else
 		ret = twl4030_clear_set_boot_bci(TWL4030_BCIAUTOAC, 0);
 
 	return ret;
@@ -676,9 +691,10 @@ static void twl4030_bci_usb_work(struct work_struct *data)
 
 	/* reset current on each 'plug' event */
 	if (allow_usb && default_usb_current < 500000)
-		bci->ichg = 500000;
+		bci->usb_cur = 500000;
 	else
-		bci->ichg = default_usb_current;
+		bci->usb_cur = default_usb_current;
+	bci->ac_cur = 500000;
 
 	switch (bci->event) {
 	case USB_EVENT_VBUS:
@@ -711,7 +727,7 @@ static ssize_t
 twl4030_bci_max_current_store(struct device *dev, struct device_attribute *attr,
 	const char *buf, size_t n)
 {
-	struct twl4030_bci *bci = dev_get_drvdata(dev);
+	struct twl4030_bci *bci = dev_get_drvdata(dev->parent);
 	int cur = 0;
 	int status = 0;
 	status = kstrtoint(buf, 10, &cur);
@@ -719,9 +735,15 @@ twl4030_bci_max_current_store(struct device *dev, struct device_attribute *attr,
 		return status;
 	if (cur < 0)
 		return -EINVAL;
-	if (bci->ichg == cur)
-		return n;
-	bci->ichg = cur;
+	if (dev == bci->ac.dev) {
+		if (bci->ac_cur == cur)
+			return n;
+		bci->ac_cur = cur;
+	} else {
+		if (bci->usb_cur == cur)
+			return n;
+		bci->usb_cur = cur;
+	}
 	twl4030_charger_enable_usb(bci, false);
 	twl4030_charger_enable_ac(bci, false);
 	twl4030_charger_update_current(bci);
@@ -737,15 +759,26 @@ static ssize_t twl4030_bci_max_current_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
 	int status = 0;
-	int cur;
+	int cur = -1;
 	u8 bcictl1;
-	cur = twl4030bci_read_adc_val(TWL4030_BCIIREF1);
-	if (cur < 0)
-		return cur;
-	status = twl4030_bci_read(TWL4030_BCICTL1, &bcictl1);
-	if (status < 0)
-		return status;
-	cur = regval2ua(cur, bcictl1 & TWL4030_CGAIN);
+	struct twl4030_bci *bci = dev_get_drvdata(dev->parent);
+
+	if (dev == bci->ac.dev) {
+		if (!bci->ac_is_active)
+			cur = bci->ac_cur;
+	} else {
+		if (bci->ac_is_active)
+			cur = bci->usb_cur;
+	}
+	if (cur < 0) {
+		cur = twl4030bci_read_adc_val(TWL4030_BCIIREF1);
+		if (cur < 0)
+			return cur;
+		status = twl4030_bci_read(TWL4030_BCICTL1, &bcictl1);
+		if (status < 0)
+			return status;
+		cur = regval2ua(cur, bcictl1 & TWL4030_CGAIN);
+	}
 	return scnprintf(buf, PAGE_SIZE, "%u\n", cur);
 }
 
@@ -1000,7 +1033,10 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->ichg_eoc = 80100; /* Stop charging when current drops to here */
 	bci->ichg_lo = 241000; /* low threshold */
 	bci->ichg_hi = 500000; /* High threshold */
-	bci->ichg = default_usb_current;
+	if (allow_usb && default_usb_current < 500000)
+		default_usb_current = 500000;
+	bci->usb_cur = default_usb_current;
+	bci->ac_cur = 500000;
 
 	bci->dev = &pdev->dev;
 	bci->irq_chg = platform_get_irq(pdev, 0);
@@ -1081,7 +1117,9 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	if (ret < 0)
 		dev_warn(&pdev->dev, "failed to unmask interrupts: %d\n", ret);
 
-	if (device_create_file(&pdev->dev, &dev_attr_max_current))
+	if (device_create_file(bci->usb.dev, &dev_attr_max_current))
+		dev_warn(&pdev->dev, "could not create sysfs file\n");
+	if (device_create_file(bci->ac.dev, &dev_attr_max_current))
 		dev_warn(&pdev->dev, "could not create sysfs file\n");
 	if (device_create_file(bci->usb.dev, &dev_attr_mode))
 		dev_warn(&pdev->dev, "could not create sysfs file\n");
