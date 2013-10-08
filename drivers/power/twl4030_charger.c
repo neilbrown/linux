@@ -39,6 +39,8 @@
 #define TWL4030_BCIMFKEY	0x11
 #define TWL4030_BCIMFEN3	0x14
 #define TWL4030_BCIMFTH2	0x17
+#define TWL4030_BCIMFTH8	0x1d
+#define TWL4030_BCIMFTH9	0x1e
 #define TWL4030_BCIWDKEY	0x21
 
 #define TWL4030_BCIMFSTS1	0x01
@@ -115,6 +117,11 @@ struct twl4030_bci {
 #define	CHARGE_OFF	0
 #define	CHARGE_AUTO	1
 #define	CHARGE_LINEAR	2
+
+	/* ichg values in uA. If any are 'large', we set CGAIN to
+	 * '1' which doubles the range for half the precision.
+	 */
+	int			ichg_eoc, ichg_lo, ichg_hi, ichg;
 
 	unsigned long		event;
 };
@@ -249,19 +256,13 @@ static int ua2regval(int ua, bool cgain)
 	return ret;
 }
 
-
-static int twl4030_charger_set_max_current(int cur)
+static int twl4030_charger_set_max_current(int cur, bool cgain)
 {
-	u8 bcictl1;
 	int status;
-	/* get setting of CGAIN bit */
-	status = twl4030_bci_read(TWL4030_BCICTL1, &bcictl1);
-	if (status < 0)
-		return status;
-	cur = ua2regval(cur, bcictl1 & TWL4030_CGAIN);
+	cur = ua2regval(cur, cgain);
 	/* we have only 10 bit */
 	if (cur > 0x3ff)
-		return -EINVAL;
+		cur = 0x3ff;
 	/* disable write protection for one write access for BCIIREF */
 	status = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0xE7,
 			TWL4030_BCIMFKEY);
@@ -279,6 +280,104 @@ static int twl4030_charger_set_max_current(int cur)
 	status = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, cur & 0xff,
 			TWL4030_BCIIREF1);
 	return status;
+}
+
+static int twl4030_charger_update_current(struct twl4030_bci *bci)
+{
+	int status;
+	unsigned reg;
+	u8 bcictl1, oldreg, fullreg;
+	int cgain = 0;
+
+	/* First, check thresholds and see if cgain is needed */
+	if (bci->ichg_eoc >= 200000)
+		cgain = 1;
+	if (bci->ichg_lo >= 400000)
+		cgain = 1;
+	if (bci->ichg_hi >= 820000)
+		cgain = 1;
+	if (bci->ichg > 852000)
+		cgain = 1;
+
+	if (!cgain) {
+		status = twl4030_bci_read(TWL4030_BCICTL1, &bcictl1);
+		if (status < 0)
+			return status;
+		if (bcictl1 & TWL4030_CGAIN) {
+			bcictl1 &= ~TWL4030_CGAIN;
+			twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE,
+					 bcictl1, TWL4030_BCICTL1);
+		}
+	}
+
+	/* For ichg_eoc, reg value must be 100XXXX000, we only
+	 * set the XXXX
+	 */
+	reg = ua2regval(bci->ichg_eoc, cgain);
+	if (reg > 0x278)
+		reg = 0x278;
+	if (reg < 0x200)
+		reg = 0x200;
+	reg = (reg >> 3) & 0xf;
+	fullreg = reg << 4;
+
+	/* For ichg_lo, reg value must be 10XXXX0000. */
+	reg = ua2regval(bci->ichg_lo, cgain);
+	if (reg > 0x2F0)
+		reg = 0x2F0;
+	if (reg < 0x200)
+		reg = 0x200;
+	reg = (reg >> 4) & 0xf;
+	fullreg |= reg;
+
+	/* ichg_eoc and ichg_lo live in same register */
+	status = twl4030_bci_read(TWL4030_BCIMFTH8, &oldreg);
+	if (status < 0)
+		return status;
+	if (oldreg != fullreg) {
+		status = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0xF4,
+					  TWL4030_BCIMFKEY);
+		if (status < 0)
+			return status;
+		twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE,
+				 fullreg, TWL4030_BCIMFTH8);
+	}
+
+	/* ichg_hi must be 1XXXX01100 (I think) */
+	reg = ua2regval(bci->ichg_hi, cgain);
+	if (reg > 0x3E0)
+		reg = 0x3E0;
+	if (reg < 0x200)
+		reg = 0x200;
+	fullreg = (reg >> 5) & 0xF;
+	fullreg <<= 4;
+	status = twl4030_bci_read(TWL4030_BCIMFTH9, &oldreg);
+	if (status < 0)
+		return status;
+	if ((oldreg & 0xF0) != fullreg) {
+		fullreg |= (oldreg & 0x0F);
+		status = twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0xE7,
+					  TWL4030_BCIMFKEY);
+		if (status < 0)
+			return status;
+		twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE,
+				 fullreg, TWL4030_BCIMFTH9);
+	}
+
+	/* And finally, set the current */
+	twl4030_charger_set_max_current(bci->ichg, cgain);
+
+	if (cgain) {
+		status = twl4030_bci_read(TWL4030_BCICTL1, &bcictl1);
+		if (status < 0)
+			return status;
+		if (!(bcictl1 & TWL4030_CGAIN)) {
+			bcictl1 |= TWL4030_CGAIN;
+			twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE,
+					 bcictl1, TWL4030_BCICTL1);
+		}
+	}
+	return 0;
 }
 
 /*
@@ -396,10 +495,8 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 			bci->usb_enabled = 1;
 		}
 
-		if (allow_usb && default_usb_current < 500000)
-			twl4030_charger_set_max_current(500000);
-		else
-			twl4030_charger_set_max_current(default_usb_current);
+		twl4030_charger_update_current(bci);
+
 		if (bci->mode == CHARGE_AUTO) {
 			/* forcing the field BCIAUTOUSB (BOOT_BCI[1]) to 1 */
 			ret = twl4030_clear_set_boot_bci(0, TWL4030_BCIAUTOUSB);
@@ -439,7 +536,7 @@ static int twl4030_charger_enable_usb(struct twl4030_bci *bci, bool enable)
 					       TWL4030_BCIMFEN3);
 		}
 	} else {
-		ret = twl4030_clear_set_boot_bci(TWL4030_BCIAUTOUSB, 0);
+		ret = twl4030_clear_set_boot_bci(TWL4030_BCIAUTOUSB|TWL4030_CVENAC, 0);
 		ret |= twl_i2c_write_u8(TWL_MODULE_MAIN_CHARGE, 0x2a,
 					TWL4030_BCIMDKEY);
 		if (bci->usb_enabled) {
@@ -574,6 +671,12 @@ static void twl4030_bci_usb_work(struct work_struct *data)
 {
 	struct twl4030_bci *bci = container_of(data, struct twl4030_bci, work);
 
+	/* reset current on each 'plug' event */
+	if (allow_usb && default_usb_current < 500000)
+		bci->ichg = 500000;
+	else
+		bci->ichg = default_usb_current;
+
 	switch (bci->event) {
 	case USB_EVENT_VBUS:
 	case USB_EVENT_CHARGER:
@@ -605,6 +708,7 @@ static ssize_t
 twl4030_bci_max_current_store(struct device *dev, struct device_attribute *attr,
 	const char *buf, size_t n)
 {
+	struct twl4030_bci *bci = dev_get_drvdata(dev);
 	int cur = 0;
 	int status = 0;
 	status = kstrtoint(buf, 10, &cur);
@@ -612,7 +716,14 @@ twl4030_bci_max_current_store(struct device *dev, struct device_attribute *attr,
 		return status;
 	if (cur < 0)
 		return -EINVAL;
-	status = twl4030_charger_set_max_current(cur);
+	if (bci->ichg == cur)
+		return n;
+	bci->ichg = cur;
+	twl4030_charger_enable_usb(bci, false);
+	twl4030_charger_enable_ac(false);
+	twl4030_charger_update_current(bci);
+	twl4030_charger_enable_ac(true);
+	twl4030_charger_enable_usb(bci, true);
 	return (status == 0) ? n : status;
 }
 
@@ -868,6 +979,11 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->min_battery_mvolts_usb = 0xC;
 	bci->min_battery_mvolts_ac = 0x8;
 	bci->mode = CHARGE_AUTO;
+
+	bci->ichg_eoc = 80100; /* Stop charging when current drops to here */
+	bci->ichg_lo = 241000; /* low threshold */
+	bci->ichg_hi = 500000; /* High threshold */
+	bci->ichg = default_usb_current;
 
 	bci->dev = &pdev->dev;
 	bci->irq_chg = platform_get_irq(pdev, 0);
