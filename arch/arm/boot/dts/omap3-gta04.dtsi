@@ -109,6 +109,12 @@
 		timers = <&timer11>;
 		#pwm-cells = <2>;
 	};
+
+	external-gps-antenna {
+		compatible = "gpio-presence-detector";
+		gpios = <&gpio5 16 0>; /* GPIO144 */
+		debounce-delay-ms = <10>;
+	};
 };
 
 &omap3_pmx_core {
