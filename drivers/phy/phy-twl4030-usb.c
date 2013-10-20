@@ -41,6 +41,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+#include <linux/extcon.h>
 
 /* Register defines */
 
@@ -165,6 +166,9 @@ struct twl4030_usb {
 	bool			vbus_supplied;
 	u8			asleep;
 	bool			irq_enabled;
+
+	/* cable connection */
+	struct extcon_dev	edev;
 
 	struct delayed_work	id_workaround_work;
 };
@@ -550,6 +554,47 @@ static ssize_t twl4030_usb_vbus_show(struct device *dev,
 }
 static DEVICE_ATTR(vbus, 0444, twl4030_usb_vbus_show, NULL);
 
+
+static const char *usb_cables[] = {
+	"USB", /* id is floating */
+	"USB-Host", /* id is ground */
+	"Fast-charger", /* id is 102kOhm to ground */
+	"Slow-charger", /* id is something else */
+	NULL
+};
+enum {
+	TWL_CABLE_USB,
+	TWL_CABLE_OTG,
+	TWL_CABLE_CHARGER,
+	TWL_CABLE_OTHER,
+};
+static u32 all_exclusive[] =  {0xFFFFFFFF, 0};
+
+static void twl4030_usb_report_cable(struct twl4030_usb *twl)
+{
+	switch(twl->linkstat) {
+	case OMAP_MUSB_VBUS_OFF:
+	case OMAP_MUSB_UNKNOWN:
+		extcon_set_state(&twl->edev, 0);
+		break;
+	case OMAP_MUSB_ID_GROUND:
+		extcon_update_state(&twl->edev,
+				    1<<TWL_CABLE_OTG,
+				    1<<TWL_CABLE_OTG);
+		break;
+	case OMAP_MUSB_VBUS_VALID:
+		extcon_update_state(&twl->edev,
+				    1<<TWL_CABLE_USB,
+				    1<<TWL_CABLE_USB);
+		break;
+	case OMAP_MUSB_ID_FLOAT:
+		extcon_update_state(&twl->edev,
+				    1<<TWL_CABLE_OTHER,
+				    1<<TWL_CABLE_OTHER);
+		break;
+	}
+}
+
 static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 {
 	struct twl4030_usb *twl = _twl;
@@ -588,6 +633,7 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 			}
 		}
 		omap_musb_mailbox(status);
+		twl4030_usb_report_cable(twl);
 	}
 
 	/* don't schedule during sleep - irq works right then */
@@ -621,6 +667,7 @@ static int twl4030_phy_init(struct phy *phy)
 
 	if (status == OMAP_MUSB_ID_GROUND || status == OMAP_MUSB_VBUS_VALID)
 		omap_musb_mailbox(twl->linkstat);
+	twl4030_usb_report_cable(twl);
 
 	sysfs_notify(&twl->dev->kobj, NULL, "vbus");
 	pm_runtime_mark_last_busy(twl->dev);
@@ -735,6 +782,20 @@ static int twl4030_usb_probe(struct platform_device *pdev)
 		return err;
 	}
 	usb_add_phy_dev(&twl->phy);
+
+	twl->edev.name = devm_kasprintf(twl->dev, GFP_KERNEL, "%s-usb",
+					dev_name(twl->dev->parent));
+	twl->edev.supported_cable = usb_cables;
+	twl->edev.mutually_exclusive = all_exclusive;
+	twl->edev.print_name = NULL; /* why would you change this? */
+	twl->edev.print_state = NULL; /* probably want to change this */
+
+	twl->edev.dev.parent = &pdev->dev;
+	err = extcon_dev_register(&twl->edev);
+	if (err) {
+		dev_err(&pdev->dev, "register extcon failed\n");
+		return err;
+	}
 
 	platform_set_drvdata(pdev, twl);
 	if (device_create_file(&pdev->dev, &dev_attr_vbus))
