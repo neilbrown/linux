@@ -28,6 +28,7 @@
 #include <linux/types.h>
 #include <linux/phy/phy.h>
 #include <linux/input/matrix_keypad.h>
+#include <linux/extcon.h>
 
 /*
  * Using the twl4030 core we address registers using a pair
@@ -582,6 +583,7 @@ struct twl4030_bci_platform_data {
 	unsigned int tblsize;
 	int	bb_uvolt;	/* voltage to charge backup battery */
 	int	bb_uamp;	/* current for backup battery charging */
+	struct extcon_dev *edev;
 };
 
 /* TWL4030_GPIO_MAX (18) GPIOs, with interrupts */

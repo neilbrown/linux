@@ -24,6 +24,7 @@
 #include <linux/usb/otg.h>
 #include <linux/regulator/machine.h>
 #include <linux/i2c/twl4030-madc.h>
+#include <linux/extcon.h>
 
 #define TWL4030_BCIMDEN		0x00
 #define TWL4030_BCIMDKEY	0x01
@@ -125,6 +126,10 @@ struct twl4030_bci {
 	int			ichg_eoc, ichg_lo, ichg_hi;
 	int			usb_cur, ac_cur;
 	bool			ac_is_active;
+
+	struct extcon_specific_cable_nb	usb_dev,
+		charger_dev, other_dev;
+	struct notifier_block ext_usb_nb, charger_nb, other_nb;
 
 	unsigned long		event;
 };
@@ -720,6 +725,42 @@ static int twl4030_bci_usb_ncb(struct notifier_block *nb, unsigned long val,
 	return NOTIFY_OK;
 }
 
+static int twl4030_charger_ext_usb(struct notifier_block *nb,
+				   unsigned long event, void *ptr)
+{
+	struct twl4030_bci *bci = container_of(nb, struct twl4030_bci, ext_usb_nb);
+	if (event)
+		bci->event = USB_EVENT_VBUS;
+	else
+		bci->event = USB_EVENT_NONE;
+	schedule_work(&bci->work);
+	return NOTIFY_OK;
+}
+
+static int twl4030_charger_charger(struct notifier_block *nb,
+				   unsigned long event, void *ptr)
+{
+	struct twl4030_bci *bci = container_of(nb, struct twl4030_bci, charger_nb);
+	if (event)
+		bci->event = USB_EVENT_CHARGER;
+	else
+		bci->event = USB_EVENT_NONE;
+	schedule_work(&bci->work);
+	return NOTIFY_OK;
+}
+
+static int twl4030_charger_other(struct notifier_block *nb,
+				   unsigned long event, void *ptr)
+{
+	struct twl4030_bci *bci = container_of(nb, struct twl4030_bci, other_nb);
+	if (event)
+		bci->event = USB_EVENT_VBUS;
+	else
+		bci->event = USB_EVENT_NONE;
+	schedule_work(&bci->work);
+	return NOTIFY_OK;
+}
+
 /*
  * sysfs max_current store
  */
@@ -985,6 +1026,7 @@ twl4030_bci_parse_dt(struct device *dev)
 	struct device_node *np = dev->of_node;
 	struct twl4030_bci_platform_data *pdata;
 	u32 num;
+	char *ename;
 
 	if (!np)
 		return NULL;
@@ -996,6 +1038,11 @@ twl4030_bci_parse_dt(struct device *dev)
 		pdata->bb_uvolt = num;
 	if (of_property_read_u32(np, "ti,bb-uamp", &num) == 0)
 		pdata->bb_uamp = num;
+
+	ename = kasprintf(GFP_KERNEL, "%s-usb", dev_name(dev->parent));
+	if (ename)
+		pdata->edev = extcon_get_extcon_dev(ename);
+	kfree(ename);
 	return pdata;
 }
 #else
@@ -1019,6 +1066,8 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 
 	if (!pdata)
 		pdata = twl4030_bci_parse_dt(&pdev->dev);
+	if (IS_ERR(pdata))
+		return PTR_ERR(pdata);
 
 	/* Hardware default is 3950. Max is 4113.
 	 * We let's try 4070 - hopefully not too high
@@ -1067,6 +1116,21 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 	bci->usb.properties = twl4030_charger_props;
 	bci->usb.num_properties = ARRAY_SIZE(twl4030_charger_props);
 	bci->usb.get_property = twl4030_bci_get_property;
+
+	if (pdata && pdata->edev) {
+		bci->ext_usb_nb.notifier_call = twl4030_charger_ext_usb;
+		extcon_register_interest(&bci->usb_dev,
+					 pdata->edev->name,
+					 "USB", &bci->ext_usb_nb);
+		bci->charger_nb.notifier_call = twl4030_charger_charger;
+		extcon_register_interest(&bci->charger_dev,
+					 pdata->edev->name,
+					 "Fast-charger", &bci->charger_nb);
+		bci->other_nb.notifier_call = twl4030_charger_other;
+		extcon_register_interest(&bci->other_dev,
+					 pdata->edev->name,
+					 "Slow-charger", &bci->other_nb);
+	}
 
 	bci->usb_reg = regulator_get(bci->dev, "bci3v1");
 
@@ -1152,6 +1216,9 @@ fail_chg_irq:
 	power_supply_unregister(&bci->usb);
 fail_register_usb:
 	power_supply_unregister(&bci->ac);
+	extcon_unregister_interest(&bci->usb_dev);
+	extcon_unregister_interest(&bci->charger_dev);
+	extcon_unregister_interest(&bci->other_dev);
 fail_register_ac:
 fail_no_battery:
 	kfree(bci);
@@ -1179,6 +1246,9 @@ static int __exit twl4030_bci_remove(struct platform_device *pdev)
 		usb_unregister_notifier(bci->transceiver, &bci->usb_nb);
 		usb_put_phy(bci->transceiver);
 	}
+	extcon_unregister_interest(&bci->usb_dev);
+	extcon_unregister_interest(&bci->charger_dev);
+	extcon_unregister_interest(&bci->other_dev);
 	free_irq(bci->irq_bci, bci);
 	free_irq(bci->irq_chg, bci);
 	power_supply_unregister(&bci->usb);
