@@ -270,7 +270,7 @@
 		twl_audio: audio {
 			compatible = "ti,twl4030-audio";
 			ti,enable-vibra = <1>;
-			codec {
+			twl_codec: codec {
 			};
 		};
 	};
@@ -548,4 +548,9 @@
 
 &twl_power {
 	ti,use_poweroff;
+};
+#define SND_SOC_DAIFMT_CBS_CFS          (4 << 12)
+#define SND_SOC_DAIFMT_IB_NF            (3 << 8)
+&twl_codec {
+	ti,voice_fmt = <(SND_SOC_DAIFMT_CBS_CFS | SND_SOC_DAIFMT_IB_NF)>;
 };
