@@ -545,3 +545,7 @@
 &mcbsp2 {
 	status = "okay";
 };
+
+&twl_power {
+	ti,use_poweroff;
+};
