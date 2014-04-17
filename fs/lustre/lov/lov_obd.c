@@ -423,7 +423,8 @@ static int lov_set_osc_active(struct obd_device *obd, struct obd_uuid *uuid,
 			lov->lov_tgts[index]->ltd_exp->exp_obd->obd_inactive = 1;
 		}
 	} else {
-		CERROR("Unknown event(%d) for uuid %s", ev, uuid->uuid);
+		CERROR("%s: unknown event %d for uuid %s\n", obd->obd_name,
+		       ev, uuid->uuid);
 	}
 
 	if (tgt->ltd_exp)

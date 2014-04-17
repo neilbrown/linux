@@ -1262,7 +1262,7 @@ static void mdc_adjust_dirpages(struct page **pages, int cfs_pgs, int lu_pgs)
 
 		kunmap(pages[i]);
 	}
-	LASSERTF(lu_pgs == 0, "left = %d", lu_pgs);
+	LASSERTF(lu_pgs == 0, "left = %d\n", lu_pgs);
 }
 #else
 #define mdc_adjust_dirpages(pages, cfs_pgs, lu_pgs) do {} while (0)
