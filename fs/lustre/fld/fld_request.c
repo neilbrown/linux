@@ -372,6 +372,11 @@ int fld_client_rpc(struct obd_export *exp,
 		obd_put_request_slot(&exp->exp_obd->u.cli);
 	}
 
+	if (rc == -ENOENT) {
+		/* Don't loop forever on non-existing FID sequences. */
+		goto out_req;
+	}
+
 	if (rc != 0) {
 		if (imp->imp_state != LUSTRE_IMP_CLOSED && !imp->imp_deactive) {
 			/*
