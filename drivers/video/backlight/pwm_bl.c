@@ -46,8 +46,10 @@ static void pwm_backlight_power_on(struct pwm_bl_data *pb, int brightness)
 {
 	int err;
 
-	if (pb->enabled)
+	if (pb->enabled) {
+		pwm_enable(pb->pwm);
 		return;
+	}
 
 	err = regulator_enable(pb->power_supply);
 	if (err < 0)
