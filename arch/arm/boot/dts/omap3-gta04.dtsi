@@ -83,6 +83,21 @@
 		compatible = "usb-nop-xceiv";
 		reset-gpios = <&gpio6 14 GPIO_ACTIVE_LOW>;
 	};
+
+	pwm-backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pwm 0 2000000>;
+		brightness-levels = <0 11 20 30 40 50 60 70 80 90 100>;
+		default-brightness-level = <10>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&backlight_pins>;
+	};
+
+	pwm: omap-pwm {
+		compatible = "ti,omap-pwm";
+		timers = <&timer11>;
+		#pwm-cells = <2>;
+	};
 };
 
 &omap3_pmx_core {
@@ -166,6 +181,11 @@
                        0x0da (PIN_OUTPUT | MUX_MODE0)   /* dss_data23.dss_data23 */
                >;
        };
+	backlight_pins: pinmux_backlight_pins {
+		pinctrl-single,pins = <
+			0x08a (PIN_OUTPUT | MUX_MODE3) /* gpmc_ncs6.gpt11_pwm_evt */
+		>;
+	};
 };
 
 &omap3_pmx_core2 {
@@ -193,6 +213,7 @@
 			OMAP3630_CORE2_IOPAD(0x25e4, PIN_INPUT | MUX_MODE4) /* rx */
 		>;
 	};
+
 };
 
 &i2c1 {
