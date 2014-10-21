@@ -526,6 +526,8 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 	 */
 	if (!button->can_disable)
 		irqflags |= IRQF_SHARED;
+	if (button->wakeup)
+		irqflags |= IRQF_NO_SUSPEND;
 
 	error = devm_request_any_context_irq(&pdev->dev, bdata->irq,
 					     isr, irqflags, desc, bdata);
