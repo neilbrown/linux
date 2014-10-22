@@ -266,7 +266,7 @@
 	};
 
 	/* leds */
-	tca6507@45 {
+	tca: tca6507@45 {
 		compatible = "ti,tca6507";
 		#address-cells = <1>;
 		#size-cells = <0>;
@@ -352,6 +352,7 @@
 	vmmc-supply = <&vaux4>;
 	bus-width = <4>;
 	ti,non-removable;
+	reset-gpios = <&tca 0 GPIO_ACTIVE_LOW>;
 };
 
 &mmc3 {
