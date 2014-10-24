@@ -849,7 +849,8 @@ static void if_sdio_finish_power_on(struct if_sdio_card *card)
 			card->started = true;
 			/* Tell PM core that we don't need the card to be
 			 * powered now */
-			pm_runtime_put(&func->dev);
+			if (func->card->host->caps & MMC_CAP_POWER_OFF_CARD)
+				pm_runtime_put(&func->dev);
 		}
 	}
 
@@ -1111,7 +1112,8 @@ static int if_sdio_power_save(struct lbs_private *priv)
 	ret = if_sdio_power_off(card);
 
 	/* Let runtime PM know the card is powered off */
-	pm_runtime_put_sync(&card->func->dev);
+	if (card->func->card->host->caps & MMC_CAP_POWER_OFF_CARD)
+		pm_runtime_put_sync(&card->func->dev);
 
 	return ret;
 }
@@ -1122,7 +1124,8 @@ static int if_sdio_power_restore(struct lbs_private *priv)
 	int r;
 
 	/* Make sure the card will not be powered off by runtime PM */
-	pm_runtime_get_sync(&card->func->dev);
+	if (card->func->card->host->caps & MMC_CAP_POWER_OFF_CARD)
+		pm_runtime_get_sync(&card->func->dev);
 
 	r = if_sdio_power_on(card);
 	if (r)
@@ -1303,7 +1306,8 @@ static void if_sdio_remove(struct sdio_func *func)
 	card = sdio_get_drvdata(func);
 
 	/* Undo decrement done above in if_sdio_probe */
-	pm_runtime_get_noresume(&func->dev);
+	if (func->card->host->caps & MMC_CAP_POWER_OFF_CARD)
+		pm_runtime_get_noresume(&func->dev);
 
 	if (user_rmmod && (card->model == MODEL_8688)) {
 		/*
