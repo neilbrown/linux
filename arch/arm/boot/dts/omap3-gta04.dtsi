@@ -160,6 +160,26 @@
 		>;
 	};
 
+	mmc2_pins: pinmux_mmc2_pins {
+		pinctrl-single,pins = <
+			0x128 (PIN_INPUT_PULLUP | MUX_MODE0)	/* sdmmc2_clk */
+			0x12a (PIN_INPUT_PULLUP | MUX_MODE0)	/* sdmmc2_cmd */
+			0x12c (PIN_INPUT_PULLUP | MUX_MODE0)	/* sdmmc2_dat0 */
+			0x12e (PIN_INPUT_PULLUP | MUX_MODE0)	/* sdmmc2_dat1 */
+			0x130 (PIN_INPUT_PULLUP | MUX_MODE0)	/* sdmmc2_dat2 */
+			0x132 (PIN_INPUT_PULLUP | MUX_MODE0)	/* sdmmc2_dat3 */
+			0x134 (PIN_INPUT_PULLUP | MUX_MODE1)	/* sdmmc2_dir_dat0 */
+			0x136 (PIN_INPUT_PULLUP | MUX_MODE1)	/* sdmmc2_dir_dat1 */
+			0x138 (PIN_INPUT_PULLUP | MUX_MODE1)	/* sdmmc2_cmd */
+			0x13a (PIN_INPUT_PULLUP | MUX_MODE1)	/* sdmmc2_clkin */
+		>;
+	};
+	mmc2_cirq_pin: pinmux_cirq_pin {
+		pinctrl-single,pins = <
+			0x12e (PIN_INPUT_PULLUP | MUX_MODE4)	/* sdmmc2_dat1 as GPIO_133 GPIO5,5 */
+		>;
+	};
+
 	dss_dpi_pins: pinmux_dss_dpi_pins {
                pinctrl-single,pins = <
                        0x0a4 (PIN_OUTPUT | MUX_MODE0)   /* dss_pclk.dss_pclk */
@@ -354,6 +374,11 @@
 	ti,non-removable;
 	cap-power-off-card;
 	reset-gpios = <&tca 0 GPIO_ACTIVE_LOW>;
+	interrupts-extended = <&intc 86 &gpio5 5 0>; /* GPIO_133 */
+	pinctrl-names = "default", "active", "idle";
+	pinctrl-0 = <&mmc2_pins>;
+	pinctrl-1 = <&mmc2_pins>;
+	pinctrl-2 = <&mmc2_cirq_pin>;
 };
 
 &mmc3 {
