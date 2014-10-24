@@ -1533,6 +1533,8 @@ void mmc_power_up(struct mmc_host *host, u32 ocr)
 
 	mmc_host_clk_hold(host);
 
+	/* Reset during power-off */
+	mmc_gpio_set_rs(host, 1);
 	host->ios.vdd = fls(ocr) - 1;
 	if (mmc_host_is_spi(host))
 		host->ios.chip_select = MMC_CS_HIGH;
@@ -1568,6 +1570,7 @@ void mmc_power_up(struct mmc_host *host, u32 ocr)
 	 * time required to reach a stable voltage.
 	 */
 	mmc_delay(10);
+	mmc_gpio_set_rs(host, 0);
 
 	mmc_host_clk_release(host);
 }
