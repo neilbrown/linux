@@ -129,6 +129,7 @@ struct if_sdio_card {
 	struct work_struct	packet_worker;
 
 	u8			rx_unit;
+	int			restore_on_resume;
 };
 
 static void if_sdio_finish_power_on(struct if_sdio_card *card);
@@ -1350,6 +1351,13 @@ static int if_sdio_suspend(struct device *dev)
 	struct if_sdio_card *card = sdio_get_drvdata(func);
 
 	mmc_pm_flag_t flags = sdio_get_host_pm_caps(func);
+	if (card->priv->fw_ready) {
+		/* hard is on... */
+		card->restore_on_resume = 1;
+		if_sdio_power_off(card);
+	} else
+		card->restore_on_resume = 0;
+	return 0;
 
 	/* If we're powered off anyway, just let the mmc layer remove the
 	 * card. */
@@ -1389,7 +1397,9 @@ static int if_sdio_resume(struct device *dev)
 	struct sdio_func *func = dev_to_sdio_func(dev);
 	struct if_sdio_card *card = sdio_get_drvdata(func);
 	int ret;
-
+	if (card->restore_on_resume)
+		if_sdio_power_on(card);
+	return 0;
 	dev_info(dev, "%s: resume: we're back\n", sdio_func_id(func));
 
 	ret = lbs_resume(card->priv);
