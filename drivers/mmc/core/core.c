@@ -1555,6 +1555,8 @@ void mmc_power_up(struct mmc_host *host, u32 ocr)
 
 	mmc_host_clk_hold(host);
 
+	/* Reset during power-off */
+	mmc_gpio_set_rs(host, 1);
 	host->ios.vdd = fls(ocr) - 1;
 	host->ios.power_mode = MMC_POWER_UP;
 	/* Set initial state and call mmc_set_ios */
@@ -1584,6 +1586,7 @@ void mmc_power_up(struct mmc_host *host, u32 ocr)
 	 * time required to reach a stable voltage.
 	 */
 	mmc_delay(10);
+	mmc_gpio_set_rs(host, 0);
 
 	mmc_host_clk_release(host);
 }

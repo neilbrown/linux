@@ -412,6 +412,18 @@ int mmc_of_parse(struct mmc_host *host)
 	if (ro_cap_invert ^ ro_gpio_invert)
 		host->caps2 |= MMC_CAP2_RO_ACTIVE_HIGH;
 
+	ret = mmc_gpiod_request_reset(host, "reset", 0, 0);
+	if (ret) {
+		if (ret == -EPROBE_DEFER)
+			goto out;
+		if (ret != -ENOENT) {
+			dev_err(host->parent,
+				"Failed to request RESET GPIO: %d\n",
+				ret);
+		}
+	} else
+		dev_info(host->parent, "Got RESET GPIO\n");
+
 	if (of_find_property(np, "cap-sd-highspeed", &len))
 		host->caps |= MMC_CAP_SD_HIGHSPEED;
 	if (of_find_property(np, "cap-mmc-highspeed", &len))
