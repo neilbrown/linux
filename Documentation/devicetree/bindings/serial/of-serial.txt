@@ -39,6 +39,10 @@ Optional properties:
   driver is allowed to detect support for the capability even without this
   property.
 
+Optional child node:
+- a platform device listed as a child node will be probed and can
+  register with the tty for open/close events to manage power.
+
 Example:
 
 	uart@80230000 {

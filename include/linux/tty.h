@@ -299,6 +299,22 @@ struct tty_file_private {
 	struct list_head list;
 };
 
+/* A "tty slave" device is permanently attached to a tty, typically
+ * via a UART.
+ * The driver can register for notifications for power management
+ * etc.  Any operation can be NULL.
+ * Operations are called under dev->mutex for the tty device.
+ */
+struct tty_slave_operations {
+	/* 'open' is called when the device is first opened */
+	void (*open)(struct device *slave, struct tty_struct *tty);
+	/* 'release' is called on last close */
+	void (*release)(struct device *slave, struct tty_struct *tty);
+};
+int tty_set_slave(struct device *tty, struct device *slave,
+		  struct tty_slave_operations *ops);
+void tty_clear_slave(struct device *tty, struct device *slave);
+
 /* tty magic number */
 #define TTY_MAGIC		0x5401
 
