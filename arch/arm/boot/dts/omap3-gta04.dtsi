@@ -112,7 +112,7 @@
 
 	external-gps-antenna {
 		compatible = "gpio-presence-detector";
-		gpios = <&gpio5 16 0>; /* GPIO144 */
+		gpios = <&gpio5 16 0>; /* GPIO_144 */
 		debounce-delay-ms = <10>;
 	};
 };
@@ -281,15 +281,15 @@
 		compatible = "bosch,bmp085";
 		reg = <0x77>;
 		interrupt-parent = <&gpio4>;
-		interrupts = <17 IRQ_TYPE_EDGE_RISING>;
+		interrupts = <17 IRQ_TYPE_EDGE_RISING>; /* GPIO_113 */
 	};
 
 	/* accelerometer */
 	bma180@41 {
 		compatible = "bosch,bma180";
 		reg = <0x41>;
-		interrupt-parent = <&gpio3>;
-		interrupts = <19 IRQ_TYPE_LEVEL_HIGH>;
+		interrupt-parent = <&gpio4>;
+		interrupts = <19 IRQ_TYPE_LEVEL_HIGH>; /* GPIO_115 */
 	};
 
 	/* gyroscope */
@@ -348,7 +348,7 @@
 		compatible = "ti,tsc2007";
 		reg = <0x48>;
 		interrupt-parent = <&gpio6>;
-		interrupts = <0 IRQ_TYPE_EDGE_FALLING>;
+		interrupts = <0 IRQ_TYPE_EDGE_FALLING>; /* GPIO_160 */
 		gpios = <&gpio6 0 GPIO_ACTIVE_LOW>;
 		ti,x-plate-ohms = <600>;
 	};
