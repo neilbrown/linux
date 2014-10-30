@@ -148,6 +148,12 @@
 		>;
 	};
 
+	uart2_pins_rx_gpio: pinmux_uart2_pins_rx_gpio {
+		pinctrl-single,pins = <
+			0x14a (PIN_INPUT | MUX_MODE4)		/* uart2_rx.gpio_147 */
+		>;
+	};
+
 	uart3_pins: pinmux_uart3_pins {
 		pinctrl-single,pins = <
 			0x16e (PIN_INPUT | MUX_MODE0)		/* uart3_rx.uart3_rx */
@@ -410,8 +416,16 @@
 };
 
 &uart2 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&uart2_pins>;
+	gps {
+		compatible = "tty,w2sg0004";
+		vdd-supply = <&vsim>;
+		gpios = <&gpio5 17 0>; /* GPIO_145 */
+		interrupts-extended = <&gpio5 19 0>; /* GPIO_147 */
+		/* When idle, switch RX to be an interrupt */
+		pinctrl-names = "default", "idle";
+		pinctrl-0 = <&uart2_pins>;
+		pinctrl-1 = <&uart2_pins_rx_gpio>;
+	};
 };
 
 &uart3 {
