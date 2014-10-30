@@ -9,4 +9,10 @@ if TTY_SLAVE
 config TTY_SLAVE_REGULATOR
 	tristate "TTY slave device powered by regulator"
 
+config TTY_SLAVE_W2SG0004
+	tristate "W2SG0004 GPS on/off control"
+	help
+	  Enable on/off control of W2SG0004 GPS when attached
+	  to a UART.
+
 endif

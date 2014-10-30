@@ -1,2 +1,3 @@
 
-obj-$(CONFIG_TTY_SLAVE_REGULATOR) += tty-reg.o
+obj-$(CONFIG_TTY_SLAVE_REGULATOR)	+= tty-reg.o
+obj-$(CONFIG_TTY_SLAVE_W2SG0004)	+= tty-w2sg0004.o
