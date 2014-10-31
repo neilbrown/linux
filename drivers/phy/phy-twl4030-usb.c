@@ -412,10 +412,17 @@ static void twl4030_phy_power(struct twl4030_usb *twl, int on)
 					(PHY_CLK_CTRL_CLOCKGATING_EN |
 						PHY_CLK_CTRL_CLK32K_EN));
 	} else {
-		__twl4030_phy_power(twl, 0);
 		regulator_disable(twl->usb1v5);
 		regulator_disable(twl->usb1v8);
 		regulator_disable(twl->usb3v1);
+		__twl4030_phy_power(twl, 0);
+		if (!regulator_is_enabled(twl->usb3v1))
+			/* no-one else is requesting this
+			 * so it is OK to power-down the
+			 * phy.  Sometimes a charger might
+			 * hold the regulator active.
+			 */
+			__twl4030_phy_power(twl, 0);
 	}
 }
 
