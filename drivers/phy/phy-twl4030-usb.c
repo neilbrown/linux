@@ -294,24 +294,16 @@ static enum omap_musb_vbus_id_status
 	status = twl4030_readb(twl, TWL_MODULE_PM_MASTER, STS_HW_CONDITIONS);
 	if (status < 0)
 		dev_err(twl->dev, "USB link status err %d\n", status);
-	else if (status & (BIT(7) | BIT(2))) {
-		if (status & BIT(7)) {
-			if (twl4030_is_driving_vbus(twl))
-				status &= ~BIT(7);
-			else
-				twl->vbus_supplied = true;
-		}
-
-		if (status & BIT(2))
-			linkstat = OMAP_MUSB_ID_GROUND;
-		else if (status & BIT(7))
-			linkstat = OMAP_MUSB_VBUS_VALID;
-		else
-			linkstat = OMAP_MUSB_VBUS_OFF;
-	} else {
-		if (twl->linkstat != OMAP_MUSB_UNKNOWN)
-			linkstat = OMAP_MUSB_VBUS_OFF;
-	}
+	else if ((status & BIT(7)) && !twl4030_is_driving_vbus(twl)) {
+		/* We have VBUS so ignore ID_PRES - it is only meaningful
+		 * as an indicator of an A plug when there is no
+		 * VBUS */
+		twl->vbus_supplied = true;
+		linkstat = OMAP_MUSB_VBUS_VALID;
+	} else if (status & BIT(2))
+		linkstat = OMAP_MUSB_ID_GROUND;
+	else if (twl->linkstat != OMAP_MUSB_UNKNOWN)
+		linkstat = OMAP_MUSB_VBUS_OFF;
 
 	dev_dbg(twl->dev, "HW_CONDITIONS 0x%02x/%d; link %d\n",
 			status, status, linkstat);
