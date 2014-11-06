@@ -257,33 +257,6 @@ static int omap_hsmmc_get_cover_state(struct device *dev, int slot)
 	return !gpio_get_value_cansleep(mmc->slots[0].switch_pin);
 }
 
-#ifdef CONFIG_PM
-
-static int omap_hsmmc_suspend_cdirq(struct device *dev, int slot)
-{
-	struct omap_hsmmc_host *host = dev_get_drvdata(dev);
-	struct omap_mmc_platform_data *mmc = host->pdata;
-
-	disable_irq(mmc->slots[0].card_detect_irq);
-	return 0;
-}
-
-static int omap_hsmmc_resume_cdirq(struct device *dev, int slot)
-{
-	struct omap_hsmmc_host *host = dev_get_drvdata(dev);
-	struct omap_mmc_platform_data *mmc = host->pdata;
-
-	enable_irq(mmc->slots[0].card_detect_irq);
-	return 0;
-}
-
-#else
-
-#define omap_hsmmc_suspend_cdirq	NULL
-#define omap_hsmmc_resume_cdirq		NULL
-
-#endif
-
 #ifdef CONFIG_REGULATOR
 
 static int omap_hsmmc_set_power(struct device *dev, int slot, int power_on,
@@ -2223,8 +2196,6 @@ static int omap_hsmmc_probe(struct platform_device *pdev)
 				"Unable to grab MMC CD IRQ\n");
 			goto err_irq_cd;
 		}
-		pdata->suspend = omap_hsmmc_suspend_cdirq;
-		pdata->resume = omap_hsmmc_resume_cdirq;
 	}
 
 	omap_hsmmc_disable_irq(host);
@@ -2316,25 +2287,6 @@ static int omap_hsmmc_remove(struct platform_device *pdev)
 }
 
 #ifdef CONFIG_PM
-static int omap_hsmmc_prepare(struct device *dev)
-{
-	struct omap_hsmmc_host *host = dev_get_drvdata(dev);
-
-	if (host->pdata->suspend)
-		return host->pdata->suspend(dev, host->slot_id);
-
-	return 0;
-}
-
-static void omap_hsmmc_complete(struct device *dev)
-{
-	struct omap_hsmmc_host *host = dev_get_drvdata(dev);
-
-	if (host->pdata->resume)
-		host->pdata->resume(dev, host->slot_id);
-
-}
-
 static int omap_hsmmc_suspend(struct device *dev)
 {
 	struct omap_hsmmc_host *host = dev_get_drvdata(dev);
@@ -2392,8 +2344,6 @@ static int omap_hsmmc_resume(struct device *dev)
 }
 
 #else
-#define omap_hsmmc_prepare	NULL
-#define omap_hsmmc_complete	NULL
 #define omap_hsmmc_suspend	NULL
 #define omap_hsmmc_resume	NULL
 #endif
@@ -2478,8 +2428,6 @@ static int omap_hsmmc_runtime_resume(struct device *dev)
 static struct dev_pm_ops omap_hsmmc_dev_pm_ops = {
 	.suspend	= omap_hsmmc_suspend,
 	.resume		= omap_hsmmc_resume,
-	.prepare	= omap_hsmmc_prepare,
-	.complete	= omap_hsmmc_complete,
 	.runtime_suspend = omap_hsmmc_runtime_suspend,
 	.runtime_resume = omap_hsmmc_runtime_resume,
 };
