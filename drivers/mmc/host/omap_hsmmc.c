@@ -36,6 +36,7 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/core.h>
 #include <linux/mmc/mmc.h>
+#include <linux/mmc/slot-gpio.h>
 #include <linux/io.h>
 #include <linux/irq.h>
 #include <linux/gpio.h>
@@ -233,28 +234,22 @@ static void omap_hsmmc_start_dma_transfer(struct omap_hsmmc_host *host);
 static int omap_hsmmc_card_detect(struct device *dev, int slot)
 {
 	struct omap_hsmmc_host *host = dev_get_drvdata(dev);
-	struct omap_mmc_platform_data *mmc = host->pdata;
 
-	/* NOTE: assumes card detect signal is active-low */
-	return !gpio_get_value_cansleep(mmc->slots[0].switch_pin);
+	return mmc_gpio_get_cd(host->mmc);
 }
 
 static int omap_hsmmc_get_wp(struct device *dev, int slot)
 {
 	struct omap_hsmmc_host *host = dev_get_drvdata(dev);
-	struct omap_mmc_platform_data *mmc = host->pdata;
 
-	/* NOTE: assumes write protect signal is active-high */
-	return gpio_get_value_cansleep(mmc->slots[0].gpio_wp);
+	return mmc_gpio_get_ro(host->mmc);
 }
 
 static int omap_hsmmc_get_cover_state(struct device *dev, int slot)
 {
 	struct omap_hsmmc_host *host = dev_get_drvdata(dev);
-	struct omap_mmc_platform_data *mmc = host->pdata;
 
-	/* NOTE: assumes card detect signal is active-low */
-	return !gpio_get_value_cansleep(mmc->slots[0].switch_pin);
+	return mmc_gpio_get_cd(host->mmc);
 }
 
 #ifdef CONFIG_REGULATOR
@@ -422,7 +417,10 @@ static inline int omap_hsmmc_have_reg(void)
 
 #endif
 
-static int omap_hsmmc_gpio_init(struct omap_mmc_platform_data *pdata)
+static irqreturn_t omap_hsmmc_detect(int irq, void *dev_id);
+
+static int omap_hsmmc_gpio_init(struct mmc_host *mmc,
+				struct omap_mmc_platform_data *pdata)
 {
 	int ret;
 
@@ -434,43 +432,24 @@ static int omap_hsmmc_gpio_init(struct omap_mmc_platform_data *pdata)
 			pdata->slots[0].card_detect = omap_hsmmc_card_detect;
 		pdata->slots[0].card_detect_irq =
 				gpio_to_irq(pdata->slots[0].switch_pin);
-		ret = gpio_request(pdata->slots[0].switch_pin, "mmc_cd");
+		ret = mmc_gpio_request_cd_isr(mmc, omap_hsmmc_detect);
 		if (ret)
 			return ret;
-		ret = gpio_direction_input(pdata->slots[0].switch_pin);
+		ret = mmc_gpio_request_cd(mmc, pdata->slots[0].switch_pin, 0);
 		if (ret)
-			goto err_free_sp;
+			return ret;
 	} else
 		pdata->slots[0].switch_pin = -EINVAL;
 
 	if (gpio_is_valid(pdata->slots[0].gpio_wp)) {
 		pdata->slots[0].get_ro = omap_hsmmc_get_wp;
-		ret = gpio_request(pdata->slots[0].gpio_wp, "mmc_wp");
+		ret = mmc_gpio_request_ro(mmc, pdata->slots[0].gpio_wp);
 		if (ret)
-			goto err_free_cd;
-		ret = gpio_direction_input(pdata->slots[0].gpio_wp);
-		if (ret)
-			goto err_free_wp;
+			return ret;
 	} else
 		pdata->slots[0].gpio_wp = -EINVAL;
 
 	return 0;
-
-err_free_wp:
-	gpio_free(pdata->slots[0].gpio_wp);
-err_free_cd:
-	if (gpio_is_valid(pdata->slots[0].switch_pin))
-err_free_sp:
-		gpio_free(pdata->slots[0].switch_pin);
-	return ret;
-}
-
-static void omap_hsmmc_gpio_free(struct omap_mmc_platform_data *pdata)
-{
-	if (gpio_is_valid(pdata->slots[0].gpio_wp))
-		gpio_free(pdata->slots[0].gpio_wp);
-	if (gpio_is_valid(pdata->slots[0].switch_pin))
-		gpio_free(pdata->slots[0].switch_pin);
 }
 
 /*
@@ -2025,15 +2004,15 @@ static int omap_hsmmc_probe(struct platform_device *pdev)
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
-	ret = omap_hsmmc_gpio_init(pdata);
-	if (ret)
-		goto err;
-
 	mmc = mmc_alloc_host(sizeof(struct omap_hsmmc_host), &pdev->dev);
 	if (!mmc) {
 		ret = -ENOMEM;
 		goto err_alloc;
 	}
+
+	ret = omap_hsmmc_gpio_init(mmc, pdata);
+	if (ret)
+		goto err1;
 
 	host		= mmc_priv(mmc);
 	host->mmc	= mmc;
@@ -2184,20 +2163,6 @@ static int omap_hsmmc_probe(struct platform_device *pdev)
 
 	mmc->ocr_avail = mmc_slot(host).ocr_mask;
 
-	/* Request IRQ for card detect */
-	if ((mmc_slot(host).card_detect_irq)) {
-		ret = devm_request_threaded_irq(&pdev->dev,
-						mmc_slot(host).card_detect_irq,
-						NULL, omap_hsmmc_detect,
-					   IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
-					   mmc_hostname(mmc), host);
-		if (ret) {
-			dev_err(mmc_dev(host->mmc),
-				"Unable to grab MMC CD IRQ\n");
-			goto err_irq_cd;
-		}
-	}
-
 	omap_hsmmc_disable_irq(host);
 
 	/*
@@ -2236,7 +2201,6 @@ static int omap_hsmmc_probe(struct platform_device *pdev)
 
 err_slot_name:
 	mmc_remove_host(mmc);
-err_irq_cd:
 	if (host->use_reg)
 		omap_hsmmc_reg_put(host);
 err_reg:
@@ -2254,8 +2218,6 @@ err_irq:
 err1:
 	mmc_free_host(mmc);
 err_alloc:
-	omap_hsmmc_gpio_free(pdata);
-err:
 	return ret;
 }
 
@@ -2280,7 +2242,6 @@ static int omap_hsmmc_remove(struct platform_device *pdev)
 	if (host->dbclk)
 		clk_disable_unprepare(host->dbclk);
 
-	omap_hsmmc_gpio_free(host->pdata);
 	mmc_free_host(host->mmc);
 
 	return 0;
