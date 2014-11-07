@@ -293,6 +293,12 @@ struct tty_file_private {
 	struct list_head list;
 };
 
+/* A "tty slave" device is permanently attached via a UART.
+ * The driver can register for notifications for power management.
+ */
+int tty_set_slave(struct device *tty, struct device *slave);
+void tty_clear_slave(struct device *tty);
+
 /* tty magic number */
 #define TTY_MAGIC		0x5401
 

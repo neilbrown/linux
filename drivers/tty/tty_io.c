@@ -95,6 +95,8 @@
 #include <linux/seq_file.h>
 #include <linux/serial.h>
 #include <linux/ratelimit.h>
+#include <linux/pm_runtime.h>
+#include <linux/of_platform.h>
 
 #include <linux/uaccess.h>
 
@@ -109,6 +111,11 @@
 
 #define TTY_PARANOIA_CHECK 1
 #define CHECK_TTY_COUNT 1
+
+struct tty_device {
+	struct device dev;
+	struct device *slave;
+};
 
 struct ktermios tty_std_termios = {	/* for the benefit of tty drivers  */
 	.c_iflag = ICRNL | IXON,
@@ -1687,6 +1694,12 @@ int tty_release(struct inode *inode, struct file *filp)
 	int	idx;
 	char	buf[64];
 
+	if (tty->dev) {
+		struct tty_device *ttyd = container_of(
+			tty->dev, struct tty_device, dev);
+		if (ttyd->slave)
+			pm_runtime_put_sync(ttyd->slave);
+	}
 	if (tty_paranoia_check(tty, inode, __func__))
 		return 0;
 
@@ -2086,6 +2099,12 @@ retry_open:
 		__proc_set_tty(current, tty);
 	spin_unlock_irq(&current->sighand->siglock);
 	tty_unlock(tty);
+	if (tty->dev) {
+		struct tty_device *ttyd = container_of(
+			tty->dev, struct tty_device, dev);
+		if (ttyd->slave)
+			pm_runtime_get_sync(ttyd->slave);
+	}
 	mutex_unlock(&tty_mutex);
 	return 0;
 err_unlock:
@@ -3134,6 +3153,7 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 {
 	char name[64];
 	dev_t devt = MKDEV(driver->major, driver->minor_start) + index;
+	struct tty_device *tty_dev;
 	struct device *dev = NULL;
 	int retval = -ENODEV;
 	bool cdev = false;
@@ -3156,11 +3176,12 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 		cdev = true;
 	}
 
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev) {
+	tty_dev = kzalloc(sizeof(*tty_dev), GFP_KERNEL);
+	if (!tty_dev) {
 		retval = -ENOMEM;
 		goto error;
 	}
+	dev = &tty_dev->dev;
 
 	dev->devt = devt;
 	dev->class = tty_class;
@@ -3173,6 +3194,11 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 	retval = device_register(dev);
 	if (retval)
 		goto error;
+	if (device && device->of_node)
+		/* Children are platform devices can register to be
+		 * runtime_pm managed by this tty
+		 */
+		of_platform_populate(device->of_node, NULL, NULL, dev);
 
 	return dev;
 
@@ -3203,6 +3229,32 @@ void tty_unregister_device(struct tty_driver *driver, unsigned index)
 		cdev_del(&driver->cdevs[index]);
 }
 EXPORT_SYMBOL(tty_unregister_device);
+
+int tty_set_slave(struct device *tty, struct device *slave)
+{
+	struct tty_device *ttyd = container_of(tty, struct tty_device, dev);
+	int err;
+	if (tty->class != tty_class)
+		return -ENODEV;
+	if (ttyd->slave)
+		err = -EBUSY;
+	else {
+		ttyd->slave = slave;
+		err = 0;
+	}
+	return err;
+}
+EXPORT_SYMBOL_GPL(tty_set_slave);
+
+void tty_clear_slave(struct device *tty)
+{
+	struct tty_device *ttyd = container_of(tty, struct tty_device, dev);
+	if (tty->class != tty_class)
+		return;
+	ttyd->slave = NULL;
+}
+EXPORT_SYMBOL_GPL(tty_clear_slave);
+
 
 /**
  * __tty_alloc_driver -- allocate tty driver

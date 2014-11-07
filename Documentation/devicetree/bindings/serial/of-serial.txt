@@ -39,6 +39,10 @@ Optional properties:
   property.
 - has-hw-flow-control: the hardware has flow control capability.
 
+Optional child node:
+- a platform device listed as a child node will be probed and can
+  register with the tty to be power-managed on open and close.
+
 Example:
 
 	uart@80230000 {
