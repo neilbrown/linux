@@ -1,0 +1,18 @@
+menuconfig TTY_SLAVE
+	bool "TTY slave devices"
+	help
+	 Devices which attach via a uart, but need extra
+	 driver support for power management etc.
+
+if TTY_SLAVE
+
+config TTY_SLAVE_REGULATOR
+	tristate "TTY slave device powered by regulator"
+
+config TTY_SLAVE_W2SG0004
+	tristate "W2SG0004 GPS on/off control"
+	help
+	  Enable on/off control of W2SG0004 GPS when attached
+	  to a UART.
+
+endif

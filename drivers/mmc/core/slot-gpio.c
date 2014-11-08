@@ -21,9 +21,12 @@
 struct mmc_gpio {
 	struct gpio_desc *ro_gpio;
 	struct gpio_desc *cd_gpio;
+	struct gpio_desc *rs_gpio; /* reset line */
 	bool override_ro_active_level;
 	bool override_cd_active_level;
+	irqreturn_t (*cd_gpio_isr)(int irq, void *dev_id);
 	char *ro_label;
+	char *rs_label;
 	char cd_label[0];
 };
 
@@ -52,12 +55,14 @@ static int mmc_gpio_alloc(struct mmc_host *host)
 		 * before device_add(), i.e., between mmc_alloc_host() and
 		 * mmc_add_host()
 		 */
-		ctx = devm_kzalloc(&host->class_dev, sizeof(*ctx) + 2 * len,
+		ctx = devm_kzalloc(&host->class_dev, sizeof(*ctx) + 3 * len,
 				   GFP_KERNEL);
 		if (ctx) {
 			ctx->ro_label = ctx->cd_label + len;
+			ctx->rs_label = ctx->ro_label + len;
 			snprintf(ctx->cd_label, len, "%s cd", dev_name(host->parent));
 			snprintf(ctx->ro_label, len, "%s ro", dev_name(host->parent));
+			snprintf(ctx->rs_label, len, "%s rs", dev_name(host->parent));
 			host->slot.handler_priv = ctx;
 		}
 	}
@@ -96,6 +101,18 @@ int mmc_gpio_get_cd(struct mmc_host *host)
 	return gpiod_get_value_cansleep(ctx->cd_gpio);
 }
 EXPORT_SYMBOL(mmc_gpio_get_cd);
+
+void mmc_gpio_set_rs(struct mmc_host *host, int state)
+{
+	struct mmc_gpio *ctx = host->slot.handler_priv;
+
+	if (!ctx || !ctx->rs_gpio)
+		return;
+
+	gpiod_set_value_cansleep(ctx->rs_gpio, state);
+}
+EXPORT_SYMBOL(mmc_gpio_set_rs);
+
 
 /**
  * mmc_gpio_request_ro - request a gpio for write-protection
@@ -137,6 +154,36 @@ int mmc_gpio_request_ro(struct mmc_host *host, unsigned int gpio)
 }
 EXPORT_SYMBOL(mmc_gpio_request_ro);
 
+int mmc_gpio_request_rs(struct mmc_host *host, unsigned int gpio, int low)
+{
+	struct mmc_gpio *ctx;
+	int ret;
+	int flags;
+
+	if (!gpio_is_valid(gpio))
+		return -EINVAL;
+
+	ret = mmc_gpio_alloc(host);
+	if (ret < 0)
+		return ret;
+
+	ctx = host->slot.handler_priv;
+	if (low)
+		flags = GPIOF_DIR_OUT | GPIOF_INIT_HIGH | GPIOF_ACTIVE_LOW;
+	else
+		flags = GPIOF_DIR_OUT | GPIOF_INIT_LOW;
+
+	ret = devm_gpio_request_one(&host->class_dev, gpio,
+				    flags, ctx->rs_label);
+	if (ret < 0)
+		return ret;
+
+	ctx->rs_gpio = gpio_to_desc(gpio);
+
+	return 0;
+}
+EXPORT_SYMBOL(mmc_gpio_request_rs);
+
 void mmc_gpiod_request_cd_irq(struct mmc_host *host)
 {
 	struct mmc_gpio *ctx = host->slot.handler_priv;
@@ -156,8 +203,10 @@ void mmc_gpiod_request_cd_irq(struct mmc_host *host)
 		irq = -EINVAL;
 
 	if (irq >= 0) {
+		if (ctx->cd_gpio_isr == NULL)
+			ctx->cd_gpio_isr = mmc_gpio_cd_irqt;
 		ret = devm_request_threaded_irq(&host->class_dev, irq,
-			NULL, mmc_gpio_cd_irqt,
+			NULL, ctx->cd_gpio_isr,
 			IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 			ctx->cd_label, host);
 		if (ret < 0)
@@ -170,6 +219,22 @@ void mmc_gpiod_request_cd_irq(struct mmc_host *host)
 		host->caps |= MMC_CAP_NEEDS_POLL;
 }
 EXPORT_SYMBOL(mmc_gpiod_request_cd_irq);
+
+int mmc_gpio_request_cd_isr(struct mmc_host *host,
+			    irqreturn_t (*isr)(int irq, void *dev_id))
+{
+	struct mmc_gpio *ctx;
+	int ret;
+
+	ret = mmc_gpio_alloc(host);
+	if (ret < 0)
+		return ret;
+	ctx = host->slot.handler_priv;
+	if (ctx->cd_gpio_isr)
+		return -EBUSY;
+	ctx->cd_gpio_isr = isr;
+	return 0;
+}
 
 /**
  * mmc_gpio_request_cd - request a gpio for card-detection
@@ -248,6 +313,28 @@ void mmc_gpio_free_ro(struct mmc_host *host)
 	devm_gpio_free(&host->class_dev, gpio);
 }
 EXPORT_SYMBOL(mmc_gpio_free_ro);
+
+/**
+ * mmc_gpio_free_rs - free the reset gpio
+ * @host: mmc host
+ *
+ * It's provided only for cases that client drivers need to manually free
+ * up the write-protection gpio requested by mmc_gpio_request_rs().
+ */
+void mmc_gpio_free_rs(struct mmc_host *host)
+{
+	struct mmc_gpio *ctx = host->slot.handler_priv;
+	int gpio;
+
+	if (!ctx || !ctx->rs_gpio)
+		return;
+
+	gpio = desc_to_gpio(ctx->rs_gpio);
+	ctx->rs_gpio = NULL;
+
+	devm_gpio_free(&host->class_dev, gpio);
+}
+EXPORT_SYMBOL(mmc_gpio_free_rs);
 
 /**
  * mmc_gpio_free_cd - free the card-detection gpio

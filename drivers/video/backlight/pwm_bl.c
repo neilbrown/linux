@@ -46,8 +46,10 @@ static void pwm_backlight_power_on(struct pwm_bl_data *pb, int brightness)
 {
 	int err;
 
-	if (pb->enabled)
+	if (pb->enabled) {
+		pwm_enable(pb->pwm);
 		return;
+	}
 
 	err = regulator_enable(pb->power_supply);
 	if (err < 0)
@@ -115,11 +117,6 @@ static int pwm_backlight_update_status(struct backlight_device *bl)
 	return 0;
 }
 
-static int pwm_backlight_get_brightness(struct backlight_device *bl)
-{
-	return bl->props.brightness;
-}
-
 static int pwm_backlight_check_fb(struct backlight_device *bl,
 				  struct fb_info *info)
 {
@@ -130,7 +127,6 @@ static int pwm_backlight_check_fb(struct backlight_device *bl,
 
 static const struct backlight_ops pwm_backlight_ops = {
 	.update_status	= pwm_backlight_update_status,
-	.get_brightness	= pwm_backlight_get_brightness,
 	.check_fb	= pwm_backlight_check_fb,
 };
 
@@ -179,6 +175,7 @@ static int pwm_backlight_parse_dt(struct device *dev,
 		data->max_brightness--;
 	}
 
+	data->enable_gpio = -EINVAL;
 	return 0;
 }
 
@@ -245,13 +242,10 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 	pb->dev = &pdev->dev;
 	pb->enabled = false;
 
-	pb->enable_gpio = devm_gpiod_get(&pdev->dev, "enable");
+	pb->enable_gpio = devm_gpiod_get_optional(&pdev->dev, "enable");
 	if (IS_ERR(pb->enable_gpio)) {
 		ret = PTR_ERR(pb->enable_gpio);
-		if (ret == -ENOENT)
-			pb->enable_gpio = NULL;
-		else
-			goto err_alloc;
+		goto err_alloc;
 	}
 
 	/*

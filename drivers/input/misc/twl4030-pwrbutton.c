@@ -41,8 +41,19 @@ static irqreturn_t powerbutton_irq(int irq, void *_pwr)
 
 	err = twl_i2c_read_u8(TWL_MODULE_PM_MASTER, &value, STS_HW_CONDITIONS);
 	if (!err)  {
+		int val = !!(value & PWR_PWRON_IRQ);
+
 		pm_wakeup_event(pwr->dev.parent, 0);
-		input_report_key(pwr, KEY_POWER, value & PWR_PWRON_IRQ);
+		/* We got an interrupt, so we must see a change.
+		 * Because the TWL4030 queues pending interrupts to a depth
+		 * of 2, we end up seeing two keep presses as there can
+		 * be two interrupts processed while the key appears to
+		 * be up.  Maybe we should set PNEDDIS_MASK??
+		 */
+		input_report_key(pwr, KEY_POWER, !val);
+		input_sync(pwr);
+
+		input_report_key(pwr, KEY_POWER, val);
 		input_sync(pwr);
 	} else {
 		dev_err(pwr->dev.parent, "twl4030: i2c error %d while reading"
@@ -85,6 +96,7 @@ static int twl4030_pwrbutton_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, pwr);
+	device_init_wakeup(&pdev->dev, true);
 
 	return 0;
 }

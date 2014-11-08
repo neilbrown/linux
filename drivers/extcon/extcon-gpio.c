@@ -30,6 +30,9 @@
 #include <linux/gpio.h>
 #include <linux/extcon.h>
 #include <linux/extcon/extcon-gpio.h>
+#include <linux/of_platform.h>
+#include <linux/of_gpio.h>
+#include <linux/of_irq.h>
 
 struct gpio_extcon_data {
 	struct extcon_dev *edev;
@@ -81,6 +84,45 @@ static ssize_t extcon_gpio_print_state(struct extcon_dev *edev, char *buf)
 	return -EINVAL;
 }
 
+#ifdef CONFIG_OF
+static struct gpio_extcon_platform_data *
+gpio_extcon_parse(struct device *dev)
+{
+	struct gpio_extcon_platform_data *pdata;
+	struct device_node *np = dev->of_node;
+	u32 num;
+	int irq;
+	enum of_gpio_flags flags;
+
+	if (!np)
+		return NULL;
+	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
+	if (!pdata)
+		return NULL;
+	pdata->name = dev_name(dev);
+	pdata->gpio = of_get_named_gpio_flags(np, "gpios", 0, &flags);
+	if (pdata->gpio < 0)
+		return ERR_PTR(pdata->gpio);
+	if (flags & OF_GPIO_ACTIVE_LOW)
+		pdata->gpio_active_low = 1;
+	irq = gpio_to_irq(pdata->gpio);
+	if (irq < 0) {
+		dev_err(dev, "gpio doesn't provide IRQ\n");
+		return ERR_PTR(irq);
+	}
+	pdata->irq_flags = irq_get_trigger_type(irq);
+	if (of_property_read_u32(np, "debounce-delay-ms", &num) == 0)
+		pdata->debounce = num;
+	return pdata;
+}
+#else
+static inline struct gpio_extcon_platform_data *
+gpio_extcon_parse(struct device *dev)
+{
+	return NULL;
+}
+#endif
+
 static int gpio_extcon_probe(struct platform_device *pdev)
 {
 	struct gpio_extcon_platform_data *pdata = dev_get_platdata(&pdev->dev);
@@ -88,7 +130,11 @@ static int gpio_extcon_probe(struct platform_device *pdev)
 	int ret;
 
 	if (!pdata)
+		pdata = gpio_extcon_parse(&pdev->dev);
+	if (!pdata)
 		return -EBUSY;
+	if (IS_ERR(pdata))
+		return PTR_ERR(pdata);
 	if (!pdata->irq_flags) {
 		dev_err(&pdev->dev, "IRQ flag is not specified.\n");
 		return -EINVAL;
@@ -105,7 +151,6 @@ static int gpio_extcon_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 	extcon_data->edev->name = pdata->name;
-	extcon_data->edev->dev.parent = &pdev->dev;
 
 	extcon_data->gpio = pdata->gpio;
 	extcon_data->gpio_active_low = pdata->gpio_active_low;
@@ -177,6 +222,12 @@ static int gpio_extcon_resume(struct device *dev)
 
 static SIMPLE_DEV_PM_OPS(gpio_extcon_pm_ops, NULL, gpio_extcon_resume);
 
+static const struct of_device_id gpio_extcon_match[] = {
+	{ .compatible = "gpio-presence-detector" },
+	{}
+};
+MODULE_DEVICE_TABLE(of, gpio_extcon_match);
+
 static struct platform_driver gpio_extcon_driver = {
 	.probe		= gpio_extcon_probe,
 	.remove		= gpio_extcon_remove,
@@ -184,6 +235,7 @@ static struct platform_driver gpio_extcon_driver = {
 		.name	= "extcon-gpio",
 		.owner	= THIS_MODULE,
 		.pm	= &gpio_extcon_pm_ops,
+		.of_match_table = gpio_extcon_match,
 	},
 };
 

@@ -41,6 +41,7 @@ struct gpio_button_data {
 	spinlock_t lock;
 	bool disabled;
 	bool key_pressed;
+	bool pending;
 };
 
 struct gpio_keys_drvdata {
@@ -334,6 +335,14 @@ static void gpio_keys_gpio_report_event(struct gpio_button_data *bdata)
 		if (state)
 			input_event(input, type, button->code, button->value);
 	} else {
+		if (type == EV_KEY && bdata->pending) {
+			/* report both the observed state and the alternate,
+			 * to be sure that a change is seen
+			 */
+			bdata->pending = 0;
+			input_event(input, type, button->code, !state);
+			input_sync(input);
+		}
 		input_event(input, type, button->code, !!state);
 	}
 	input_sync(input);
@@ -365,6 +374,7 @@ static irqreturn_t gpio_keys_gpio_isr(int irq, void *dev_id)
 
 	if (bdata->button->wakeup)
 		pm_stay_awake(bdata->input->dev.parent);
+	bdata->pending = true;
 	if (bdata->timer_debounce)
 		mod_timer(&bdata->timer,
 			jiffies + msecs_to_jiffies(bdata->timer_debounce));
@@ -526,6 +536,8 @@ static int gpio_keys_setup_key(struct platform_device *pdev,
 	 */
 	if (!button->can_disable)
 		irqflags |= IRQF_SHARED;
+	if (button->wakeup)
+		irqflags |= IRQF_NO_SUSPEND;
 
 	error = devm_request_any_context_irq(&pdev->dev, bdata->irq,
 					     isr, irqflags, desc, bdata);

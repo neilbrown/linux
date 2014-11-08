@@ -117,6 +117,8 @@ static int sdio_irq_thread(void *_host)
 	idle_period = msecs_to_jiffies(10);
 	period = (host->caps & MMC_CAP_SDIO_IRQ) ?
 		MAX_SCHEDULE_TIMEOUT : idle_period;
+	/* Interrupts don't seem to be 100% reliable on GTA04 */
+	period = idle_period;
 
 	pr_debug("%s: IRQ thread started (poll period = %lu jiffies)\n",
 		 mmc_hostname(host), period);
@@ -138,7 +140,8 @@ static int sdio_irq_thread(void *_host)
 		ret = __mmc_claim_host(host, &host->sdio_irq_thread_abort);
 		if (ret)
 			break;
-		ret = process_sdio_pending_irqs(host);
+		if (host->ios.power_mode == MMC_POWER_ON)
+			ret = process_sdio_pending_irqs(host);
 		host->sdio_irq_pending = false;
 		mmc_release_host(host);
 

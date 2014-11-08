@@ -1,0 +1,18 @@
+Regulator powered UART-attached device
+
+Required properties:
+- compatible: "tty,regulator"
+- vdd-supply: regulator to power the device
+
+
+This is listed as a child node of a UART.  When the
+UART is opened, the device is powered.
+
+Example:
+
+&uart1 {
+	bluetooth {
+		compatible = "tty,regulator";
+		vdd-supply = <&vaux4>;
+	};
+};

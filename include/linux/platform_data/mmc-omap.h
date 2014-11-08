@@ -28,6 +28,7 @@
  */
 #define OMAP_HSMMC_SUPPORTS_DUAL_VOLT		BIT(0)
 #define OMAP_HSMMC_BROKEN_MULTIBLOCK_READ	BIT(1)
+#define OMAP_HSMMC_SWAKEUP_MISSING		BIT(2)
 
 struct mmc_card;
 
@@ -53,10 +54,6 @@ struct omap_mmc_platform_data {
 	int (*init)(struct device *dev);
 	void (*cleanup)(struct device *dev);
 	void (*shutdown)(struct device *dev);
-
-	/* To handle board related suspend/resume functionality for MMC */
-	int (*suspend)(struct device *dev, int slot);
-	int (*resume)(struct device *dev, int slot);
 
 	/* Return context loss count due to PM states changing */
 	int (*get_context_loss_count)(struct device *dev);

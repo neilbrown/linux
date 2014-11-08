@@ -60,6 +60,13 @@ static u8 twl4030_start_script_address = 0x2b;
 #define R_CFG_P2_TRANSITION	PHY_TO_OFF_PM_MASTER(0x37)
 #define R_CFG_P3_TRANSITION	PHY_TO_OFF_PM_MASTER(0x38)
 
+#define	STARTON_PWON	BIT(0)	/* power-on button */
+#define	STARTON_CHG	BIT(1)	/* charger inserted */
+#define	STARTON_USB	BIT(2)	/* USB plug-in */
+#define	STARTON_RTC	BIT(3)	/* RTC alarm */
+#define	STARTON_VBAT	BIT(4)	/* Battery plugged in */
+#define	STARTON_VBUS	BIT(5)	/* voltage detection */
+
 #define END_OF_SCRIPT		0x3f
 
 #define R_SEQ_ADD_A2S		PHY_TO_OFF_PM_MASTER(0x55)
@@ -284,13 +291,13 @@ static int twl4030_config_wakeup12_sequence(u8 address)
 	if (err)
 		goto out;
 
-	if (machine_is_omap_3430sdp() || machine_is_omap_ldp()) {
+	if (1) {
 		/* Disabling AC charger effect on sleep-active transitions */
 		err = twl_i2c_read_u8(TWL_MODULE_PM_MASTER, &data,
 				      R_CFG_P1_TRANSITION);
 		if (err)
 			goto out;
-		data &= ~(1<<1);
+		data &= ~(STARTON_CHG|STARTON_VBUS|STARTON_VBAT|STARTON_USB);
 		err = twl_i2c_write_u8(TWL_MODULE_PM_MASTER, data,
 				       R_CFG_P1_TRANSITION);
 		if (err)
@@ -724,24 +731,24 @@ static struct twl4030_script *omap3_idle_scripts[] = {
  * above.
  */
 static struct twl4030_resconfig omap3_idle_rconfig[] = {
-	TWL_REMAP_SLEEP(RES_VAUX1, DEV_GRP_NULL, 0, 0),
-	TWL_REMAP_SLEEP(RES_VAUX2, DEV_GRP_NULL, 0, 0),
-	TWL_REMAP_SLEEP(RES_VAUX3, DEV_GRP_NULL, 0, 0),
-	TWL_REMAP_SLEEP(RES_VAUX4, DEV_GRP_NULL, 0, 0),
-	TWL_REMAP_SLEEP(RES_VMMC1, DEV_GRP_NULL, 0, 0),
-	TWL_REMAP_SLEEP(RES_VMMC2, DEV_GRP_NULL, 0, 0),
+	TWL_REMAP_SLEEP(RES_VAUX1, TWL4030_RESCONFIG_UNDEF, 0, 0),
+	TWL_REMAP_SLEEP(RES_VAUX2, TWL4030_RESCONFIG_UNDEF, 0, 0),
+	TWL_REMAP_SLEEP(RES_VAUX3, TWL4030_RESCONFIG_UNDEF, 0, 0),
+	TWL_REMAP_SLEEP(RES_VAUX4, TWL4030_RESCONFIG_UNDEF, 0, 0),
+	TWL_REMAP_SLEEP(RES_VMMC1, TWL4030_RESCONFIG_UNDEF, 0, 0),
+	TWL_REMAP_SLEEP(RES_VMMC2, TWL4030_RESCONFIG_UNDEF, 0, 0),
 	TWL_REMAP_OFF(RES_VPLL1, DEV_GRP_P1, 3, 1),
 	TWL_REMAP_SLEEP(RES_VPLL2, DEV_GRP_P1, 0, 0),
-	TWL_REMAP_SLEEP(RES_VSIM, DEV_GRP_NULL, 0, 0),
-	TWL_REMAP_SLEEP(RES_VDAC, DEV_GRP_NULL, 0, 0),
+	TWL_REMAP_SLEEP(RES_VSIM, TWL4030_RESCONFIG_UNDEF, 0, 0),
+	TWL_REMAP_SLEEP(RES_VDAC, TWL4030_RESCONFIG_UNDEF, 0, 0),
 	TWL_REMAP_SLEEP(RES_VINTANA1, TWL_DEV_GRP_P123, 1, 2),
 	TWL_REMAP_SLEEP(RES_VINTANA2, TWL_DEV_GRP_P123, 0, 2),
 	TWL_REMAP_SLEEP(RES_VINTDIG, TWL_DEV_GRP_P123, 1, 2),
 	TWL_REMAP_SLEEP(RES_VIO, TWL_DEV_GRP_P123, 2, 2),
 	TWL_REMAP_OFF(RES_VDD1, DEV_GRP_P1, 4, 1),
 	TWL_REMAP_OFF(RES_VDD2, DEV_GRP_P1, 3, 1),
-	TWL_REMAP_SLEEP(RES_VUSB_1V5, DEV_GRP_NULL, 0, 0),
-	TWL_REMAP_SLEEP(RES_VUSB_1V8, DEV_GRP_NULL, 0, 0),
+	TWL_REMAP_SLEEP(RES_VUSB_1V5, TWL4030_RESCONFIG_UNDEF, 0, 0),
+	TWL_REMAP_SLEEP(RES_VUSB_1V8, TWL4030_RESCONFIG_UNDEF, 0, 0),
 	TWL_REMAP_SLEEP(RES_VUSB_3V1, TWL_DEV_GRP_P123, 0, 0),
 	/* Resource #20 USB charge pump skipped */
 	TWL_REMAP_SLEEP(RES_REGEN, TWL_DEV_GRP_P123, 2, 1),
@@ -775,6 +782,10 @@ static struct twl4030_power_data osc_off_idle = {
 };
 
 static struct of_device_id twl4030_power_of_match[] = {
+	{
+		.compatible = "ti,twl4030-power",
+		.data = NULL,
+	},
 	{
 		.compatible = "ti,twl4030-power-reset",
 		.data = &omap3_reset,

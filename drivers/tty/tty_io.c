@@ -95,6 +95,8 @@
 #include <linux/seq_file.h>
 #include <linux/serial.h>
 #include <linux/ratelimit.h>
+#include <linux/pm_runtime.h>
+#include <linux/of_platform.h>
 
 #include <linux/uaccess.h>
 
@@ -109,6 +111,11 @@
 
 #define TTY_PARANOIA_CHECK 1
 #define CHECK_TTY_COUNT 1
+
+struct tty_device {
+	struct device dev;
+	struct device *slave;
+};
 
 struct ktermios tty_std_termios = {	/* for the benefit of tty drivers  */
 	.c_iflag = ICRNL | IXON,
@@ -155,20 +162,6 @@ static int tty_fasync(int fd, struct file *filp, int on);
 static void release_tty(struct tty_struct *tty, int idx);
 static void __proc_set_tty(struct task_struct *tsk, struct tty_struct *tty);
 static void proc_set_tty(struct task_struct *tsk, struct tty_struct *tty);
-
-/**
- *	alloc_tty_struct	-	allocate a tty object
- *
- *	Return a new empty tty structure. The data fields have not
- *	been initialized in any way but has been zeroed
- *
- *	Locking: none
- */
-
-struct tty_struct *alloc_tty_struct(void)
-{
-	return kzalloc(sizeof(struct tty_struct), GFP_KERNEL);
-}
 
 /**
  *	free_tty_struct		-	free a disused tty
@@ -688,7 +681,7 @@ static void __tty_hangup(struct tty_struct *tty, int exit_session)
 			for (n = 0; n < closecount; n++)
 				tty->ops->close(tty, cons_filp);
 	} else if (tty->ops->hangup)
-		(tty->ops->hangup)(tty);
+		tty->ops->hangup(tty);
 	/*
 	 * We don't want to have driver/ldisc interactions beyond
 	 * the ones we did here. The driver layer expects no
@@ -1455,12 +1448,11 @@ struct tty_struct *tty_init_dev(struct tty_driver *driver, int idx)
 	if (!try_module_get(driver->owner))
 		return ERR_PTR(-ENODEV);
 
-	tty = alloc_tty_struct();
+	tty = alloc_tty_struct(driver, idx);
 	if (!tty) {
 		retval = -ENOMEM;
 		goto err_module_put;
 	}
-	initialize_tty_struct(tty, driver, idx);
 
 	tty_lock(tty);
 	retval = tty_driver_install_tty(driver, tty);
@@ -1702,6 +1694,12 @@ int tty_release(struct inode *inode, struct file *filp)
 	int	idx;
 	char	buf[64];
 
+	if (tty->dev) {
+		struct tty_device *ttyd = container_of(
+			tty->dev, struct tty_device, dev);
+		if (ttyd->slave)
+			pm_runtime_put_sync(ttyd->slave);
+	}
 	if (tty_paranoia_check(tty, inode, __func__))
 		return 0;
 
@@ -2101,6 +2099,12 @@ retry_open:
 		__proc_set_tty(current, tty);
 	spin_unlock_irq(&current->sighand->siglock);
 	tty_unlock(tty);
+	if (tty->dev) {
+		struct tty_device *ttyd = container_of(
+			tty->dev, struct tty_device, dev);
+		if (ttyd->slave)
+			pm_runtime_get_sync(ttyd->slave);
+	}
 	mutex_unlock(&tty_mutex);
 	return 0;
 err_unlock:
@@ -3003,19 +3007,21 @@ static struct device *tty_get_device(struct tty_struct *tty)
 
 
 /**
- *	initialize_tty_struct
- *	@tty: tty to initialize
+ *	alloc_tty_struct
  *
- *	This subroutine initializes a tty structure that has been newly
- *	allocated.
+ *	This subroutine allocates and initializes a tty structure.
  *
- *	Locking: none - tty in question must not be exposed at this point
+ *	Locking: none - tty in question is not exposed at this point
  */
 
-void initialize_tty_struct(struct tty_struct *tty,
-		struct tty_driver *driver, int idx)
+struct tty_struct *alloc_tty_struct(struct tty_driver *driver, int idx)
 {
-	memset(tty, 0, sizeof(struct tty_struct));
+	struct tty_struct *tty;
+
+	tty = kzalloc(sizeof(*tty), GFP_KERNEL);
+	if (!tty)
+		return NULL;
+
 	kref_init(&tty->kref);
 	tty->magic = TTY_MAGIC;
 	tty_ldisc_init(tty);
@@ -3039,6 +3045,8 @@ void initialize_tty_struct(struct tty_struct *tty,
 	tty->index = idx;
 	tty_line_name(driver, idx, tty->name);
 	tty->dev = tty_get_device(tty);
+
+	return tty;
 }
 
 /**
@@ -3145,6 +3153,7 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 {
 	char name[64];
 	dev_t devt = MKDEV(driver->major, driver->minor_start) + index;
+	struct tty_device *tty_dev;
 	struct device *dev = NULL;
 	int retval = -ENODEV;
 	bool cdev = false;
@@ -3167,11 +3176,12 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 		cdev = true;
 	}
 
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev) {
+	tty_dev = kzalloc(sizeof(*tty_dev), GFP_KERNEL);
+	if (!tty_dev) {
 		retval = -ENOMEM;
 		goto error;
 	}
+	dev = &tty_dev->dev;
 
 	dev->devt = devt;
 	dev->class = tty_class;
@@ -3184,6 +3194,11 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 	retval = device_register(dev);
 	if (retval)
 		goto error;
+	if (device && device->of_node)
+		/* Children are platform devices can register to be
+		 * runtime_pm managed by this tty
+		 */
+		of_platform_populate(device->of_node, NULL, NULL, dev);
 
 	return dev;
 
@@ -3214,6 +3229,32 @@ void tty_unregister_device(struct tty_driver *driver, unsigned index)
 		cdev_del(&driver->cdevs[index]);
 }
 EXPORT_SYMBOL(tty_unregister_device);
+
+int tty_set_slave(struct device *tty, struct device *slave)
+{
+	struct tty_device *ttyd = container_of(tty, struct tty_device, dev);
+	int err;
+	if (tty->class != tty_class)
+		return -ENODEV;
+	if (ttyd->slave)
+		err = -EBUSY;
+	else {
+		ttyd->slave = slave;
+		err = 0;
+	}
+	return err;
+}
+EXPORT_SYMBOL_GPL(tty_set_slave);
+
+void tty_clear_slave(struct device *tty)
+{
+	struct tty_device *ttyd = container_of(tty, struct tty_device, dev);
+	if (tty->class != tty_class)
+		return;
+	ttyd->slave = NULL;
+}
+EXPORT_SYMBOL_GPL(tty_clear_slave);
+
 
 /**
  * __tty_alloc_driver -- allocate tty driver
