@@ -536,8 +536,13 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 
 	mutex_lock(&twl->lock);
 	if (status >= 0 && status != twl->linkstat) {
+		status_changed =
+			(twl->linkstat == OMAP_MUSB_VBUS_VALID ||
+			 twl->linkstat == OMAP_MUSB_ID_GROUND)
+			!=
+			(status == OMAP_MUSB_VBUS_VALID ||
+			 status == OMAP_MUSB_ID_GROUND);
 		twl->linkstat = status;
-		status_changed = true;
 	}
 	mutex_unlock(&twl->lock);
 
@@ -555,13 +560,10 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 		 */
 		if ((status == OMAP_MUSB_VBUS_VALID) ||
 		    (status == OMAP_MUSB_ID_GROUND)) {
-			if (pm_runtime_suspended(twl->dev))
-				pm_runtime_get_sync(twl->dev);
+			pm_runtime_get_sync(twl->dev);
 		} else {
-			if (pm_runtime_active(twl->dev)) {
-				pm_runtime_mark_last_busy(twl->dev);
-				pm_runtime_put_autosuspend(twl->dev);
-			}
+			pm_runtime_mark_last_busy(twl->dev);
+			pm_runtime_put_autosuspend(twl->dev);
 		}
 		omap_musb_mailbox(status);
 	}
@@ -765,6 +767,10 @@ static int twl4030_usb_remove(struct platform_device *pdev)
 
 	/* disable complete OTG block */
 	twl4030_usb_clear_bits(twl, POWER_CTRL, POWER_CTRL_OTG_ENAB);
+
+	if (twl->linkstat == OMAP_MUSB_VBUS_VALID ||
+	    twl->linkstat == OMAP_MUSB_ID_GROUND)
+		pm_runtime_put_noidle(twl->dev);
 	pm_runtime_mark_last_busy(twl->dev);
 	pm_runtime_put(twl->dev);
 
