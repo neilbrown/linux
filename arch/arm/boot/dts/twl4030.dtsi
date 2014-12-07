@@ -25,6 +25,10 @@
 		bci3v1-supply = <&vusb3v1>;
 	};
 
+	twl_power: power {
+		compatible = "ti,twl4030-power";
+	};
+
 	watchdog {
 		compatible = "ti,twl4030-wdt";
 	};
