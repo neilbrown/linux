@@ -19,6 +19,13 @@ Audio functionality:
 -ti,offset_cncl_path: Offset cancellation path selection, refer to TRM for the
 		      valid values.
 
+Voice functionality:
+- ti,voice_fmt:  The separate 'voice' interface is connected to a
+		 separate device such as a GSM modem.  This field
+		 sets the format expected by that device (who masters
+		 the clock/FRM and what their polarity is).
+
+
 Vibra functionality
 - ti,enable-vibra: Need to be set to <1> if the vibra functionality is used. if
 		   missing or it is 0, the vibra functionality is disabled.
