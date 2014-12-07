@@ -163,6 +163,11 @@ struct twl4030_usb {
 	enum omap_musb_vbus_id_status linkstat;
 	bool			vbus_supplied;
 
+	/* Permitted vbus draw - only meaningful after
+	 * USB_EVENT_ENUMERATED
+	 */
+	unsigned		vbus_draw;
+
 	struct delayed_work	id_workaround_work;
 };
 
@@ -625,6 +630,20 @@ static int twl4030_set_host(struct usb_otg *otg, struct usb_bus *host)
 	return 0;
 }
 
+static int twl4030_set_power(struct usb_phy *phy, unsigned mA)
+{
+	struct twl4030_usb *twl = phy_to_twl(phy);
+
+	if (twl->vbus_draw != mA) {
+		phy->last_event = USB_EVENT_ENUMERATED;
+		twl->vbus_draw = mA;
+		atomic_notifier_call_chain(&phy->notifier,
+					   USB_EVENT_ENUMERATED,
+					   &twl->vbus_draw);
+	}
+	return 0;
+}
+
 static const struct phy_ops ops = {
 	.init		= twl4030_phy_init,
 	.power_on	= twl4030_phy_power_on,
@@ -677,6 +696,7 @@ static int twl4030_usb_probe(struct platform_device *pdev)
 	twl->phy.label		= "twl4030";
 	twl->phy.otg		= otg;
 	twl->phy.type		= USB_PHY_TYPE_USB2;
+	twl->phy.set_power	= twl4030_set_power;
 
 	otg->phy		= &twl->phy;
 	otg->set_host		= twl4030_set_host;
