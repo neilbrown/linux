@@ -257,6 +257,7 @@
 
 		twl_audio: audio {
 			compatible = "ti,twl4030-audio";
+			ti,enable-vibra = <1>;
 			codec {
 			};
 		};
