@@ -352,6 +352,7 @@
 	vmmc-supply = <&vaux4>;
 	bus-width = <4>;
 	ti,non-removable;
+	cap-power-off-card;
 	reset-gpios = <&tca 0 GPIO_ACTIVE_LOW>;
 };
 
