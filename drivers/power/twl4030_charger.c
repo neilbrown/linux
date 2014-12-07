@@ -610,21 +610,21 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 		goto fail_register_usb;
 	}
 
-	ret = request_threaded_irq(bci->irq_chg, NULL,
+	ret = devm_request_threaded_irq(&pdev->dev, bci->irq_chg, NULL,
 			twl4030_charger_interrupt, IRQF_ONESHOT, pdev->name,
 			bci);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "could not request irq %d, status %d\n",
 			bci->irq_chg, ret);
-		goto fail_chg_irq;
+		goto fail;
 	}
 
-	ret = request_threaded_irq(bci->irq_bci, NULL,
+	ret = devm_request_threaded_irq(&pdev->dev, bci->irq_bci, NULL,
 			twl4030_bci_interrupt, IRQF_ONESHOT, pdev->name, bci);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "could not request irq %d, status %d\n",
 			bci->irq_bci, ret);
-		goto fail_bci_irq;
+		goto fail;
 	}
 
 	INIT_WORK(&bci->work, twl4030_bci_usb_work);
@@ -642,7 +642,7 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 			       TWL4030_INTERRUPTS_BCIIMR1A);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "failed to unmask interrupts: %d\n", ret);
-		goto fail_unmask_interrupts;
+		goto fail;
 	}
 
 	reg = ~(u32)(TWL4030_VBATOV | TWL4030_VBUSOV | TWL4030_ACCHGOV);
@@ -661,15 +661,11 @@ static int __init twl4030_bci_probe(struct platform_device *pdev)
 
 	return 0;
 
-fail_unmask_interrupts:
+fail:
 	if (!IS_ERR_OR_NULL(bci->transceiver)) {
 		usb_unregister_notifier(bci->transceiver, &bci->usb_nb);
 		usb_put_phy(bci->transceiver);
 	}
-	free_irq(bci->irq_bci, bci);
-fail_bci_irq:
-	free_irq(bci->irq_chg, bci);
-fail_chg_irq:
 	power_supply_unregister(&bci->usb);
 fail_register_usb:
 	power_supply_unregister(&bci->ac);
@@ -698,8 +694,6 @@ static int __exit twl4030_bci_remove(struct platform_device *pdev)
 		usb_unregister_notifier(bci->transceiver, &bci->usb_nb);
 		usb_put_phy(bci->transceiver);
 	}
-	free_irq(bci->irq_bci, bci);
-	free_irq(bci->irq_chg, bci);
 	power_supply_unregister(&bci->usb);
 	power_supply_unregister(&bci->ac);
 	kfree(bci);
