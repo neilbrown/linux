@@ -596,8 +596,29 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 	struct twl4030_usb *twl = _twl;
 	enum omap_musb_vbus_id_status status;
 	bool status_changed = false;
+	bool found_charger = false;
 
 	status = twl4030_usb_linkstat(twl);
+
+	if (status == OMAP_MUSB_ID_GROUND ||
+	    status == OMAP_MUSB_VBUS_VALID) {
+		/* We should check the resistance on the ID pin.
+		 * If not a Ground or Floating, then this is
+		 * likely a charger
+		 */
+		enum twl4030_id_status sts = twl4030_get_id(twl);
+		if (sts > TWL4030_GROUND &&
+		    sts < TWL4030_FLOATING) {
+			/* This might be an charger, or an
+			 * Accessory Charger Adapter.
+			 * In either case we can charge, and it
+			 * make sense to tell the USB system
+			 * that we might be acting as a HOST.
+			 */
+			status = OMAP_MUSB_ID_GROUND;
+			found_charger = true;
+		}
+	}
 
 	mutex_lock(&twl->lock);
 	if (status >= 0 && status != twl->linkstat) {
@@ -631,6 +652,12 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 			pm_runtime_put_autosuspend(twl->dev);
 		}
 		omap_musb_mailbox(status);
+	}
+	if (found_charger && twl->phy.last_event != USB_EVENT_CHARGER) {
+		twl->phy.last_event = USB_EVENT_CHARGER;
+		atomic_notifier_call_chain(&twl->phy.notifier,
+					   USB_EVENT_CHARGER,
+					   NULL);
 	}
 
 	/* don't schedule during sleep - irq works right then */
