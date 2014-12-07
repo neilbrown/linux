@@ -597,6 +597,7 @@ static void twl4030_bci_usb_work(struct work_struct *data)
 	switch (bci->event) {
 	case USB_EVENT_VBUS:
 	case USB_EVENT_CHARGER:
+	case USB_EVENT_ENUMERATED:
 		twl4030_charger_enable_usb(bci, true);
 		break;
 	case USB_EVENT_NONE:
@@ -609,6 +610,7 @@ static int twl4030_bci_usb_ncb(struct notifier_block *nb, unsigned long val,
 			       void *priv)
 {
 	struct twl4030_bci *bci = container_of(nb, struct twl4030_bci, usb_nb);
+	unsigned *vbus_draw = priv;
 
 	dev_dbg(bci->dev, "OTG notify %lu\n", val);
 
@@ -619,6 +621,9 @@ static int twl4030_bci_usb_ncb(struct notifier_block *nb, unsigned long val,
 		bci->usb_cur = 100000;
 
 	bci->event = val;
+	if (val == USB_EVENT_ENUMERATED && vbus_draw &&
+	    *vbus_draw * 1000 > bci->usb_cur)
+		bci->usb_cur = *vbus_draw * 1000;
 	schedule_work(&bci->work);
 
 	return NOTIFY_OK;
