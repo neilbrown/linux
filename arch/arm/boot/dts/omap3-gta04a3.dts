@@ -46,3 +46,8 @@
 		st,max-limit-z = <32>;
 	};
 };
+
+&incoming {
+	/* incoming in GPIO 176 on the older boards */
+	gpios = <&gpio6 16 GPIO_ACTIVE_HIGH>;
+};

@@ -41,6 +41,17 @@
 		};
 	};
 
+	gpio-keys-incoming {
+		compatible = "gpio-keys";
+
+		incoming: incoming-button {
+			label = "Option";
+			linux,code = <240>;
+			gpios = <&gpio1 10 GPIO_ACTIVE_HIGH>;
+			gpio-key,wakeup;
+		};
+	};
+
 	sound {
 		compatible = "ti,omap-twl4030";
 		ti,model = "gta04";
