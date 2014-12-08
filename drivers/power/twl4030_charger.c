@@ -691,8 +691,10 @@ static void twl4030_bci_usb_work(struct work_struct *data)
 	struct twl4030_bci *bci = container_of(data, struct twl4030_bci, work);
 
 	switch (bci->event) {
-	case USB_EVENT_VBUS:
 	case USB_EVENT_CHARGER:
+		bci->usb_cur = USB_MAX_CURRENT;
+		/* FALL THROUGH */
+	case USB_EVENT_VBUS:
 	case USB_EVENT_ENUMERATED:
 		twl4030_charger_enable_usb(bci, true);
 		break;
