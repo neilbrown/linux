@@ -515,6 +515,18 @@ config VEXPRESS_SYSCFG
 	  bus. System Configuration interface is one of the possible means
 	  of generating transactions on this bus.
 
+config SERIAL_POWER_MANAGER
+	tristate "Power Management controller for serial-attached devices"
+	depends on TTY && OF
+	default n
+	help
+	  Some devices permanently attached via a UART can benefit from
+	  being power-managed when the tty device is openned or closed.
+	  This driver can support several such devices with simple
+	  power requirements such as enabling a regulator.
+
+	  If in doubt, say 'N'
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

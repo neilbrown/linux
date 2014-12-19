@@ -160,6 +160,7 @@ v3	V3 Semiconductor
 variscite	Variscite Ltd.
 via	VIA Technologies, Inc.
 voipac	Voipac Technologies s.r.o.
+wi2wi	wi2wi Inc.  http://www.wi2wi.com/
 winbond Winbond Electronics corp.
 wlf	Wolfson Microelectronics
 wm	Wondermedia Technologies, Inc.

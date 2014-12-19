@@ -1,0 +1,19 @@
+wi2wi bluetooth module
+
+This is access via a serial port and is largely controlled via that
+link.  Extra configuration is needed to enable power on/off
+
+Required properties:
+- compatible: "wi2wi,w2cbw003"
+- vdd-supply: regulator used to power the device.
+
+The node for this device must be the child of a UART.
+
+Example:
+
+&uart1 {
+       bluetooth {
+               compatible = "wi2wi,w2cbw003";
+               vdd-supply = <&vaux4>;
+       };
+};

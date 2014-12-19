@@ -55,4 +55,5 @@ obj-y				+= mic/
 obj-$(CONFIG_GENWQE)		+= genwqe/
 obj-$(CONFIG_ECHO)		+= echo/
 obj-$(CONFIG_VEXPRESS_SYSCFG)	+= vexpress-syscfg.o
+obj-$(CONFIG_SERIAL_POWER_MANAGER) += serial-power-manager.o
 obj-$(CONFIG_CXL_BASE)		+= cxl/
