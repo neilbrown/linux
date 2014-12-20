@@ -688,6 +688,9 @@ struct twl4030_codec_data {
 	unsigned int offset_cncl_path;
 	unsigned int hs_extmute:1;
 	int hs_extmute_gpio;
+	unsigned int voice_fmt;	/* If != 0, gives format for external
+				 * voice connection.
+				 */
 };
 
 struct twl4030_vibra_data {

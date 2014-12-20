@@ -163,6 +163,11 @@ struct twl4030_usb {
 	enum omap_musb_vbus_id_status linkstat;
 	bool			vbus_supplied;
 
+	/* Permitted vbus draw - only meaningful after
+	 * USB_EVENT_ENUMERATED
+	 */
+	unsigned		vbus_draw;
+
 	struct delayed_work	id_workaround_work;
 };
 
@@ -369,6 +374,56 @@ static void twl4030_i2c_access(struct twl4030_usb *twl, int on)
 	}
 }
 
+enum twl4030_id_status {
+	TWL4030_GROUND,
+	TWL4030_102K,
+	TWL4030_200K,
+	TWL4030_440K,
+	TWL4030_FLOATING,
+	TWL4030_ID_UNKNOWN,
+};
+static char *twl4030_id_names[] = {
+	"ground",
+	"102k",
+	"200k",
+	"440k",
+	"floating",
+	"unknown"
+};
+
+enum twl4030_id_status twl4030_get_id(struct twl4030_usb *twl)
+{
+	int ret;
+
+	pm_runtime_get_sync(twl->dev);
+	if (twl->usb_mode == T2_USB_MODE_ULPI)
+		twl4030_i2c_access(twl, 1);
+	ret = twl4030_usb_read(twl, ULPI_OTG_CTRL);
+	if (ret < 0 || !(ret & ULPI_OTG_ID_PULLUP)) {
+		/* Need pull-up to read ID */
+		twl4030_usb_set_bits(twl, ULPI_OTG_CTRL,
+				     ULPI_OTG_ID_PULLUP);
+		mdelay(50);
+	}
+	ret = twl4030_usb_read(twl, ID_STATUS);
+	if (ret < 0 || (ret & 0x1f) == 0) {
+		mdelay(50);
+		ret = twl4030_usb_read(twl, ID_STATUS);
+	}
+
+	if (twl->usb_mode == T2_USB_MODE_ULPI)
+		twl4030_i2c_access(twl, 0);
+	pm_runtime_put_autosuspend(twl->dev);
+
+	if (ret < 0)
+		return TWL4030_ID_UNKNOWN;
+	ret = ffs(ret) - 1;
+	if (ret < TWL4030_GROUND || ret > TWL4030_FLOATING)
+		return TWL4030_ID_UNKNOWN;
+
+	return ret;
+}
+
 static void __twl4030_phy_power(struct twl4030_usb *twl, int on)
 {
 	u8 pwr = twl4030_usb_read(twl, PHY_PWR_CTRL);
@@ -526,18 +581,54 @@ static ssize_t twl4030_usb_vbus_show(struct device *dev,
 }
 static DEVICE_ATTR(vbus, 0444, twl4030_usb_vbus_show, NULL);
 
+static ssize_t twl4030_usb_id_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
+{
+	struct twl4030_usb *twl = dev_get_drvdata(dev);
+	return scnprintf(buf, PAGE_SIZE, "%s\n",
+			 twl4030_id_names[twl4030_get_id(twl)]);
+}
+static DEVICE_ATTR(id, 0444, twl4030_usb_id_show, NULL);
+
 static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 {
 	struct twl4030_usb *twl = _twl;
 	enum omap_musb_vbus_id_status status;
 	bool status_changed = false;
+	bool found_charger = false;
 
 	status = twl4030_usb_linkstat(twl);
 
+	if (status == OMAP_MUSB_ID_GROUND ||
+	    status == OMAP_MUSB_VBUS_VALID) {
+		/* We should check the resistance on the ID pin.
+		 * If not a Ground or Floating, then this is
+		 * likely a charger
+		 */
+		enum twl4030_id_status sts = twl4030_get_id(twl);
+		if (sts > TWL4030_GROUND &&
+		    sts < TWL4030_FLOATING) {
+			/* This might be an charger, or an
+			 * Accessory Charger Adapter.
+			 * In either case we can charge, and it
+			 * make sense to tell the USB system
+			 * that we might be acting as a HOST.
+			 */
+			status = OMAP_MUSB_ID_GROUND;
+			found_charger = true;
+		}
+	}
+
 	mutex_lock(&twl->lock);
 	if (status >= 0 && status != twl->linkstat) {
+		status_changed =
+			(twl->linkstat == OMAP_MUSB_VBUS_VALID ||
+			 twl->linkstat == OMAP_MUSB_ID_GROUND)
+			!=
+			(status == OMAP_MUSB_VBUS_VALID ||
+			 status == OMAP_MUSB_ID_GROUND);
 		twl->linkstat = status;
-		status_changed = true;
 	}
 	mutex_unlock(&twl->lock);
 
@@ -555,15 +646,18 @@ static irqreturn_t twl4030_usb_irq(int irq, void *_twl)
 		 */
 		if ((status == OMAP_MUSB_VBUS_VALID) ||
 		    (status == OMAP_MUSB_ID_GROUND)) {
-			if (pm_runtime_suspended(twl->dev))
-				pm_runtime_get_sync(twl->dev);
+			pm_runtime_get_sync(twl->dev);
 		} else {
-			if (pm_runtime_active(twl->dev)) {
-				pm_runtime_mark_last_busy(twl->dev);
-				pm_runtime_put_autosuspend(twl->dev);
-			}
+			pm_runtime_mark_last_busy(twl->dev);
+			pm_runtime_put_autosuspend(twl->dev);
 		}
 		omap_musb_mailbox(status);
+	}
+	if (found_charger && twl->phy.last_event != USB_EVENT_CHARGER) {
+		twl->phy.last_event = USB_EVENT_CHARGER;
+		atomic_notifier_call_chain(&twl->phy.notifier,
+					   USB_EVENT_CHARGER,
+					   NULL);
 	}
 
 	/* don't schedule during sleep - irq works right then */
@@ -623,6 +717,20 @@ static int twl4030_set_host(struct usb_otg *otg, struct usb_bus *host)
 	return 0;
 }
 
+static int twl4030_set_power(struct usb_phy *phy, unsigned mA)
+{
+	struct twl4030_usb *twl = phy_to_twl(phy);
+
+	if (twl->vbus_draw != mA) {
+		phy->last_event = USB_EVENT_ENUMERATED;
+		twl->vbus_draw = mA;
+		atomic_notifier_call_chain(&phy->notifier,
+					   USB_EVENT_ENUMERATED,
+					   &twl->vbus_draw);
+	}
+	return 0;
+}
+
 static const struct phy_ops ops = {
 	.init		= twl4030_phy_init,
 	.power_on	= twl4030_phy_power_on,
@@ -675,6 +783,7 @@ static int twl4030_usb_probe(struct platform_device *pdev)
 	twl->phy.label		= "twl4030";
 	twl->phy.otg		= otg;
 	twl->phy.type		= USB_PHY_TYPE_USB2;
+	twl->phy.set_power	= twl4030_set_power;
 
 	otg->phy		= &twl->phy;
 	otg->set_host		= twl4030_set_host;
@@ -707,6 +816,8 @@ static int twl4030_usb_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, twl);
 	if (device_create_file(&pdev->dev, &dev_attr_vbus))
+		dev_warn(&pdev->dev, "could not create sysfs file\n");
+	if (device_create_file(&pdev->dev, &dev_attr_id))
 		dev_warn(&pdev->dev, "could not create sysfs file\n");
 
 	ATOMIC_INIT_NOTIFIER_HEAD(&twl->phy.notifier);
@@ -748,6 +859,7 @@ static int twl4030_usb_remove(struct platform_device *pdev)
 	pm_runtime_get_sync(twl->dev);
 	cancel_delayed_work(&twl->id_workaround_work);
 	device_remove_file(twl->dev, &dev_attr_vbus);
+	device_remove_file(twl->dev, &dev_attr_id);
 
 	/* set transceiver mode to power on defaults */
 	twl4030_usb_set_mode(twl, -1);
@@ -765,6 +877,10 @@ static int twl4030_usb_remove(struct platform_device *pdev)
 
 	/* disable complete OTG block */
 	twl4030_usb_clear_bits(twl, POWER_CTRL, POWER_CTRL_OTG_ENAB);
+
+	if (twl->linkstat == OMAP_MUSB_VBUS_VALID ||
+	    twl->linkstat == OMAP_MUSB_ID_GROUND)
+		pm_runtime_put_noidle(twl->dev);
 	pm_runtime_mark_last_busy(twl->dev);
 	pm_runtime_put(twl->dev);
 

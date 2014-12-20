@@ -1,0 +1,15 @@
+* Cable presence detector using GPIO
+
+Required Properties:
+ - compatible: "gpio-presence-detector"
+ - gpios: gpio line that detects connector
+ - debounce-delay-ms: debouncing delay
+
+Example:
+
+antenna-detect {
+	compatible = "gpio-presence-detector";
+	gpios = <&gpio5 16 0>;
+	debounce-delay-ms = <10>;
+};
+

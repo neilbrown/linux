@@ -307,15 +307,15 @@ int __init omap2_common_pm_late_init(void)
 	omap_pmic_late_init();
 	omap_voltage_late_init();
 
+	/* cpufreq dummy device instantiation */
+	omap_init_cpufreq();
+
 	/* Initialize the voltages */
 	omap3_init_voltages();
 	omap4_init_voltages();
 
 	/* Smartreflex device init */
 	omap_devinit_smartreflex();
-
-	/* cpufreq dummy device instantiation */
-	omap_init_cpufreq();
 
 	return 0;
 }

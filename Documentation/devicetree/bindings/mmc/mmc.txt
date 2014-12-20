@@ -21,6 +21,9 @@ Optional properties:
   below for the case, when a GPIO is used for the CD line
 - wp-inverted: when present, polarity on the WP line is inverted. See the note
   below for the case, when a GPIO is used for the WP line
+- reset-gpios: Specify a GPIO to be asserted during power-up. This is
+  useful is power is not actually removed (e.g. due to shared
+  regulator) but a reset is needed before reconfiguration.
 - max-frequency: maximum operating clock frequency
 - no-1-8-v: when present, denotes that 1.8v card voltage is not supported on
   this system, even if the controller claims it is.

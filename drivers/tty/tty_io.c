@@ -95,6 +95,7 @@
 #include <linux/seq_file.h>
 #include <linux/serial.h>
 #include <linux/ratelimit.h>
+#include <linux/of_platform.h>
 
 #include <linux/uaccess.h>
 
@@ -109,6 +110,13 @@
 
 #define TTY_PARANOIA_CHECK 1
 #define CHECK_TTY_COUNT 1
+
+struct tty_device {
+	struct device dev;
+
+	struct tty_slave_operations *slave_ops;
+	struct device *slave;
+};
 
 struct ktermios tty_std_termios = {	/* for the benefit of tty drivers  */
 	.c_iflag = ICRNL | IXON,
@@ -1825,6 +1833,17 @@ int tty_release(struct inode *inode, struct file *filp)
 				__func__, tty->count, tty_name(tty, buf));
 		tty->count = 0;
 	}
+	if (tty->dev && tty->count == 0) {
+		struct tty_device *ttyd = container_of(tty->dev,
+						       struct tty_device,
+						       dev);
+		if (ttyd->slave) {
+			mutex_lock(&ttyd->dev.mutex);
+			if (ttyd->slave)
+				ttyd->slave_ops->release(ttyd->slave, tty);
+			mutex_unlock(&ttyd->dev.mutex);
+		}
+	}
 
 	/*
 	 * We've decremented tty->count, so we need to remove this file
@@ -2105,6 +2124,18 @@ retry_open:
 		goto retry_open;
 	}
 	clear_bit(TTY_HUPPED, &tty->flags);
+	if (tty->dev && tty->count == 1) {
+		struct tty_device *ttyd = container_of(tty->dev,
+						       struct tty_device,
+						       dev);
+		if (ttyd->slave) {
+			mutex_lock(&ttyd->dev.mutex);
+			if (ttyd->slave &&
+			    ttyd->slave_ops->open)
+				ttyd->slave_ops->open(ttyd->slave, tty);
+			mutex_unlock(&ttyd->dev.mutex);
+		}
+	}
 	tty_unlock(tty);
 
 
@@ -3168,6 +3199,7 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 {
 	char name[64];
 	dev_t devt = MKDEV(driver->major, driver->minor_start) + index;
+	struct tty_device *tty_dev;
 	struct device *dev = NULL;
 	int retval = -ENODEV;
 	bool cdev = false;
@@ -3190,12 +3222,12 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 		cdev = true;
 	}
 
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
-	if (!dev) {
+	tty_dev = kzalloc(sizeof(*tty_dev), GFP_KERNEL);
+	if (!tty_dev) {
 		retval = -ENOMEM;
 		goto error;
 	}
-
+	dev = &tty_dev->dev;
 	dev->devt = devt;
 	dev->class = tty_class;
 	dev->parent = device;
@@ -3207,6 +3239,12 @@ struct device *tty_register_device_attr(struct tty_driver *driver,
 	retval = device_register(dev);
 	if (retval)
 		goto error;
+	if (device && device->of_node)
+		/* Children are platform devices and can register
+		 * for various call-backs on tty operations.
+		 */
+		of_platform_populate(device->of_node, NULL, NULL, dev);
+
 
 	return dev;
 
@@ -3237,6 +3275,35 @@ void tty_unregister_device(struct tty_driver *driver, unsigned index)
 		cdev_del(&driver->cdevs[index]);
 }
 EXPORT_SYMBOL(tty_unregister_device);
+
+int tty_set_slave(struct device *tty, struct device *slave,
+		  struct tty_slave_operations *ops)
+{
+	struct tty_device *ttyd = container_of(tty, struct tty_device, dev);
+	int err;
+	if (tty->class != tty_class)
+		return -ENODEV;
+	if (ttyd->slave)
+		err = -EBUSY;
+	else {
+		ttyd->slave = slave;
+		ttyd->slave_ops = ops;
+		err = 0;
+	}
+	return err;
+}
+EXPORT_SYMBOL_GPL(tty_set_slave);
+
+void tty_clear_slave(struct device *tty, struct device *slave)
+{
+	struct tty_device *ttyd = container_of(tty, struct tty_device, dev);
+
+	WARN_ON(ttyd->slave != slave);
+	ttyd->slave = NULL;
+	ttyd->slave_ops = NULL;
+}
+EXPORT_SYMBOL_GPL(tty_clear_slave);
+
 
 /**
  * __tty_alloc_driver -- allocate tty driver

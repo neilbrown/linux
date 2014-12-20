@@ -31,6 +31,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/string.h>
 #include <linux/of.h>
+#include <linux/suspend.h>
 
 #include <video/omapdss.h>
 
@@ -703,6 +704,8 @@ static int omap_dpi_probe(struct platform_device *pdev)
 	mutex_init(&dpi.lock);
 
 	dpi_init_output(pdev);
+	/* No need to vt_switch in suspend/resume */
+	pm_set_vt_switch(0);
 
 	return 0;
 }

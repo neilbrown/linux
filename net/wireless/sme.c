@@ -652,7 +652,11 @@ void __cfg80211_connect_result(struct net_device *dev, const u8 *bssid,
 		return;
 	}
 
-	if (WARN_ON(!bss))
+	if (!bss)
+		/* This happens on disconnect, not a problem */
+		/* is_bss fails in cfg80211_get_bss called from
+		 * __cfg80211_connect_result
+		 */
 		return;
 
 	wdev->current_bss = bss_from_pub(bss);
