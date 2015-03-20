@@ -1527,7 +1527,6 @@ restart:
 	io->ci_ndelay_tried = retried;
 
 	if (cl_io_rw_init(env, io, iot, *ppos, count) == 0) {
-		struct vvp_io *vio = vvp_env_io(env);
 		bool range_locked = false;
 
 		if (file->f_flags & O_APPEND)
@@ -1629,11 +1628,11 @@ out:
 	}
 
 	if (iot == CIT_READ) {
-		if (result >= 0)
+		if (result > 0)
 			ll_stats_ops_tally(ll_i2sbi(file_inode(file)),
 					   LPROC_LL_READ_BYTES, result);
 	} else if (iot == CIT_WRITE) {
-		if (result >= 0) {
+		if (result > 0) {
 			ll_stats_ops_tally(ll_i2sbi(file_inode(file)),
 					   LPROC_LL_WRITE_BYTES, result);
 			fd->fd_write_failed = false;
@@ -1647,6 +1646,7 @@ out:
 			fd->fd_write_failed = true;
 		}
 	}
+
 	CDEBUG(D_VFSTRACE, "iot: %d, result: %zd\n", iot, result);
 	if (result > 0)
 		ll_heat_add(file_inode(file), iot, result);
