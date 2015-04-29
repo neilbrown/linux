@@ -1293,7 +1293,6 @@ static int osc_brw_prep_request(int cmd, struct client_obd *cli,
 				struct obdo *oa, u32 page_count,
 				struct brw_page **pga,
 				struct ptlrpc_request **reqp,
-				int reserve,
 				int resend)
 {
 	struct ptlrpc_request *req;
@@ -1949,7 +1948,7 @@ static int osc_brw_redo_request(struct ptlrpc_request *request,
 				   OST_WRITE) ? OBD_BRW_WRITE : OBD_BRW_READ,
 				  aa->aa_cli, aa->aa_oa,
 				  aa->aa_page_count, aa->aa_ppga,
-				  &new_req, 0, 1);
+				  &new_req, 1);
 	if (rc)
 		return rc;
 
@@ -2299,7 +2298,7 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	}
 
 	sort_brw_pages(pga, page_count);
-	rc = osc_brw_prep_request(cmd, cli, oa, page_count, pga, &req, 1, 0);
+	rc = osc_brw_prep_request(cmd, cli, oa, page_count, pga, &req, 0);
 	if (rc != 0) {
 		CERROR("prep_req failed: %d\n", rc);
 		goto out;
