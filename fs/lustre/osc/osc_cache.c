@@ -392,9 +392,9 @@ static void osc_extent_free(struct kref *kref)
 	LASSERT(RB_EMPTY_NODE(&ext->oe_node));
 
 	if (ext->oe_dlmlock) {
-		lu_ref_add(&ext->oe_dlmlock->l_reference,
+		lu_ref_del(&ext->oe_dlmlock->l_reference,
 			   "osc_extent", ext);
-		LDLM_LOCK_PUT(ext->oe_dlmlock);
+		LDLM_LOCK_RELEASE(ext->oe_dlmlock);
 		ext->oe_dlmlock = NULL;
 	}
 }
