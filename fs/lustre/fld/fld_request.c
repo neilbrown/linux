@@ -378,11 +378,17 @@ int fld_client_rpc(struct obd_export *exp,
 	}
 
 	if (rc != 0) {
-		if (imp->imp_state != LUSTRE_IMP_CLOSED && !imp->imp_deactive) {
+		if (imp->imp_state != LUSTRE_IMP_CLOSED && !imp->imp_deactive &&
+		    imp->imp_connect_flags_orig & OBD_CONNECT_MDS_MDS &&
+		    rc != -ENOTSUPP) {
 			/*
-			 * Since LWP is not replayable, so notify the caller
-			 * to retry if needed after a while.
+			 * Since LWP is not replayable, so it will keep
+			 * trying unless umount happens or the remote
+			 * target does not support the operation, otherwise
+			 * it would cause unnecessary failure of the
+			 * application.
 			 */
+			ptlrpc_req_finished(req);
 			rc = -EAGAIN;
 		}
 		goto out_req;
