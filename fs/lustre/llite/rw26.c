@@ -476,16 +476,29 @@ static int ll_write_begin(struct file *file, struct address_space *mapping,
 	env = lcc->lcc_env;
 	io  = lcc->lcc_io;
 
-	if (file->f_flags & O_DIRECT && io->ci_designated_mirror > 0) {
+	if (file->f_flags & O_DIRECT) {
 		/* direct IO failed because it couldn't clean up cached pages,
 		 * this causes a problem for mirror write because the cached
 		 * page may belong to another mirror, which will result in
 		 * problem submitting the I/O.
 		 */
-		result = -EBUSY;
-		goto out;
-	}
+		if (io->ci_designated_mirror > 0) {
+			result = -EBUSY;
+			goto out;
+		}
 
+		/*
+		 * Direct read can fall back to buffered read, but DIO is done
+		 * with lockless i/o, and buffered requires LDLM locking, so
+		 * in this case we must restart without lockless.
+		 */
+		if (!io->ci_ignore_lockless) {
+			io->ci_ignore_lockless = 1;
+			io->ci_need_restart = 1;
+			result = -ENOLCK;
+			goto out;
+		}
+	}
 again:
 	/* To avoid deadlock, try to lock page first. */
 	vmpage = grab_cache_page_nowait(mapping, index);

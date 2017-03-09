@@ -1264,7 +1264,7 @@ struct hsm_state_set {
 #define OBD_BRW_CHECK		0x10
 #define OBD_BRW_FROM_GRANT	0x20 /* the osc manages this under llite */
 #define OBD_BRW_GRANTED		0x40 /* the ost manages this */
-/* #define OBD_BRW_NOCACHE	0x80 internal use only 2.2.57-2.12 */
+#define OBD_BRW_NOCACHE		0x80 /* this page is a part of non-cached IO */
 #define OBD_BRW_NOQUOTA	       0x100
 #define OBD_BRW_SRVLOCK	       0x200 /* Client holds no lock over this page */
 #define OBD_BRW_ASYNC	       0x400 /* Server may delay commit to disk */
@@ -1276,6 +1276,7 @@ struct hsm_state_set {
 				      * space for unstable pages; asking
 				      * it to sync quickly
 				      */
+#define OBD_BRW_RDMA_ONLY    0x20000 /* RPC contains RDMA-only pages*/
 
 #define OBD_MAX_GRANT 0x7fffffffUL /* Max grant allowed to one client: 2 GiB */
 
