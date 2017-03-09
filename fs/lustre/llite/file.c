@@ -876,6 +876,10 @@ restart:
 		goto out_och_free;
 
 	mutex_unlock(&lli->lli_och_mutex);
+
+	/* lockless for direct IO so that it can do IO in parallel */
+	if (file->f_flags & O_DIRECT)
+		fd->fd_flags |= LL_FILE_LOCKLESS_IO;
 	fd = NULL;
 
 	/* Must do this outside lli_och_mutex lock to prevent deadlock where
@@ -884,7 +888,6 @@ restart:
 	 */
 	if (!S_ISREG(inode->i_mode))
 		goto out_och_free;
-
 	cl_lov_delay_create_clear(&file->f_flags);
 	goto out_och_free;
 
@@ -1503,6 +1506,7 @@ ll_file_io_generic(const struct lu_env *env, struct vvp_io_args *args,
 	ssize_t result = 0;
 	int rc = 0;
 	unsigned int retried = 0;
+	unsigned int ignore_lockless = 0;
 
 	CDEBUG(D_VFSTRACE, "file: %pD, type: %d ppos: %llu, count: %zu\n",
 	       file, iot, *ppos, count);
@@ -1510,6 +1514,7 @@ ll_file_io_generic(const struct lu_env *env, struct vvp_io_args *args,
 restart:
 	io = vvp_env_thread_io(env);
 	ll_io_init(io, file, iot == CIT_WRITE, args);
+	io->ci_ignore_lockless = ignore_lockless;
 	io->ci_ndelay_tried = retried;
 
 	if (cl_io_rw_init(env, io, iot, *ppos, count) == 0) {
@@ -1572,7 +1577,8 @@ out:
 	       file->f_path.dentry->d_name.name,
 	       iot, rc, result, io->ci_need_restart);
 
-	if ((!rc || rc == -ENODATA) && count > 0 && io->ci_need_restart) {
+	if ((!rc || rc == -ENODATA || rc == -ENOLCK) &&
+	    count > 0 && io->ci_need_restart) {
 		CDEBUG(D_VFSTRACE,
 		       "%s: restart %s from %lld, count:%zu, result: %zd\n",
 		       file_dentry(file)->d_name.name,
@@ -1580,6 +1586,7 @@ out:
 		       *ppos, count, result);
 		/* preserve the tried count for FLR */
 		retried = io->ci_ndelay_tried;
+		ignore_lockless = io->ci_ignore_lockless;
 		goto restart;
 	}
 
