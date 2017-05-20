@@ -46,6 +46,7 @@
 #include <uapi/linux/lustre/lustre_fiemap.h>
 #include <uapi/linux/lustre/lustre_ioctl.h>
 #include <lustre_swab.h>
+#include <linux/falloc.h>
 
 #include <cl_object.h>
 #include "llite_internal.h"
@@ -4636,6 +4637,82 @@ int ll_getattr(const struct path *path, struct kstat *stat,
 	return 0;
 }
 
+int cl_falloc(struct inode *inode, int mode, loff_t offset, loff_t len)
+{
+	struct lu_env *env;
+	struct cl_io *io;
+	u16 refcheck;
+	int rc; loff_t sa_falloc_end;
+	loff_t size = i_size_read(inode);
+
+	env = cl_env_get(&refcheck);
+	if (IS_ERR(env))
+		return PTR_ERR(env);
+
+	io = vvp_env_thread_io(env);
+	io->ci_obj = ll_i2info(inode)->lli_clob;
+	io->ci_verify_layout = 1;
+	io->u.ci_setattr.sa_parent_fid = lu_object_fid(&io->ci_obj->co_lu);
+	io->u.ci_setattr.sa_falloc_mode = mode;
+	io->u.ci_setattr.sa_falloc_offset = offset;
+	io->u.ci_setattr.sa_falloc_len = len;
+	io->u.ci_setattr.sa_falloc_end = io->u.ci_setattr.sa_falloc_offset +
+		io->u.ci_setattr.sa_falloc_len;
+	io->u.ci_setattr.sa_subtype = CL_SETATTR_FALLOCATE;
+	sa_falloc_end = io->u.ci_setattr.sa_falloc_end;
+	if (sa_falloc_end > size) {
+		/* Check new size against VFS/VM file size limit and rlimit */
+		rc = inode_newsize_ok(inode, sa_falloc_end);
+		if (rc)
+			goto out;
+		if (sa_falloc_end > ll_file_maxbytes(inode)) {
+			CDEBUG(D_INODE, "file size too large %llu > %llu\n",
+			       (unsigned long long)(sa_falloc_end),
+			       ll_file_maxbytes(inode));
+			rc = -EFBIG;
+			goto out;
+		}
+		io->u.ci_setattr.sa_attr.lvb_size = sa_falloc_end;
+		if (!(mode & FALLOC_FL_KEEP_SIZE))
+			io->u.ci_setattr.sa_avalid |= ATTR_SIZE;
+	} else {
+		io->u.ci_setattr.sa_attr.lvb_size = size;
+	}
+
+again:
+	if (cl_io_init(env, io, CIT_SETATTR, io->ci_obj) == 0)
+		rc = cl_io_loop(env, io);
+	else
+		rc = io->ci_result;
+
+	cl_io_fini(env, io);
+	if (unlikely(io->ci_need_restart))
+		goto again;
+
+out:
+	cl_env_put(env, &refcheck);
+	return rc;
+}
+
+long ll_fallocate(struct file *filp, int mode, loff_t offset, loff_t len)
+{
+	struct inode *inode = filp->f_path.dentry->d_inode;
+	int rc;
+
+	/*
+	 * Only mode == 0 (which is standard prealloc) is supported now.
+	 * Punch is not supported yet.
+	 */
+	if (mode & ~FALLOC_FL_KEEP_SIZE)
+		return -EOPNOTSUPP;
+
+	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FALLOCATE, 1);
+
+	rc = cl_falloc(inode, mode, offset, len);
+
+	return rc;
+}
+
 static int ll_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 		     u64 start, u64 len)
 {
@@ -4691,7 +4768,7 @@ int ll_inode_permission(struct inode *inode, int mask)
 	if (mask & MAY_NOT_BLOCK)
 		return -ECHILD;
 
-       /* as root inode are NOT getting validated in lookup operation,
+	/* As root inode are NOT getting validated in lookup operation,
 	* need to do it before permission check.
 	*/
 
@@ -4760,7 +4837,8 @@ const struct file_operations ll_file_operations = {
 	.llseek			= ll_file_seek,
 	.splice_read		= generic_file_splice_read,
 	.fsync			= ll_fsync,
-	.flush			= ll_flush
+	.flush			= ll_flush,
+	.fallocate	= ll_fallocate,
 };
 
 const struct file_operations ll_file_operations_flock = {
@@ -4775,7 +4853,8 @@ const struct file_operations ll_file_operations_flock = {
 	.fsync			= ll_fsync,
 	.flush			= ll_flush,
 	.flock			= ll_file_flock,
-	.lock			= ll_file_flock
+	.lock			= ll_file_flock,
+	.fallocate	= ll_fallocate,
 };
 
 /* These are for -o noflock - to return ENOSYS on flock calls */
@@ -4791,7 +4870,8 @@ const struct file_operations ll_file_operations_noflock = {
 	.fsync			= ll_fsync,
 	.flush			= ll_flush,
 	.flock			= ll_file_noflock,
-	.lock			= ll_file_noflock
+	.lock			= ll_file_noflock,
+	.fallocate	= ll_fallocate,
 };
 
 const struct inode_operations ll_file_inode_operations = {

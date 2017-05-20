@@ -615,13 +615,16 @@ static int vvp_io_setattr_lock(const struct lu_env *env,
 			       const struct cl_io_slice *ios)
 {
 	struct cl_io *io = ios->cis_io;
-	u64 new_size;
+	u64 lock_start = 0;
+	u64 lock_end = OBD_OBJECT_EOF;
 	u32 enqflags = 0;
 
 	if (cl_io_is_trunc(io)) {
-		new_size = io->u.ci_setattr.sa_attr.lvb_size;
-		if (new_size == 0)
+		if (io->u.ci_setattr.sa_attr.lvb_size == 0)
 			enqflags = CEF_DISCARD_DATA;
+	} else if (cl_io_is_fallocate(io)) {
+		lock_start = io->u.ci_setattr.sa_falloc_offset;
+		lock_end = lock_start + io->u.ci_setattr.sa_attr.lvb_size;
 	} else {
 		unsigned int valid = io->u.ci_setattr.sa_avalid;
 
@@ -635,11 +638,10 @@ static int vvp_io_setattr_lock(const struct lu_env *env,
 		     io->u.ci_setattr.sa_attr.lvb_atime >=
 		     io->u.ci_setattr.sa_attr.lvb_ctime))
 			return 0;
-		new_size = 0;
 	}
 
 	return vvp_io_one_lock(env, io, enqflags, CLM_WRITE,
-			       new_size, OBD_OBJECT_EOF);
+			       lock_start, lock_end);
 }
 
 static int vvp_do_vmtruncate(struct inode *inode, size_t size)
@@ -695,6 +697,9 @@ static int vvp_io_setattr_start(const struct lu_env *env,
 		trunc_sem_down_write(&lli->lli_trunc_sem);
 		inode_lock(inode);
 		inode_dio_wait(inode);
+	} else if (cl_io_is_fallocate(io)) {
+		inode_lock(inode);
+		inode_dio_wait(inode);
 	} else {
 		inode_lock(inode);
 	}
@@ -719,6 +724,8 @@ static void vvp_io_setattr_end(const struct lu_env *env,
 		vvp_do_vmtruncate(inode, io->u.ci_setattr.sa_attr.lvb_size);
 		inode_unlock(inode);
 		trunc_sem_up_write(&lli->lli_trunc_sem);
+	} else if (cl_io_is_fallocate(io)) {
+		inode_unlock(inode);
 	} else {
 		inode_unlock(inode);
 	}
