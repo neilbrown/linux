@@ -381,6 +381,8 @@ int client_obd_setup(struct obd_device *obddev, struct lustre_cfg *lcfg)
 	 */
 	cli->cl_max_pages_per_rpc = PTLRPC_MAX_BRW_PAGES;
 
+	cli->cl_short_io_bytes = OBD_MAX_SHORT_IO_BYTES;
+
 	/*
 	 * set cl_chunkbits default value to PAGE_CACHE_SHIFT,
 	 * it will be updated at OSC connection time.

@@ -1775,7 +1775,6 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
 			       obd_name, rc);
 			return -EPROTO;
 		}
-		LASSERT(req->rq_bulk->bd_nob == aa->aa_requested_nob);
 
 		if (req->rq_bulk &&
 		    sptlrpc_cli_unwrap_bulk_write(req, req->rq_bulk))
