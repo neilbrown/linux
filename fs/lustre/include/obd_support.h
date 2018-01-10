@@ -194,7 +194,8 @@ extern char obd_jobid_var[];
 #define OBD_FAIL_MDS_CHANGELOG_INIT			0x151
 #define OBD_FAIL_MDS_REINT_MULTI_NET			0x159
 #define OBD_FAIL_MDS_REINT_MULTI_NET_REP		0x15a
-#define OBD_FAIL_MDS_RMFID_NET		 0x166
+#define OBD_FAIL_MDS_RMFID_NET				0x166
+#define OBD_FAIL_MDS_CREATE_RACE			0x167
 
 /* layout lock */
 #define OBD_FAIL_MDS_NO_LL_GETATTR			0x170
