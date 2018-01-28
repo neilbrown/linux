@@ -39,7 +39,7 @@ To build and boot a kernel:
 
 8/ make O=O INSTALL_MOD_PATH=`pwd`/initramfs modules_install
 
-   This puts all the modues in the initramfs
+   This puts all the modules in the initramfs
 
 9/ copy initramfs/lib/modules to yuor gnubee Debian install.
   You need the Debian GNUBEE-ROOT to be on USB, not just a uSD card.
