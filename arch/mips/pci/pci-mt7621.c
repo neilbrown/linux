@@ -437,7 +437,11 @@ pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 	cmd = cmd | PCI_COMMAND_MASTER | PCI_COMMAND_IO | PCI_COMMAND_MEMORY;
 	pci_write_config_word(dev, PCI_COMMAND, cmd);
 	pci_write_config_byte(dev, PCI_INTERRUPT_LINE, irq);
-	return irq;
+	/* we have a hwirq, but need to return a virq (virtual irq).
+	 * I don't yet now how to do the mapping, so a hack is needed.
+	 * 11 -> 22 because I find that in /proc/interrupts.
+	 */
+	return irq == 11 ? 22 : irq;
 }
 
 void
