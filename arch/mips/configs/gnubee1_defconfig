@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/mips 4.15.0-rc5 Kernel Configuration
+# Linux/mips 4.15.0-rc7 Kernel Configuration
 #
 CONFIG_MIPS=y
 
@@ -2531,9 +2531,12 @@ CONFIG_MMC_SDHCI_PLTFM=m
 # CONFIG_MMC_USHC is not set
 # CONFIG_MMC_USDHI6ROL0 is not set
 # CONFIG_MMC_TOSHIBA_PCI is not set
-CONFIG_MMC_MTK=m
+# CONFIG_MMC_MTK is not set
 # CONFIG_MMC_SDHCI_XENON is not set
 # CONFIG_MMC_SDHCI_OMAP is not set
+CONFIG_MTK_MMC=m
+# CONFIG_MTK_AEE_KDUMP is not set
+CONFIG_MTK_MMC_CD_POLL=y
 # CONFIG_MEMSTICK is not set
 CONFIG_NEW_LEDS=y
 CONFIG_LEDS_CLASS=y
