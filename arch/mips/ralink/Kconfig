@@ -92,6 +92,11 @@ choice
 		bool "MT7621 eval kit"
 		depends on SOC_MT7621
 
+	config DTB_GNUBEE1
+		bool "GnuBee1 NAS"
+		depends on SOC_MT7621
+		select BUILTIN_DTB
+
 endchoice
 
 endif
