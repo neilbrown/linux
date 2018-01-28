@@ -609,6 +609,9 @@ config RALINK
 	select RESET_CONTROLLER
 	select PINCTRL
 	select PINCTRL_RT2880
+	select ARCH_HAS_RESET_CONTROLLER
+	select RESET_CONTROLLER
+	select ARCH_REQUIRE_GPIOLIB
 
 config SGI_IP22
 	bool "SGI IP22 (Indy/Indigo2)"
