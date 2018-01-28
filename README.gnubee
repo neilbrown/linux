@@ -1,0 +1,96 @@
+
+See also:   https://lwn.net/Articles/743609/
+
+don't expect MMC or network to work :-(
+
+This "Linux" source code tree is specifically for building
+a kernel that boots on my GnuBee-PC1.  Maybe it will work for you to.
+It contains some hacks and extras.
+
+To build and boot a kernel:
+
+1/ get a MIPS cross compiler (unless you are going to build on the
+   Gnubee itself).  See below if you don't have one.
+
+2/ copy the script mkgnubee-initramfs.sh to you Gnubee with
+   Debian installed, and run it.  It will create
+   "gnubee-initramfs.tgz".  You might need to apt-get install busybox
+   first.
+
+3/ copy the gnubee-initramfs.tgz here and
+     tar xvf gnubee-initramfs.tgz
+   to place the contents here.
+
+4/ Create a directory for storing the compiled result.  I use the subdir "O".
+    When you see "O=O" below, replace by "O=the-directory-you-created".
+
+5/ export ARCH=mips
+   export CROSS_COMPILE= .... whatever
+
+6/ make O=O gnubee1_defconfig
+
+    the O/.config this creates knows where to find the initramfs
+    to created earlier.
+
+7/ make -j8 O=O
+
+   you might want a different '-j' value, depending on how many
+   CPU cores you have.
+
+8/ make O=O INSTALL_MOD_PATH=`pwd`/initramfs modules_install
+
+   This puts all the modues in the initramfs
+
+9/ copy initramfs/lib/modules to yuor gnubee Debian install.
+  You need the Debian GNUBEE-ROOT to be on USB, not just a uSD card.
+  Now might be a good time to copy it or get a card reader, if you haven't already.
+  This kernel doesn't handle uSD.
+
+10/ make O=O uImage
+
+11/ copy O/arch/mips/boot/uImage.bin to an USB drive as gnubee.bin.
+
+12/ boot - wait - unplug usb - boot - enjoy.
+
+
+-------------------------------------------------------
+If you don't have a cross compiler, this is how I got one.
+I put all my git trees in /home/git.  You might put them elsewhere.
+
+
+Install gmp mpfr mpc devel packages
+
+cd /home/git
+git clone git://sourceware.org/git/binutils-gdb.git
+git clone git://gcc.gnu.org/git/gcc.git
+
+cd binutils-gdb
+binutils-2_29_1
+mkdir MIPS
+cd MIPS
+../configure --target=mipsel-unknown-linux-gnu --prefix=/opt/cross
+make
+sudo make install
+
+cd ../../gcc
+git checkout gcc-7_2_0-release
+mkdir MIPS
+cd MIPS
+../configure --target=mipsel-unknown-linux-gnu --prefix=/opt/cross \
+  --enable-languages=c --without-headers \
+  --with-gnu-ld --with-gnu-as \
+  --disable-shared --disable-threads \
+  --disable-libmudflap --disable-libgomp \
+  --disable-libssp --disable-libquadmath \
+  --disable-libatomic
+make -j8
+sudo make install
+
+This will install the cross-tools in /opt/cross
+You need to add /opt/cross/bin to your path.
+e.g.
+  export PATH=/opt/cross/bin:$PATH
+
+To use the tools to compile Linux:
+
+ export ARCH=mips CROSS_COMPILE=mipsel-unknown-linux-gnu-
