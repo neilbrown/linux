@@ -108,6 +108,11 @@
 			clock-frequency = <90000000>;
 };
 
+&cpuclock {
+			compatible = "fixed-clock";
+			clock-frequency = <900000000>;
+};
+
 &pcie {
 	status = "okay";
 };
