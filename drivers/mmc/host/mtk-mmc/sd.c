@@ -2809,6 +2809,8 @@ static int msdc_drv_probe(struct platform_device *pdev)
     host->hw        = hw;
     host->mmc       = mmc;
     host->id        = pdev->id;
+    if (host->id < 0 || host->id >= 4)
+	    host->id = 0;
     host->error     = 0;
     host->irq       = irq;    
     host->base      = (unsigned long) base;
