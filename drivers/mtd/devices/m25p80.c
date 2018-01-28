@@ -27,6 +27,9 @@
 #include <linux/spi/flash.h>
 #include <linux/mtd/spi-nor.h>
 
+#define OPCODE_RESET_ENABLE    0x66
+#define OPCODE_RESET           0x99
+
 #define	MAX_CMD_SIZE		6
 struct m25p {
 	struct spi_device	*spi;
@@ -226,6 +229,17 @@ static ssize_t m25p80_read(struct spi_nor *nor, loff_t from, size_t len,
 	return ret;
 }
 
+void m25p80_reboot(struct mtd_info *mtd)
+{
+	struct spi_nor *nor = container_of(mtd, struct spi_nor, mtd);
+	struct m25p *flash = nor->priv;
+
+	flash->command[0] = OPCODE_RESET_ENABLE;
+	spi_write(flash->spi, flash->command, 1);
+	flash->command[0] = OPCODE_RESET;
+	spi_write(flash->spi, flash->command, 1);
+}
+
 /*
  * board specific setup should have ensured the SPI clock used here
  * matches what the READ command supports, at least until this driver
@@ -257,6 +271,7 @@ static int m25p_probe(struct spi_device *spi)
 	nor->write = m25p80_write;
 	nor->write_reg = m25p80_write_reg;
 	nor->read_reg = m25p80_read_reg;
+	nor->mtd._reboot = m25p80_reboot;
 
 	nor->dev = &spi->dev;
 	spi_nor_set_flash_node(nor, spi->dev.of_node);
