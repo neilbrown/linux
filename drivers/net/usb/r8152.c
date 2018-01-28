@@ -1389,7 +1389,7 @@ static void intr_callback(struct urb *urb)
 	}
 
 	d = urb->transfer_buffer;
-	if (INTR_LINK & __le16_to_cpu(d[0])) {
+	if (1 || (INTR_LINK & __le16_to_cpu(d[0]))) {
 		if (!netif_carrier_ok(tp->netdev)) {
 			set_bit(RTL8152_LINK_CHG, &tp->flags);
 			schedule_delayed_work(&tp->schedule, 0);
