@@ -26,6 +26,7 @@
 #include "common.h"
 
 __iomem void *rt_sysc_membase;
+EXPORT_SYMBOL_GPL(rt_sysc_membase);
 __iomem void *rt_memc_membase;
 
 __iomem void *plat_of_remap_node(const char *node)

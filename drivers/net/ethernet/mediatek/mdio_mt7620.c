@@ -55,6 +55,7 @@ u32 _mt7620_mii_write(struct mt7620_gsw *gsw, u32 phy_addr,
 
 	return 0;
 }
+EXPORT_SYMBOL(_mt7620_mii_write);
 
 u32 _mt7620_mii_read(struct mt7620_gsw *gsw, int phy_addr, int phy_reg)
 {
@@ -75,6 +76,7 @@ u32 _mt7620_mii_read(struct mt7620_gsw *gsw, int phy_addr, int phy_reg)
 
 	return d;
 }
+EXPORT_SYMBOL(_mt7620_mii_read);
 
 int mt7620_mdio_write(struct mii_bus *bus, int phy_addr, int phy_reg, u16 val)
 {
@@ -98,6 +100,7 @@ void mt7530_mdio_w32(struct mt7620_gsw *gsw, u32 reg, u32 val)
 	_mt7620_mii_write(gsw, 0x1f, (reg >> 2) & 0xf,  val & 0xffff);
 	_mt7620_mii_write(gsw, 0x1f, 0x10, val >> 16);
 }
+EXPORT_SYMBOL(mt7530_mdio_w32);
 
 u32 mt7530_mdio_r32(struct mt7620_gsw *gsw, u32 reg)
 {
@@ -109,6 +112,7 @@ u32 mt7530_mdio_r32(struct mt7620_gsw *gsw, u32 reg)
 
 	return (high << 16) | (low & 0xffff);
 }
+EXPORT_SYMBOL(mt7530_mdio_r32);
 
 void mt7530_mdio_m32(struct mt7620_gsw *gsw, u32 mask, u32 set, u32 reg)
 {
@@ -118,6 +122,7 @@ void mt7530_mdio_m32(struct mt7620_gsw *gsw, u32 mask, u32 set, u32 reg)
 	val |= set;
 	mt7530_mdio_w32(gsw, reg, val);
 }
+EXPORT_SYMBOL_GPL(mt7530_mdio_m32);
 
 static unsigned char *mtk_speed_str(int speed)
 {

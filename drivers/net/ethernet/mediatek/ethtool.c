@@ -20,8 +20,8 @@ MTK_STAT_REG_DECLARE
 #undef _FE
 };
 
-static int mtk_get_settings(struct net_device *dev,
-			    struct ethtool_cmd *cmd)
+static int mtk_get_link_ksettings(struct net_device *dev,
+			    struct ethtool_link_ksettings *cmd)
 {
 	struct mtk_mac *mac = netdev_priv(dev);
 	int err;
@@ -35,32 +35,31 @@ static int mtk_get_settings(struct net_device *dev,
 			return -ENODEV;
 	}
 
-	return phy_ethtool_gset(mac->phy_dev, cmd);
+	phy_ethtool_ksettings_get(mac->phy_dev, cmd);
+	return 0;
 }
 
-static int mtk_set_settings(struct net_device *dev,
-			    struct ethtool_cmd *cmd)
+static int mtk_set_link_ksettings(struct net_device *dev,
+				  const struct ethtool_link_ksettings *cmd)
 {
 	struct mtk_mac *mac = netdev_priv(dev);
 
 	if (!mac->phy_dev)
 		return -ENODEV;
 
-	if (cmd->phy_address != mac->phy_dev->addr) {
-		if (mac->hw->phy->phy_node[cmd->phy_address]) {
-			mac->phy_dev = mac->hw->phy->phy[cmd->phy_address];
+	if (cmd->base.phy_address != mac->phy_dev->mdio.addr) {
+		if (mac->hw->phy->phy_node[cmd->base.phy_address]) {
+			mac->phy_dev = mac->hw->phy->phy[cmd->base.phy_address];
 			mac->phy_flags = MTK_PHY_FLAG_PORT;
-		} else if (mac->hw->mii_bus &&
-			   mac->hw->mii_bus->phy_map[cmd->phy_address]) {
-			mac->phy_dev =
-				mac->hw->mii_bus->phy_map[cmd->phy_address];
+		} else if (mac->hw->mii_bus) {
+			mac->phy_dev = mdiobus_get_phy(mac->hw->mii_bus, cmd->base.phy_address);
+			if (!mac->phy_dev)
+				return -ENODEV;
 			mac->phy_flags = MTK_PHY_FLAG_ATTACH;
-		} else {
-			return -ENODEV;
 		}
 	}
 
-	return phy_ethtool_sset(mac->phy_dev, cmd);
+	return phy_ethtool_ksettings_set(mac->phy_dev, cmd);
 }
 
 static void mtk_get_drvinfo(struct net_device *dev,
@@ -197,8 +196,8 @@ static void mtk_get_ethtool_stats(struct net_device *dev,
 }
 
 static struct ethtool_ops mtk_ethtool_ops = {
-	.get_settings		= mtk_get_settings,
-	.set_settings		= mtk_set_settings,
+	.get_link_ksettings	= mtk_get_link_ksettings,
+	.set_link_ksettings	= mtk_set_link_ksettings,
 	.get_drvinfo		= mtk_get_drvinfo,
 	.get_msglevel		= mtk_get_msglevel,
 	.set_msglevel		= mtk_set_msglevel,

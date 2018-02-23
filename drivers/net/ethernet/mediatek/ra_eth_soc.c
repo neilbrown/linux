@@ -119,6 +119,7 @@ void mtk_reset(struct mtk_eth *eth, u32 reset_bits)
 	regmap_write(eth->ethsys, SYSC_REG_RSTCTRL, val);
 	usleep_range(10, 20);
 }
+EXPORT_SYMBOL_GPL(mtk_reset);
 
 static inline void mtk_irq_ack(struct mtk_eth *eth, u32 mask)
 {
@@ -476,8 +477,8 @@ void mtk_stats_update_mac(struct mtk_mac *mac)
 	u64_stats_update_end(&hw_stats->syncp);
 }
 
-static struct rtnl_link_stats64 *mtk_get_stats64(struct net_device *dev,
-					struct rtnl_link_stats64 *storage)
+static void mtk_get_stats64(struct net_device *dev,
+			    struct rtnl_link_stats64 *storage)
 {
 	struct mtk_mac *mac = netdev_priv(dev);
 	struct mtk_hw_stats *hw_stats = mac->hw_stats;
@@ -486,7 +487,7 @@ static struct rtnl_link_stats64 *mtk_get_stats64(struct net_device *dev,
 
 	if (!base) {
 		netdev_stats_to_stats64(storage, &dev->stats);
-		return storage;
+		return;
 	}
 
 	if (netif_running(dev) && netif_device_present(dev)) {
@@ -514,8 +515,6 @@ static struct rtnl_link_stats64 *mtk_get_stats64(struct net_device *dev,
 	storage->tx_errors = dev->stats.tx_errors;
 	storage->rx_dropped = dev->stats.rx_dropped;
 	storage->tx_dropped = dev->stats.tx_dropped;
-
-	return storage;
 }
 
 static int mtk_vlan_rx_add_vid(struct net_device *dev,

@@ -26,4 +26,4 @@ obj-$(CONFIG_NET_MEDIATEK_GSW_MT7620)		+= gsw_mt7620.o
 obj-$(CONFIG_NET_MEDIATEK_GSW_MT7621)		+= gsw_mt7621.o
 obj-$(CONFIG_NET_MEDIATEK_GSW_MT7623)		+= gsw_mt7623.o
 
-obj-$(CONFIG_NET_MEDIATEK_SOC)			+= mtk-eth-soc.o
+obj-$(CONFIG_NET_RALINK_SOC)			+= mtk-eth-soc.o

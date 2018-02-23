@@ -376,6 +376,9 @@
 		compatible = "mediatek,mt7621-eth";
 		reg = <0x1e100000 0x10000>;
 
+		clocks = <&sysclock>;
+		clock-names = "ethif";
+
 		#address-cells = <1>;
 		#size-cells = <0>;
 

@@ -14,6 +14,14 @@ config NET_MEDIATEK_SOC
 	  This driver supports the gigabit ethernet MACs in the
 	  MediaTek SoC family.
 
+config NET_RALINK_SOC
+	tristate "Ralink SoC Gigabit Ethernet support"
+	depends on NET_VENDOR_MEDIATEK
+	select PHYLIB
+	---help---
+	  This driver supports the gigabit ethernet MACs in the
+	  MediaTek SoC family.
+
 choice
 	prompt "MAC type"
 
@@ -44,35 +52,34 @@ config NET_MEDIATEK_MT7623
 endchoice
 
 config NET_MEDIATEK_MDIO
-	def_bool NET_MEDIATEK_SOC
+	def_bool NET_RALINK_SOC
 	depends on (NET_MEDIATEK_RT2880 || NET_MEDIATEK_RT3883 || NET_MEDIATEK_MT7620 || NET_MEDIATEK_MT7621 || NET_MEDIATEK_MT7623)
 	select PHYLIB
 
 config NET_MEDIATEK_MDIO_RT2880
-	def_bool NET_MEDIATEK_SOC
+	def_bool NET_RALINK_SOC
 	depends on (NET_MEDIATEK_RT2880 || NET_MEDIATEK_RT3883)
 	select NET_MEDIATEK_MDIO
 
 config NET_MEDIATEK_MDIO_MT7620
-	def_bool NET_MEDIATEK_SOC
+	def_bool NET_RALINK_SOC
 	depends on (NET_MEDIATEK_MT7620 || NET_MEDIATEK_MT7621 || NET_MEDIATEK_MT7623)
 	select NET_MEDIATEK_MDIO
 
 config NET_MEDIATEK_ESW_RT3050
-	def_tristate NET_MEDIATEK_SOC
+	def_tristate NET_RALINK_SOC
 	depends on NET_MEDIATEK_RT3050
 
 config NET_MEDIATEK_GSW_MT7620
-	def_tristate NET_MEDIATEK_SOC
+	def_tristate NET_RALINK_SOC
 	depends on NET_MEDIATEK_MT7620
 
 config NET_MEDIATEK_GSW_MT7621
-	def_tristate NET_MEDIATEK_SOC
+	def_tristate NET_RALINK_SOC
 	depends on NET_MEDIATEK_MT7621
 
 config NET_MEDIATEK_GSW_MT7623
-	def_tristate NET_MEDIATEK_SOC
+	def_tristate NET_RALINK_SOC
 	depends on NET_MEDIATEK_MT7623
-endif
 
 endif #NET_VENDOR_MEDIATEK

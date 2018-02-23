@@ -124,6 +124,7 @@ static struct mtk_soc_data mt7621_data = {
 	.rx_2b_offset = 1,
 	.rx_sg_dma = 1,
 	.has_switch = 1,
+	.mac_count = 2,
 	.reset_fe = mt7621_mtk_reset,
 	.set_mac = mt7621_set_mac,
 	.fwd_config = mt7621_fwd_config,

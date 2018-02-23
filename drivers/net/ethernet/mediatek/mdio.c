@@ -93,7 +93,7 @@ int mtk_connect_phy_node(struct mtk_eth *eth, struct mtk_mac *mac,
 
 	dev_info(eth->dev,
 		 "connected port %d to PHY at %s [uid=%08x, driver=%s]\n",
-		 port, dev_name(&phydev->dev), phydev->phy_id,
+		 port, phydev_name(phydev), phydev->phy_id,
 		 phydev->drv->name);
 
 	eth->phy->phy[port] = phydev;
@@ -105,7 +105,7 @@ int mtk_connect_phy_node(struct mtk_eth *eth, struct mtk_mac *mac,
 static void phy_init(struct mtk_eth *eth, struct mtk_mac *mac,
 		     struct phy_device *phy)
 {
-	phy_attach(eth->netdev[mac->id], dev_name(&phy->dev),
+	phy_attach(eth->netdev[mac->id], phydev_name(phy),
 		   PHY_INTERFACE_MODE_MII);
 
 	phy->autoneg = AUTONEG_ENABLE;
@@ -128,11 +128,15 @@ static int mtk_phy_connect(struct mtk_mac *mac)
 				mac->phy_dev = eth->phy->phy[i];
 				mac->phy_flags = MTK_PHY_FLAG_PORT;
 			}
-		} else if (eth->mii_bus && eth->mii_bus->phy_map[i]) {
-			phy_init(eth, mac, eth->mii_bus->phy_map[i]);
-			if (!mac->phy_dev) {
-				mac->phy_dev = eth->mii_bus->phy_map[i];
-				mac->phy_flags = MTK_PHY_FLAG_ATTACH;
+		} else if (eth->mii_bus) {
+			struct phy_device *phy;
+			phy = mdiobus_get_phy(eth->mii_bus, i);
+			if (phy) {
+				phy_init(eth, mac, phy);
+				if (!mac->phy_dev) {
+					mac->phy_dev = phy;
+					mac->phy_flags = MTK_PHY_FLAG_ATTACH;
+				}
 			}
 		}
 	}
@@ -155,8 +159,10 @@ static void mtk_phy_disconnect(struct mtk_mac *mac)
 			spin_unlock_irqrestore(&eth->phy->lock, flags);
 		} else if (eth->phy->phy[i]) {
 			phy_disconnect(eth->phy->phy[i]);
-		} else if (eth->mii_bus && eth->mii_bus->phy_map[i]) {
-			phy_detach(eth->mii_bus->phy_map[i]);
+		} else if (eth->mii_bus) {
+			struct phy_device *phy = mdiobus_get_phy(eth->mii_bus, i);
+			if (phy)
+				phy_detach(phy);
 		}
 }
 
