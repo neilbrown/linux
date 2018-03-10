@@ -69,28 +69,39 @@ static irqreturn_t gsw_interrupt_mt7621(int irq, void *_eth)
 	return IRQ_HANDLED;
 }
 
+void mt7620_lock(void);
+void mt7620_unlock(void);
+
 static void mt7621_hw_init(struct mtk_eth *eth, struct mt7620_gsw *gsw,
 			   struct device_node *np)
 {
 	u32 i;
 	u32 val;
 
-	/* wardware reset the switch */
+	/* hardware reset the switch */
 	mtk_reset(eth, RST_CTRL_MCM);
 	mdelay(10);
 
 	/* reduce RGMII2 PAD driving strength */
 	rt_sysc_m32(MT7621_MDIO_DRV_MASK, 0, SYSC_PAD_RGMII2_MDIO);
 
+	/* gpio mux - RGMII1=Normal mode */
+	rt_sysc_m32(BIT(14), 0, SYSC_GPIO_MODE);
+
 	/* set GMAC1 RGMII mode */
 	rt_sysc_m32(MT7621_GE1_MODE_MASK, 0, SYSC_REG_CFG1);
 
+	/* enable MDIO to control MT7530 */
+	rt_sysc_m32(3 << 12, 0, SYSC_GPIO_MODE);
+
 	/* turn off all PHYs */
+	mt7620_lock();
 	for (i = 0; i <= 4; i++) {
 		val = _mt7620_mii_read(gsw, i, 0x0);
 		val |= BIT(11);
 		_mt7620_mii_write(gsw, i, 0x0, val);
 	}
+	mt7620_unlock();
 
 	/* reset the switch */
 	mt7530_mdio_w32(gsw, MT7530_SYS_CTRL,
@@ -118,10 +129,12 @@ static void mt7621_hw_init(struct mtk_eth *eth, struct mt7620_gsw *gsw,
 	val |= MHWTRAP_P5_DIS;
 	/* manual override of HW-Trap */
 	val |= MHWTRAP_MANUAL;
+	val |= MHWTRAP_P5_MAC_SEL;
 	mt7530_mdio_w32(gsw, MT7530_MHWTRAP, val);
 
 	val = rt_sysc_r32(SYSC_REG_CFG);
 	val = (val >> MT7621_XTAL_SHIFT) & MT7621_XTAL_MASK;
+	mt7620_lock();
 	if (val < MT7621_XTAL_25 && val >= MT7621_XTAL_40) {
 		/* 40Mhz */
 
@@ -159,9 +172,10 @@ static void mt7621_hw_init(struct mtk_eth *eth, struct mt7620_gsw *gsw,
 
 	/* RGMII */
 	_mt7620_mii_write(gsw, 0, 14, 0x1);
+	mt7620_unlock();
 
 	/* set MT7530 central align */
-	mt7530_mdio_w32(gsw, MT7530_P6ECR, P6ECR_INTF_MODE_RGMII);
+	mt7530_mdio_m32(gsw, BIT(0), P6ECR_INTF_MODE_RGMII, MT7530_P6ECR);
 	mt7530_mdio_m32(gsw, TRGMII_TXCTRL_TXC_INV, 0,
 			MT7530_TRGMII_TXCTRL);
 	mt7530_mdio_w32(gsw, MT7530_TRGMII_TCK_CTRL, 0x855);
@@ -169,25 +183,47 @@ static void mt7621_hw_init(struct mtk_eth *eth, struct mt7620_gsw *gsw,
 	/* delay setting for 10/1000M */
 	mt7530_mdio_w32(gsw, MT7530_P5RGMIIRXCR,
 			P5RGMIIRXCR_C_ALIGN | P5RGMIIRXCR_DELAY_2);
-	mt7530_mdio_w32(gsw, MT7530_P5RGMIITXCR, P5RGMIITXCR_DELAY_2);
+	mt7530_mdio_w32(gsw, MT7530_P5RGMIITXCR, 0x14);
 
 	/* lower Tx Driving*/
 	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD0_ODT, 0x44);
-	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD0_ODT, 0x44);
-	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD0_ODT, 0x44);
-	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD0_ODT, 0x44);
-	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD0_ODT, 0x44);
-	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD0_ODT, 0x44);
+	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD1_ODT, 0x44);
+	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD2_ODT, 0x44);
+	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD3_ODT, 0x44);
+	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD4_ODT, 0x44);
+	mt7530_mdio_w32(gsw, MT7530_TRGMII_TD5_ODT, 0x44);
 
 	/* turn on all PHYs */
+	mt7620_lock();
 	for (i = 0; i <= 4; i++) {
 		val = _mt7620_mii_read(gsw, i, 0);
 		val &= ~BIT(11);
 		_mt7620_mii_write(gsw, i, 0, val);
 	}
+	mt7620_unlock();
 
 	/* enable irq */
-	mt7530_mdio_m32(gsw, 0, 3 << 16, MT7530_SYS_INT_EN);
+	mt7530_mdio_m32(gsw, 0, 3 << 16, MT7530_TOP_SIG_CTRL);
+
+#define MT7530_NUM_PORTS 8
+#define REG_ESW_PORT_PCR(x)	(0x2004 | ((x) << 8))
+#define REG_ESW_PORT_PVC(x)	(0x2010 | ((x) << 8))
+#define REG_ESW_PORT_PPBV1(x)	(0x2014 | ((x) << 8))
+#define MT7530_CPU_PORT		6
+
+	{
+		int i;
+		for (i = 0; i < MT7530_NUM_PORTS; i++)
+			mt7530_mdio_w32(gsw, REG_ESW_PORT_PCR(i), 0x00400000);
+
+		mt7530_mdio_w32(gsw, REG_ESW_PORT_PCR(MT7530_CPU_PORT), 0x00ff0000);
+
+		for (i = 0; i < MT7530_NUM_PORTS; i++)
+			mt7530_mdio_w32(gsw, REG_ESW_PORT_PVC(i), 0x810000c0);
+
+	}
+
+
 }
 
 static const struct of_device_id mediatek_gsw_match[] = {
@@ -211,13 +247,15 @@ int mtk_gsw_init(struct mtk_eth *eth)
 	gsw = platform_get_drvdata(pdev);
 	eth->sw_priv = gsw;
 
-	mt7621_hw_init(eth, gsw, np);
 
 	if (gsw->irq) {
 		request_irq(gsw->irq, gsw_interrupt_mt7621, 0,
 			    "gsw", eth);
-		mt7530_mdio_w32(gsw, MT7530_SYS_INT_EN, 0x1f);
+		disable_irq(gsw->irq);
 	}
+	mt7621_hw_init(eth, gsw, np);
+	if (gsw->irq)
+		mt7530_mdio_w32(gsw, MT7530_SYS_INT_EN, 0x1f);
 
 	return 0;
 }

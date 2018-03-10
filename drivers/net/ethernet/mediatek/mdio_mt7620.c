@@ -20,6 +20,8 @@
 #include "gsw_mt7620.h"
 #include "mdio.h"
 
+static DEFINE_SPINLOCK(lock);
+
 static int mt7620_mii_busy_wait(struct mt7620_gsw *gsw)
 {
 	unsigned long t_start = jiffies;
@@ -78,27 +80,53 @@ u32 _mt7620_mii_read(struct mt7620_gsw *gsw, int phy_addr, int phy_reg)
 }
 EXPORT_SYMBOL(_mt7620_mii_read);
 
+void mt7620_lock(void)
+{
+	spin_lock_irq(&lock);
+}
+EXPORT_SYMBOL(mt7620_lock);
+
+void mt7620_unlock(void)
+{
+	spin_unlock_irq(&lock);
+}
+EXPORT_SYMBOL(mt7620_lock);
+
 int mt7620_mdio_write(struct mii_bus *bus, int phy_addr, int phy_reg, u16 val)
 {
 	struct mtk_eth *eth = bus->priv;
 	struct mt7620_gsw *gsw = (struct mt7620_gsw *)eth->sw_priv;
+	int ret;
 
-	return _mt7620_mii_write(gsw, phy_addr, phy_reg, val);
+	unsigned long flags;
+	spin_lock_irqsave(&lock, flags);
+	ret = _mt7620_mii_write(gsw, phy_addr, phy_reg, val);
+	spin_unlock_irqrestore(&lock, flags);
+	return ret;
 }
 
 int mt7620_mdio_read(struct mii_bus *bus, int phy_addr, int phy_reg)
 {
 	struct mtk_eth *eth = bus->priv;
 	struct mt7620_gsw *gsw = (struct mt7620_gsw *)eth->sw_priv;
+	int ret;
 
-	return _mt7620_mii_read(gsw, phy_addr, phy_reg);
+	unsigned long flags;
+	spin_lock_irqsave(&lock, flags);
+	ret = _mt7620_mii_read(gsw, phy_addr, phy_reg);
+	spin_unlock_irqrestore(&lock, flags);
+	return ret;
 }
 
 void mt7530_mdio_w32(struct mt7620_gsw *gsw, u32 reg, u32 val)
 {
+	unsigned long flags;
+
+	spin_lock_irqsave(&lock, flags);
 	_mt7620_mii_write(gsw, 0x1f, 0x1f, (reg >> 6) & 0x3ff);
 	_mt7620_mii_write(gsw, 0x1f, (reg >> 2) & 0xf,  val & 0xffff);
 	_mt7620_mii_write(gsw, 0x1f, 0x10, val >> 16);
+	spin_unlock_irqrestore(&lock, flags);
 }
 EXPORT_SYMBOL(mt7530_mdio_w32);
 
@@ -106,10 +134,13 @@ u32 mt7530_mdio_r32(struct mt7620_gsw *gsw, u32 reg)
 {
 	u16 high, low;
 
+	unsigned long flags;
+	spin_lock_irqsave(&lock, flags);
 	_mt7620_mii_write(gsw, 0x1f, 0x1f, (reg >> 6) & 0x3ff);
 	low = _mt7620_mii_read(gsw, 0x1f, (reg >> 2) & 0xf);
 	high = _mt7620_mii_read(gsw, 0x1f, 0x10);
 
+	spin_unlock_irqrestore(&lock, flags);
 	return (high << 16) | (low & 0xffff);
 }
 EXPORT_SYMBOL(mt7530_mdio_r32);
@@ -118,7 +149,7 @@ void mt7530_mdio_m32(struct mt7620_gsw *gsw, u32 mask, u32 set, u32 reg)
 {
 	u32 val = mt7530_mdio_r32(gsw, reg);
 
-	val &= mask;
+	val &= ~mask;
 	val |= set;
 	mt7530_mdio_w32(gsw, reg, val);
 }
@@ -146,9 +177,10 @@ int mt7620_has_carrier(struct mtk_eth *eth)
 	struct mt7620_gsw *gsw = (struct mt7620_gsw *)eth->sw_priv;
 	int i;
 
-	for (i = 0; i < GSW_PORT6; i++)
-		if (mtk_switch_r32(gsw, GSW_REG_PORT_STATUS(i)) & 0x1)
+	for (i = 0; i < GSW_PORT6; i++) {
+		if (mt7530_mdio_r32(gsw, GSW_REG_PORT_STATUS(i)) & 0x1)
 			return 1;
+	}
 	return 0;
 }
 

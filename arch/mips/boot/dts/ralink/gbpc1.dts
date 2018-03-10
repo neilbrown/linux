@@ -118,7 +118,19 @@
 };
 
 &ethernet {
-	mtd-mac-address = <&factory 0xe000>;
+	//mtd-mac-address = <&factory 0xe000>;
+	gmac1: mac@0 {
+		compatible = "mediatek,eth-mac";
+		reg = <0>;
+		phy-handle = <&phy1>;
+	};
+
+	mdio-bus {
+		phy1: ethernet-phy@1 {
+			reg = <1>;
+			phy-mode = "rgmii";
+		};
+	};
 };
 
 &pinctrl {

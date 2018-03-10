@@ -368,7 +368,7 @@
 	ethsys: syscon@1e000000 {
 		compatible = "mediatek,mt7621-ethsys",
 			     "syscon";
-		reg = <0 0x1e000000 0 0x1000>;
+		reg = <0x1e000000 0x1000>;
 		#clock-cells = <1>;
 	};
 

@@ -47,6 +47,8 @@
 
 #define GSW_REG_GDMA1_MAC_ADRL	0x508
 #define GSW_REG_GDMA1_MAC_ADRH	0x50C
+#define GSW_REG_GDMA2_MAC_ADRL	0x1508
+#define GSW_REG_GDMA2_MAC_ADRH	0x150C
 
 #define MT7621_MTK_RST_GL	0x04
 #define MT7620_MTK_INT_STATUS2	0x08
@@ -94,7 +96,7 @@ static int mt7621_fwd_config(struct mtk_eth *eth)
 		       MT7620_GDMA1_FWD_CFG);
 
 	/* Enable RX VLan Offloading */
-	mtk_w32(eth, 1, MT7621_CDMP_EG_CTRL);
+	mtk_w32(eth, 0, MT7621_CDMP_EG_CTRL);
 
 	return 0;
 }
@@ -104,10 +106,18 @@ static void mt7621_set_mac(struct mtk_mac *mac, unsigned char *hwaddr)
 	unsigned long flags;
 
 	spin_lock_irqsave(&mac->hw->page_lock, flags);
-	mtk_w32(mac->hw, (hwaddr[0] << 8) | hwaddr[1], GSW_REG_GDMA1_MAC_ADRH);
-	mtk_w32(mac->hw, (hwaddr[2] << 24) | (hwaddr[3] << 16) |
-			 (hwaddr[4] << 8) | hwaddr[5],
-		GSW_REG_GDMA1_MAC_ADRL);
+	if (mac->id == 0) {
+		mtk_w32(mac->hw, (hwaddr[0] << 8) | hwaddr[1], GSW_REG_GDMA1_MAC_ADRH);
+		mtk_w32(mac->hw, (hwaddr[2] << 24) | (hwaddr[3] << 16) |
+			(hwaddr[4] << 8) | hwaddr[5],
+			GSW_REG_GDMA1_MAC_ADRL);
+	}
+	if (mac->id == 1) {
+		mtk_w32(mac->hw, (hwaddr[0] << 8) | hwaddr[1], GSW_REG_GDMA2_MAC_ADRH);
+		mtk_w32(mac->hw, (hwaddr[2] << 24) | (hwaddr[3] << 16) |
+			(hwaddr[4] << 8) | hwaddr[5],
+			GSW_REG_GDMA2_MAC_ADRL);
+	}
 	spin_unlock_irqrestore(&mac->hw->page_lock, flags);
 }
 
@@ -116,7 +126,7 @@ static struct mtk_soc_data mt7621_data = {
 		       NETIF_F_HW_VLAN_CTAG_TX | NETIF_F_HW_VLAN_CTAG_RX |
 		       NETIF_F_SG | NETIF_F_TSO | NETIF_F_TSO6 |
 		       NETIF_F_IPV6_CSUM,
-	.dma_type = MTK_PDMA_RX_QDMA_TX,
+	.dma_type = MTK_PDMA,
 	.dma_ring_size = 256,
 	.napi_weight = 64,
 	.new_stats = 1,

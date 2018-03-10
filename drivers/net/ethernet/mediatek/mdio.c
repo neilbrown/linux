@@ -123,6 +123,10 @@ static int mtk_phy_connect(struct mtk_mac *mac)
 	int i;
 
 	for (i = 0; i < 8; i++) {
+		if (mac->id == 0 && i != 1)
+			continue;
+		if (mac->id == 1 && i != 4)
+			continue;
 		if (eth->phy->phy_node[i]) {
 			if (!mac->phy_dev) {
 				mac->phy_dev = eth->phy->phy[i];

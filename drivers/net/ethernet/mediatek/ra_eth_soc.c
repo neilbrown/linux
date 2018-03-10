@@ -636,6 +636,12 @@ static int mtk_pdma_tx_map(struct sk_buff *skb, struct net_device *dev,
 	def_txd4 = eth->soc->txd4;
 	txd.txd4 = def_txd4;
 
+	if (eth->soc->mac_count > 1)
+		txd.txd4 |= (mac->id + 1) << TX_DMA_FPORT_SHIFT;
+
+	if (gso)
+		txd.txd4 |= TX_DMA_TSO;
+
 	/* TX Checksum offload */
 	if (skb->ip_summed == CHECKSUM_PARTIAL)
 		txd.txd4 |= TX_DMA_CHKSUM;
@@ -1061,19 +1067,21 @@ static int mtk_poll_rx(struct napi_struct *napi, int budget,
 		/* find out which mac the packet come from. values start at 1 */
 		if (eth->soc->mac_count > 1) {
 			mac = (trxd.rxd4 >> RX_DMA_FPORT_SHIFT) &
-			      RX_DMA_FPORT_MASK;
+				RX_DMA_FPORT_MASK;
 			mac--;
+			if (mac < 0 || mac >= eth->soc->mac_count)
+				goto release_desc;
 		}
 
 		netdev = eth->netdev[mac];
 
 		/* alloc new buffer */
 		new_data = napi_alloc_frag(ring->frag_size);
-		if (unlikely(!new_data)) {
+		if (unlikely(!new_data || !netdev)) {
 			netdev->stats.rx_dropped++;
 			goto release_desc;
 		}
-		dma_addr = dma_map_single(&eth->netdev[mac]->dev,
+		dma_addr = dma_map_single(&netdev->dev,
 					  new_data + NET_SKB_PAD + pad,
 					  ring->rx_buf_size,
 					  DMA_FROM_DEVICE);
@@ -1822,6 +1830,7 @@ static int __init mtk_init(struct net_device *dev)
 		dev_err(eth->dev, "generated random MAC address %pM\n",
 			dev->dev_addr);
 		dev->addr_assign_type = NET_ADDR_RANDOM;
+		mac->hw->soc->set_mac(mac, dev->dev_addr);
 	}
 
 	if (eth->soc->port_init)
@@ -2133,7 +2142,7 @@ static int mtk_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, eth);
-
+	enable_irq(21);
 	return 0;
 
 err_free_dev:
