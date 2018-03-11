@@ -98,6 +98,7 @@ nod /dev/tty0 660 0 0 c 4 0
 nod /dev/tty1 660 0 0 c 4 1
 nod /dev/random 666 0 0 c 1 8
 nod /dev/urandom 666 0 0 c 1 9
+nod /dev/kmsg 666 0 0 c 1 11
 dir /dev/pts 755 0 0
 dir /proc 755 0 0
 dir /sys 755 0 0
