@@ -44,6 +44,14 @@ cat > init << END
 
 gnubee_switch_root(){
   echo "Partition GNUBEE-ROOT found. Starting..." > /dev/kmsg
+  r=`uname -r`
+  if [ -d /mnt/root/lib/modules/$r ]
+  then : skip
+  else
+     # ensure modules are available
+     mount -t tmpfs tmpfs /mnt/root/lib/modules
+     cp -a /lib/modules/. /mnt/root/lib/modules/
+  fi
   umount /proc /sys /dev
   exec switch_root /mnt/root /sbin/init
 }
