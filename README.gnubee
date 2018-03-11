@@ -52,6 +52,18 @@ To build and boot a kernel:
 
 12/ boot - wait - unplug usb - boot - enjoy.
 
+13/ The gnubee.bin contains all the kernel modules, and
+  normally will leave them in a tmpfs filesystem mounted on /lib/modules
+  so you don't have to install them separately.  This is convenient, but
+  is a waste of memory.  If you want to stay with this firmware it is
+  best to copy the modules into your root filesystem.  Then the firmware
+  will not keep a copy.  This can be done with the following steps:
+    mkdir /tmp/modules
+    mount --bind /lib/modules /tmp/modules
+    umount -l /lib/modules
+    cp -a /tmp/modules/. /lib/modules
+    umount /tmp/modules
+
 
 -------------------------------------------------------
 If you don't have a cross compiler, this is how I got one.
