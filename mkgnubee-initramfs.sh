@@ -38,7 +38,7 @@ busybox --list | while read a;
 do ln -s busybox bin/$a
 done
 
-cat > init << END
+cat > init << "END"
 #!/bin/busybox ash
 # based on ALTERNATIVE PREINIT V1 - dgazineu gmail.com
 
@@ -116,7 +116,7 @@ END
 tar czf gnubee-initramfs.tgz initramfs initramfs-files.txt
 rm -rf initramfs initramfs-files.txt
 ls -l gnubee-initramfs.tgz
-cat << END
+cat << "END"
 Please unpack this archive in the kernel source tree
 After "make modules" run
   make INSTALL_MOD_PATH=initramfs modules_install
