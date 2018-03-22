@@ -440,8 +440,15 @@ pcibios_map_irq(const struct pci_dev *dev, u8 slot, u8 pin)
 	/* we have a hwirq, but need to return a virq (virtual irq).
 	 * I don't yet now how to do the mapping, so a hack is needed.
 	 * 11 -> 22 because I find that in /proc/interrupts.
+	 * Similarly 31->23 and 32->24.
 	 */
-	return irq == 11 ? 22 : irq;
+	if (irq == 11)
+		return 22;
+	if (irq == 31)
+		return 23;
+	if (irq == 32)
+		return 24;
+	return irq;
 }
 
 void
