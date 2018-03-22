@@ -41,10 +41,9 @@ To build and boot a kernel:
 
    This puts all the modules in the initramfs
 
-9/ copy initramfs/lib/modules to yuor gnubee Debian install.
-  You need the Debian GNUBEE-ROOT to be on USB, not just a uSD card.
-  Now might be a good time to copy it or get a card reader, if you haven't already.
-  This kernel doesn't handle uSD.
+9/ copy initramfs/lib/modules to your gnubee Debian install.
+  Your Debian GNUBEE_ROOT filesystem can be on USB or the uSD card,
+  both are now supported.
 
 10/ make O=O uImage
 
