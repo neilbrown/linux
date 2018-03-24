@@ -12,6 +12,7 @@ if [ -z "$p" ]; then
 	echo "Please apt-get install busybox"
 	exit 1
 fi
+echo "$p"
 cp $p bin
 
 p=`which findfs 2> /dev/null`
@@ -19,7 +20,19 @@ if [ -z "$p" ]; then
 	echo "Please apt-get install util-linux"
 	exit 1
 fi
+echo "$p"
 cp $p bin
+
+optional_bins="cryptsetup"
+for i in $optional_bins; do
+    p=`which $i 2> /dev/null`
+    if [ -z "$p" ]; then
+        echo "$i not found, not installing"
+    else
+        echo "$p"
+        cp $p bin
+    fi
+done
 
 for i in bin/*
 do
@@ -56,15 +69,10 @@ gnubee_switch_root(){
   exec switch_root /mnt/root /sbin/init
 }
 
-continue_boot(){
-  echo "Partition GNUBEE-ROOT not found. Resuming recovery boot." > /dev/kmsg
-  while : ; do  /bin/ash ; done
-}
-
 gnubee_boot(){
    mount -t proc none /proc
    mount -t sysfs none /sys
-   mount -t tmpfs tmpfs /dev
+   mount -t devtmpfs devtmpfs /dev
 
    modprobe ahci
    modprobe xhci_mtk
@@ -85,12 +93,23 @@ gnubee_boot(){
 
    sleep 1
 
-   if mount -o ro `findfs LABEL=GNUBEE-ROOT` /mnt/root &&
-	   test -L /mnt/root/sbin/init -o -e /mnt/root/sbin/init &&
-	   gnubee_switch_root
-   then : done
-   else continue_boot
-   fi
+   while true; do
+       crypt_root=`findfs PARTLABEL=GNUBEE-CRYPT-ROOT`
+       if test -n "$crypt_root"; then
+           cryptsetup open "$crypt_root" rootdev
+           root_dev="/dev/mapper/rootdev"
+       else
+           root_dev=`findfs LABEL=GNUBEE-ROOT`
+       fi
+
+       if test -n "$root_dev" &&
+               mount -o ro $root_dev /mnt/root &&
+               test -L /mnt/root/sbin/init -o -e /mnt/root/sbin/init &&
+               gnubee_switch_root
+       then break
+       else /bin/ash # recovery shell
+       fi
+   done
 }
 
 gnubee_boot
