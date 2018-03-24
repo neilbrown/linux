@@ -1,10 +1,10 @@
 
 See also:   https://lwn.net/Articles/743609/
 
-don't expect MMC or network to work :-(
+don't expect network to work exactly the same
 
 This "Linux" source code tree is specifically for building
-a kernel that boots on my GnuBee-PC1.  Maybe it will work for you to.
+a kernel that boots on my GnuBee-PC1.  Maybe it will work for you too.
 It contains some hacks and extras.
 
 To build and boot a kernel:
@@ -12,7 +12,7 @@ To build and boot a kernel:
 1/ get a MIPS cross compiler (unless you are going to build on the
    Gnubee itself).  See below if you don't have one.
 
-2/ copy the script mkgnubee-initramfs.sh to you Gnubee with
+2/ copy the script mkgnubee-initramfs.sh to your Gnubee with
    Debian installed, and run it.  It will create
    "gnubee-initramfs.tgz".  You might need to apt-get install busybox
    first.
@@ -24,7 +24,8 @@ To build and boot a kernel:
 4/ Create a directory for storing the compiled result.  I use the subdir "O".
     When you see "O=O" below, replace by "O=the-directory-you-created".
 
-5/ export ARCH=mips
+5/ If cross-compiling,
+   export ARCH=mips
    export CROSS_COMPILE= .... whatever
 
 6/ make O=O gnubee1_defconfig
@@ -42,8 +43,8 @@ To build and boot a kernel:
    This puts all the modules in the initramfs
 
 9/ copy initramfs/lib/modules to your gnubee Debian install.
-  Your Debian GNUBEE_ROOT filesystem can be on USB or the uSD card,
-  both are now supported.
+  Your Debian GNUBEE-ROOT filesystem can be on USB, the uSD card,
+  or a SATA drive partition; all are now supported.
 
 10/ make O=O uImage
 
@@ -56,7 +57,8 @@ To build and boot a kernel:
   so you don't have to install them separately.  This is convenient, but
   is a waste of memory.  If you want to stay with this firmware it is
   best to copy the modules into your root filesystem.  Then the firmware
-  will not keep a copy.  This can be done with the following steps:
+  will not keep a copy.  If you did this in step 9 above, you don't have
+  to do anything else from the booted system.  Alternatively, you can:
     mkdir /tmp/modules
     mount --bind /lib/modules /tmp/modules
     umount -l /lib/modules
@@ -76,7 +78,7 @@ git clone git://sourceware.org/git/binutils-gdb.git
 git clone git://gcc.gnu.org/git/gcc.git
 
 cd binutils-gdb
-binutils-2_29_1
+git checkout binutils-2_29_1
 mkdir MIPS
 cd MIPS
 ../configure --target=mipsel-unknown-linux-gnu --prefix=/opt/cross

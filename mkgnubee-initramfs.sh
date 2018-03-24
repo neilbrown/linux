@@ -66,6 +66,7 @@ gnubee_boot(){
    mount -t sysfs none /sys
    mount -t tmpfs tmpfs /dev
 
+   modprobe ahci
    modprobe xhci_mtk
    modprobe usb_storage
    modprobe sd_mod
