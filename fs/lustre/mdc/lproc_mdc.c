@@ -37,7 +37,6 @@
 #include <lprocfs_status.h>
 #include <lustre_osc.h>
 #include <cl_object.h>
-
 #include "mdc_internal.h"
 
 static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
@@ -196,6 +195,38 @@ static ssize_t mdc_max_dirty_mb_seq_write(struct file *file,
 }
 LDEBUGFS_SEQ_FOPS(mdc_max_dirty_mb);
 
+static ssize_t contention_seconds_show(struct kobject *kobj,
+				       struct attribute *attr,
+				       char *buf)
+{
+	struct obd_device *obd = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
+	struct osc_device *od = obd2osc_dev(obd);
+
+	return sprintf(buf, "%lld\n", od->od_contention_time);
+}
+
+static ssize_t contention_seconds_store(struct kobject *kobj,
+					struct attribute *attr,
+					const char *buffer,
+					size_t count)
+{
+	struct obd_device *obd = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
+	struct osc_device *od = obd2osc_dev(obd);
+	time64_t val;
+	int rc;
+
+	rc = kstrtoll(buffer, 0, &val);
+	if (rc)
+		return rc;
+
+	od->od_contention_time = val;
+
+	return count;
+}
+LUSTRE_RW_ATTR(contention_seconds);
+
 static int mdc_cached_mb_seq_show(struct seq_file *m, void *v)
 {
 	struct obd_device *obd = m->private;
@@ -255,45 +286,6 @@ mdc_cached_mb_seq_write(struct file *file, const char __user *buffer,
 	return count;
 }
 LDEBUGFS_SEQ_FOPS(mdc_cached_mb);
-
-static int mdc_contention_seconds_seq_show(struct seq_file *m, void *v)
-{
-	struct obd_device *obd = m->private;
-	struct osc_device *od  = obd2osc_dev(obd);
-
-	seq_printf(m, "%lld\n", od->od_contention_time);
-	return 0;
-}
-
-static ssize_t mdc_contention_seconds_seq_write(struct file *file,
-						const char __user *buffer,
-						size_t count, loff_t *off)
-{
-	struct seq_file *sfl = file->private_data;
-	struct obd_device *obd = sfl->private;
-	struct osc_device *od  = obd2osc_dev(obd);
-	int rc;
-	char kernbuf[128];
-	s64 val;
-
-	if (count >= sizeof(kernbuf))
-		return -EINVAL;
-
-	if (copy_from_user(kernbuf, buffer, count))
-		return -EFAULT;
-	kernbuf[count] = 0;
-
-	rc = kstrtos64(kernbuf, count, &val);
-	if (rc)
-		return rc;
-	if (val < 0 || val > INT_MAX)
-		return -ERANGE;
-
-	od->od_contention_time = val;
-
-	return count;
-}
-LDEBUGFS_SEQ_FOPS(mdc_contention_seconds);
 
 static int mdc_unstable_stats_seq_show(struct seq_file *m, void *v)
 {
@@ -513,8 +505,6 @@ static struct ldebugfs_vars ldebugfs_mdc_obd_vars[] = {
 	  .fops	=	&mdc_cached_mb_fops		},
 	{ .name	=	"timeouts",
 	  .fops	=	&mdc_timeouts_fops		},
-	{ .name	=	"contention_seconds",
-	  .fops	=	&mdc_contention_seconds_fops	},
 	{ .name	=	"import",
 	  .fops	=	&mdc_import_fops		},
 	{ .name	=	"state",
@@ -533,6 +523,7 @@ static struct ldebugfs_vars ldebugfs_mdc_obd_vars[] = {
 };
 
 static struct attribute *mdc_attrs[] = {
+	&lustre_attr_contention_seconds.attr,
 	&lustre_attr_active.attr,
 	&lustre_attr_max_rpcs_in_flight.attr,
 	&lustre_attr_max_mod_rpcs_in_flight.attr,
