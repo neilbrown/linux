@@ -34,6 +34,17 @@ for i in $optional_bins; do
     fi
 done
 
+mdadm=`which mdadm 2> /dev/null`
+if [ -n "$mdadm" ]; then
+	echo "$mdadm"
+	cp $mdadm bin
+	if [ -s "/etc/mdadm/mdadm.conf" ]; then
+		echo /etc/mdadm/mdadm.conf
+		mkdir -p etc/mdadm
+		cp /etc/mdadm/mdadm.conf etc/mdadm
+	fi
+fi
+
 for i in bin/*
 do
   ldd $i | sed -n -e 's,^.*[ 	]\(/[^ ]*\) (.*$,\1,p'
@@ -85,11 +96,20 @@ gnubee_boot(){
    echo "/sbin/mdev" > /proc/sys/kernel/hotplug
    mdev -s
 
-   echo -n "Waiting disk spinup and searching for partition GNUBEE-ROOT..." > /dev/kmsg
+   echo -n ""
+
+   echo -n "Waiting disk spinup..." > /dev/kmsg
    sleep 3
    echo "done." > /dev/kmsg
 
    echo "" > /proc/sys/kernel/hotplug
+
+   if test -x /bin/mdadm; then
+	   echo "Assembling md arrays" > /dev/kmsg
+	   mdadm --assemble --scan --auto=md --run --freeze-reshape
+   fi
+
+   echo -n "Searching for partition GNUBEE-ROOT..." > /dev/kmsg
 
    sleep 1
 
