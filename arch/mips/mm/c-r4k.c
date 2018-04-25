@@ -104,6 +104,12 @@ static inline void r4k_on_each_cpu(unsigned int type,
 	preempt_enable();
 }
 
+#if defined(CONFIG_MIPS_CMP) || defined(CONFIG_MIPS_CPS)
+#define cpu_has_safe_index_cacheops 0
+#else
+#define cpu_has_safe_index_cacheops 1
+#endif
+
 /*
  * Must die.
  */
@@ -853,7 +859,7 @@ static void r4k_dma_cache_wback_inv(unsigned long addr, unsigned long size)
 	 * subset property so we have to flush the primary caches
 	 * explicitly
 	 */
-	if (size >= dcache_size) {
+	if (cpu_has_safe_index_cacheops && size >= dcache_size) {
 		r4k_blast_dcache();
 	} else {
 		R4600_HIT_CACHEOP_WAR_IMPL;
@@ -890,7 +896,7 @@ static void r4k_dma_cache_inv(unsigned long addr, unsigned long size)
 		return;
 	}
 
-	if (size >= dcache_size) {
+	if (cpu_has_safe_index_cacheops && size >= dcache_size) {
 		r4k_blast_dcache();
 	} else {
 		R4600_HIT_CACHEOP_WAR_IMPL;
