@@ -120,7 +120,8 @@ static ssize_t m25p80_write(struct spi_nor *nor, loff_t to, size_t len,
 
 	t[data_idx].tx_buf = buf;
 	t[data_idx].tx_nbits = data_nbits;
-	t[data_idx].len = len;
+	t[data_idx].len = min3(len, spi_max_transfer_size(spi),
+			       spi_max_message_size(spi) - cmd_sz);
 	spi_message_add_tail(&t[data_idx], &m);
 
 	ret = spi_sync(spi, &m);
