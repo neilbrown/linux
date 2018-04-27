@@ -384,6 +384,11 @@ static const struct of_device_id mt7621_spi_match[] = {
 };
 MODULE_DEVICE_TABLE(of, mt7621_spi_match);
 
+static size_t max_message_size(struct spi_device *spi)
+{
+	return 36;
+}
+
 static size_t max_transfer_size(struct spi_device *spi)
 {
 	return 32;
@@ -434,6 +439,7 @@ static int mt7621_spi_probe(struct platform_device *pdev)
 	master->bits_per_word_mask = SPI_BPW_MASK(8);
 	master->dev.of_node = pdev->dev.of_node;
 	master->num_chipselect = 2;
+	master->max_message_size = max_message_size;
 	master->max_transfer_size = max_transfer_size;
 
 	dev_set_drvdata(&pdev->dev, master);
