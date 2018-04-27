@@ -76,6 +76,11 @@ gnubee_switch_root(){
      mount -t tmpfs tmpfs /mnt/root/lib/modules
      cp -a /lib/modules/. /mnt/root/lib/modules/
   fi
+
+  # extract MAC address from 'factory' partition
+  addr=`dd 2> /dev/null if=/dev/mtd2 bs=1 skip=57344 count=6 | od -t x1 -A none`
+  ip link set eth0 address `echo $addr | tr ' ' :`
+
   umount /proc /sys /dev
   exec switch_root /mnt/root /sbin/init
 }
