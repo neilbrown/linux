@@ -110,6 +110,10 @@ int part_num = NUM_PARTITIONS;
 int manu_id;
 int dev_id;
 
+/* this constant was taken from linux/nand/nand.h v 3.14
+ * in later versions it seems it was removed in order to save a bit of space
+ */
+#define NAND_MAX_OOBSIZE 774
 static u8 local_oob_buf[NAND_MAX_OOBSIZE];
 
 static u8 nand_badblock_offset = 0;
@@ -348,7 +352,7 @@ mtk_nand_check_bch_error(struct mtd_info *mtd, u8 * pDataBuf, u32 u4SecIndex, u3
 		if (0xF == u4ErrNum) {
 			mtd->ecc_stats.failed++;
 			bRet = false;
-			//printk(KERN_ERR"UnCorrectable at PageAddr=%d\n", u4PageAddr);
+			printk(KERN_ERR"mtk_nand: UnCorrectable at PageAddr=%d\n", u4PageAddr);
 		} else {
 			for (i = 0; i < ((u4ErrNum + 1) >> 1); ++i) {
 				au4ErrBitLoc[i] = DRV_Reg32(ECC_DECEL0_REG32 + i);
@@ -1422,7 +1426,7 @@ mtk_nand_erase_hw(struct mtd_info *mtd, int page)
 {
 	struct nand_chip *chip = (struct nand_chip *)mtd->priv;
 
-	chip->erase_cmd(mtd, page);
+	chip->erase(mtd, page);
 
 	return chip->waitfunc(mtd, chip);
 }
@@ -2094,8 +2098,8 @@ mtk_nand_probe(struct platform_device *pdev)
 	nand_chip->write_page = mtk_nand_write_page;
 	nand_chip->ecc.write_oob = mtk_nand_write_oob;
 	nand_chip->block_markbad = mtk_nand_block_markbad;   // need to add nand_get_device()/nand_release_device().
-	//	nand_chip->erase = mtk_nand_erase;	
-	//    nand_chip->read_page = mtk_nand_read_page;
+	nand_chip->erase_mtk = mtk_nand_erase;	
+	nand_chip->read_page = mtk_nand_read_page;
 	nand_chip->ecc.read_oob = mtk_nand_read_oob;
 	nand_chip->block_bad = mtk_nand_block_bad;
 
@@ -2175,6 +2179,21 @@ mtk_nand_probe(struct platform_device *pdev)
 	nand_chip->pagemask = (nand_chip->chipsize >> nand_chip->page_shift) - 1;
 	nand_chip->phys_erase_shift = ffs(mtd->erasesize) - 1;
 	nand_chip->chip_shift = ffs(nand_chip->chipsize) - 1;//0x1C;//ffs(nand_chip->chipsize) - 1;
+
+	/* allocate buffers or call select_chip here or a bit earlier*/
+	{
+		struct nand_buffers *nbuf = kzalloc(sizeof(*nbuf) + mtd->writesize + mtd->oobsize * 3, GFP_KERNEL);
+		if (!nbuf) {
+			return -ENOMEM;
+		}
+		nbuf->ecccalc = (uint8_t *)(nbuf + 1);
+		nbuf->ecccode = nbuf->ecccalc + mtd->oobsize;
+		nbuf->databuf = nbuf->ecccode + mtd->oobsize;
+
+		nand_chip->buffers = nbuf;
+		nand_chip->options |= NAND_OWN_BUFFERS;
+	}
+
 	nand_chip->oob_poi = nand_chip->buffers->databuf + mtd->writesize;
 	nand_chip->badblockpos = 0;
 
@@ -2251,6 +2270,9 @@ out:
 	MSG(INIT, "[NFI] mtk_nand_probe fail, err = %d!\n", err);
 	nand_release(mtd);
 	platform_set_drvdata(pdev, NULL);
+	if ( NULL != nand_chip->buffers) {
+		kfree(nand_chip->buffers);
+	}
 	kfree(host);
 	nand_disable_clock();
 	return err;
@@ -2261,8 +2283,12 @@ mtk_nand_remove(struct platform_device *pdev)
 {
 	struct mtk_nand_host *host = platform_get_drvdata(pdev);
 	struct mtd_info *mtd = &host->mtd;
+	struct nand_chip *nand_chip = &host->nand_chip;
 
 	nand_release(mtd);
+	if ( NULL != nand_chip->buffers) {
+		kfree(nand_chip->buffers);
+	}
 	kfree(host);
 	nand_disable_clock();
 

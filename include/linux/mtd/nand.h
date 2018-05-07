@@ -665,6 +665,10 @@ struct nand_chip {
 	int (*write_page)(struct mtd_info *mtd, struct nand_chip *chip,
 			uint32_t offset, int data_len, const uint8_t *buf,
 			int oob_required, int page, int cached, int raw);
+#ifdef CONFIG_MTK_MTD_NAND
+	int (*read_page)(struct mtd_info *mtd, struct nand_chip *chip, u8 *buf, int page);
+	int (*erase_mtk)(struct mtd_info *mtd, int page);
+#endif /* CONFIG_MTK_MTD_NAND */
 	int (*onfi_set_features)(struct mtd_info *mtd, struct nand_chip *chip,
 			int feature_addr, uint8_t *subfeature_para);
 	int (*onfi_get_features)(struct mtd_info *mtd, struct nand_chip *chip,

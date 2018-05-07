@@ -1727,6 +1727,9 @@ static int nand_do_read_ops(struct mtd_info *mtd, loff_t from,
 						 __func__, buf);
 
 read_retry:
+#ifdef CONFIG_MTK_MTD_NAND
+			ret = chip->read_page(mtd, chip, bufpoi, page);
+#else
 			chip->cmdfunc(mtd, NAND_CMD_READ0, 0x00, page);
 
 			/*
@@ -1745,6 +1748,7 @@ read_retry:
 			else
 				ret = chip->ecc.read_page(mtd, chip, bufpoi,
 							  oob_required, page);
+#endif /* CONFIG_MTK_MTD_NAND */
 			if (ret < 0) {
 				if (use_bufpoi)
 					/* Invalidate page cache */
@@ -2932,8 +2936,11 @@ int nand_erase_nand(struct mtd_info *mtd, struct erase_info *instr,
 		if (page <= chip->pagebuf && chip->pagebuf <
 		    (page + pages_per_block))
 			chip->pagebuf = -1;
-
+#ifdef CONFIG_MTK_MTD_NAND
+		status = chip->erase_mtk(mtd, page & chip->pagemask);
+#else
 		status = chip->erase(mtd, page & chip->pagemask);
+#endif /* CONFIG_MTK_MTD_NAND */
 
 		/*
 		 * See if operation failed and additional status checks are
