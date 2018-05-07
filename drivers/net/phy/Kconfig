@@ -181,6 +181,10 @@ config MVSWITCH_PHY
 	tristate "Driver for Marvell 88E6060 switches"
 	select ETHERNET_PACKET_MANGLE
 
+config IP17XX_PHY
+	tristate "Driver for IC+ IP17xx switches"
+	select SWCONFIG
+
 config FIXED_PHY
 	tristate "Driver for MDIO Bus/PHY emulation with fixed speed/link PHYs"
 	depends on PHYLIB
