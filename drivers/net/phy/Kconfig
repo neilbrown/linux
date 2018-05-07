@@ -190,6 +190,10 @@ config AR8216_PHY
 	select ETHERNET_PACKET_MANGLE
 	select SWCONFIG
 
+config RTL8306_PHY
+	tristate "Driver for Realtek RTL8306S switches"
+	select SWCONFIG
+
 config FIXED_PHY
 	tristate "Driver for MDIO Bus/PHY emulation with fixed speed/link PHYs"
 	depends on PHYLIB
