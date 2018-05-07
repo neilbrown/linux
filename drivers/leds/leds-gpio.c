@@ -143,7 +143,7 @@ static int create_gpio_led(const struct gpio_led *template,
 
 	INIT_WORK(&led_dat->work, gpio_led_work);
 
-	return led_classdev_register(parent, &led_dat->cdev);
+	return devm_led_classdev_register(parent, &led_dat->cdev);
 }
 
 static void delete_gpio_led(struct gpio_led_data *led)
@@ -231,8 +231,6 @@ static struct gpio_leds_priv *gpio_leds_create(struct platform_device *pdev)
 	return priv;
 
 err:
-	for (count = priv->num_leds - 1; count >= 0; count--)
-		delete_gpio_led(&priv->leds[count]);
 	return ERR_PTR(ret);
 }
 
@@ -261,12 +259,8 @@ static int gpio_led_probe(struct platform_device *pdev)
 			ret = create_gpio_led(&pdata->leds[i],
 					      &priv->leds[i],
 					      &pdev->dev, pdata->gpio_blink_set);
-			if (ret < 0) {
-				/* On failure: unwind the led creations */
-				for (i = i - 1; i >= 0; i--)
-					delete_gpio_led(&priv->leds[i]);
+			if (ret < 0)
 				return ret;
-			}
 		}
 	} else {
 		priv = gpio_leds_create(pdev);
@@ -275,17 +269,6 @@ static int gpio_led_probe(struct platform_device *pdev)
 	}
 
 	platform_set_drvdata(pdev, priv);
-
-	return 0;
-}
-
-static int gpio_led_remove(struct platform_device *pdev)
-{
-	struct gpio_leds_priv *priv = platform_get_drvdata(pdev);
-	int i;
-
-	for (i = 0; i < priv->num_leds; i++)
-		delete_gpio_led(&priv->leds[i]);
 
 	return 0;
 }
@@ -304,7 +287,6 @@ static void gpio_led_shutdown(struct platform_device *pdev)
 
 static struct platform_driver gpio_led_driver = {
 	.probe		= gpio_led_probe,
-	.remove		= gpio_led_remove,
 	.shutdown	= gpio_led_shutdown,
 	.driver		= {
 		.name	= "leds-gpio",
