@@ -377,6 +377,7 @@ struct phy_device {
 	bool is_pseudo_fixed_link;
 	bool has_fixups;
 	bool suspended;
+	bool no_auto_carrier_off;
 
 	enum phy_state state;
 
