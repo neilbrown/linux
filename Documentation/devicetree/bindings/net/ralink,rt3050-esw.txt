@@ -14,9 +14,9 @@ Required properties:
 - reset-names: Should contain the reset names "esw"
 
 Optional properties:
-- ralink,portmap: can be used to choose if the default switch setup is
+- mediatek,portmap: can be used to choose if the default switch setup is
   llllw or wllll
-- ralink,led_polarity: override the active high/low settings of the leds
+- mediatek,led_polarity: override the active high/low settings of the leds
 
 Example:
 
