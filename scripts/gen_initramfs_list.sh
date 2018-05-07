@@ -59,6 +59,18 @@ default_initramfs() {
 	EOF
 }
 
+list_openwrt_initramfs() {
+	:
+}
+
+openwrt_initramfs() {
+	# make sure that /dev/console exists
+	cat <<-EOF >> ${output}
+		dir /dev 0755 0 0
+		nod /dev/console 0600 0 0 c 5 1
+	EOF
+}
+
 filetype() {
 	local argv1="$1"
 
@@ -176,6 +188,8 @@ dir_filelist() {
 	# If $dirlist is only one line, then the directory is empty
 	if [  "$(echo "${dirlist}" | wc -l)" -gt 1 ]; then
 		${dep_list}print_mtime "$1"
+
+		${dep_list}openwrt_initramfs
 
 		echo "${dirlist}" | \
 		while read x; do
