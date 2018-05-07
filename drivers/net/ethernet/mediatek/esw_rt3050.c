@@ -450,7 +450,7 @@ static void esw_hw_init(struct rt305x_esw *esw)
 		      (RT305X_ESW_PORTS_NOCPU << RT305X_ESW_POC2_UNTAG_EN_S)),
 		RT305X_ESW_REG_POC2);
 
-	esw_w32(esw, 0x00d6500c, RT305X_ESW_REG_FCT2);
+	esw_w32(esw, 0x0002500c, RT305X_ESW_REG_FCT2);
 
 	/* 300s aging timer, max packet len 1536, broadcast storm prevention
 	 * disabled, disable collision abort, mac xor48 hash, 10 packet back
