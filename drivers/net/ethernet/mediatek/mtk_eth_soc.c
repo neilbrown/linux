@@ -1291,8 +1291,13 @@ static int __init fe_init(struct net_device *dev)
 	}
 
 	err = fe_hw_init(dev);
-	if (!err)
-		return 0;
+	if (err)
+		goto err_phy_disconnect;
+
+	if ((priv->flags & FE_FLAG_HAS_SWITCH) && priv->soc->switch_config)
+		priv->soc->switch_config(priv);
+
+	return 0;
 
 err_phy_disconnect:
 	if (priv->phy)

@@ -35,6 +35,8 @@
 #define GSW_MDIO_ADDR_SHIFT	20
 #define GSW_MDIO_REG_SHIFT	25
 
+#define GSW_REG_MIB_CNT_EN	0x4000
+
 #define GSW_REG_PORT_PMCR(x)	(0x3000 + (x * 0x100))
 #define GSW_REG_PORT_STATUS(x)	(0x3008 + (x * 0x100))
 #define GSW_REG_SMACCR0		0x3fE4
@@ -75,6 +77,7 @@
 #define PHY_AN_EN		BIT(31)
 #define PHY_PRE_EN		BIT(30)
 #define PMY_MDC_CONF(_x)	((_x & 0x3f) << 24)
+
 
 enum {
 	/* Global attributes. */
