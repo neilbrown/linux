@@ -1296,6 +1296,10 @@ config RELAY
 
 	  If unsure, say N.
 
+config CRASHLOG
+	bool "Crash logging"
+	depends on (!NO_BOOTMEM || HAVE_MEMBLOCK)
+
 config BLK_DEV_INITRD
 	bool "Initial RAM filesystem and RAM disk (initramfs/initrd) support"
 	depends on BROKEN || !FRV
