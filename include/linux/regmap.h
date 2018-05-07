@@ -65,7 +65,7 @@ struct reg_sequence {
 	unsigned int delay_us;
 };
 
-#ifdef CONFIG_REGMAP
+#if IS_ENABLED(CONFIG_REGMAP)
 
 enum regmap_endian {
 	/* Unspecified -> 0 -> Backwards compatible default */
