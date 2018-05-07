@@ -399,4 +399,8 @@ config MTD_LATCH_ADDR
 
           If compiled as a module, it will be called latch-addr-flash.
 
+config MTD_NAND_MT7620
+	tristate "Support for NAND on Mediatek MT7620"
+	depends on RALINK && SOC_MT7620
+
 endmenu
