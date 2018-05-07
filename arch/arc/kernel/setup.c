@@ -366,6 +366,8 @@ static inline int is_kernel(unsigned long addr)
 	return 0;
 }
 
+extern struct boot_param_header __image_dtb;
+
 void __init setup_arch(char **cmdline_p)
 {
 #ifdef CONFIG_ARC_UBOOT_SUPPORT
@@ -379,7 +381,7 @@ void __init setup_arch(char **cmdline_p)
 #endif
 	{
 		/* No, so try the embedded one */
-		machine_desc = setup_machine_fdt(__dtb_start);
+		machine_desc = setup_machine_fdt(&__image_dtb);
 		if (!machine_desc)
 			panic("Embedded DT invalid\n");
 
