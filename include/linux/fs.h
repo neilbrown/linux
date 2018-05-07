@@ -2722,6 +2722,7 @@ enum {
 	DIO_SKIP_DIO_COUNT = 0x08,
 };
 
+#ifdef CONFIG_DIRECT_IO
 void dio_end_io(struct bio *bio, int error);
 
 ssize_t __blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
@@ -2729,6 +2730,18 @@ ssize_t __blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
 			     loff_t offset, get_block_t get_block,
 			     dio_iodone_t end_io, dio_submit_t submit_io,
 			     int flags);
+#else
+static inline void dio_end_io(struct bio *bio, int error)
+{
+}
+static inline ssize_t __blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
+	struct block_device *bdev, struct iov_iter *iter, loff_t offset,
+	get_block_t get_block, dio_iodone_t end_io,
+	dio_submit_t submit_io,	int flags)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 
 static inline ssize_t blockdev_direct_IO(struct kiocb *iocb,
 					 struct inode *inode,

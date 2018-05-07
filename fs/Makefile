@@ -14,7 +14,8 @@ obj-y :=	open.o read_write.o file_table.o super.o \
 		stack.o fs_struct.o statfs.o fs_pin.o nsfs.o
 
 ifeq ($(CONFIG_BLOCK),y)
-obj-y +=	buffer.o block_dev.o direct-io.o mpage.o
+obj-y +=	buffer.o block_dev.o mpage.o
+obj-$(CONFIG_DIRECT_IO) += direct-io.o
 else
 obj-y +=	no-block.o
 endif
