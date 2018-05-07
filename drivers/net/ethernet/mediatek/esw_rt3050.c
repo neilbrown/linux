@@ -14,26 +14,10 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/types.h>
-#include <linux/dma-mapping.h>
-#include <linux/init.h>
-#include <linux/skbuff.h>
-#include <linux/etherdevice.h>
-#include <linux/ethtool.h>
 #include <linux/platform_device.h>
-#include <linux/of_device.h>
-#include <linux/clk.h>
-#include <linux/of_net.h>
-#include <linux/of_mdio.h>
-
 #include <asm/mach-ralink/ralink_regs.h>
 
 #include "mtk_eth_soc.h"
-
-#include <linux/ioport.h>
-#include <linux/mii.h>
-
-#include <ralink_regs.h>
 
 /* HW limitations for this switch:
  * - No large frame support (PKT_MAX_LEN at most 1536)
@@ -559,7 +543,7 @@ static irqreturn_t esw_interrupt(int irq, void *_esw)
 
 static int esw_probe(struct platform_device *pdev)
 {
-	struct resource *res = platform_get_resource(p, IORESOURCE_MEM, 0);
+	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	struct device_node *np = pdev->dev.of_node;
 	const __be32 *port_map, *reg_init;
 	struct rt305x_esw *esw;
@@ -629,12 +613,9 @@ static struct platform_driver esw_driver = {
 	},
 };
 
-int __init mtk_switch_init(void)
-{
-	return platform_driver_register(&esw_driver);
-}
+module_platform_driver(esw_driver);
 
-void mtk_switch_exit(void)
-{
-	platform_driver_unregister(&esw_driver);
-}
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("John Crispin <blogic@openwrt.org>");
+MODULE_DESCRIPTION("Switch driver for RT305X SoC");
+MODULE_VERSION(MTK_FE_DRV_VERSION);
