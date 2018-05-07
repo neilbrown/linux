@@ -10,6 +10,7 @@
  *   Copyright (C) 2009-2015 John Crispin <blogic@openwrt.org>
  *   Copyright (C) 2009-2015 Felix Fietkau <nbd@nbd.name>
  *   Copyright (C) 2013-2015 Michael Lee <igvtee@gmail.com>
+ *   Copyright (C) 2016 Vittorio Gambaletta <openwrt@vittgam.net>
  */
 
 #include <linux/module.h>
@@ -219,6 +220,7 @@ struct rt305x_esw {
 	spinlock_t		reg_rw_lock;
 
 	unsigned char		port_map;
+	unsigned char		port_disable;
 	unsigned int		reg_led_polarity;
 
 	struct switch_dev	swdev;
@@ -483,8 +485,14 @@ static void esw_hw_init(struct rt305x_esw *esw)
 	esw_w32(esw, 0x00000005, RT305X_ESW_REG_P3LED);
 	esw_w32(esw, 0x00000005, RT305X_ESW_REG_P4LED);
 
-	/* Copy disabled port configuration from bootloader setup */
-	port_disable = esw_get_port_disable(esw);
+	/* Copy disabled port configuration from device tree setup */
+	port_disable = esw->port_disable;
+
+	/* Disable nonexistent ports by reading the switch config
+	 * after having enabled all possible ports above
+	 */
+	port_disable |= esw_get_port_disable(esw);
+
 	for (i = 0; i < 6; i++)
 		esw->ports[i].disable = (port_disable & (1 << i)) != 0;
 
@@ -1330,7 +1338,7 @@ static int esw_probe(struct platform_device *pdev)
 {
 	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	struct device_node *np = pdev->dev.of_node;
-	const __be32 *port_map, *reg_init;
+	const __be32 *port_map, *port_disable, *reg_init;
 	struct switch_dev *swdev;
 	struct rt305x_esw *esw;
 	int ret;
@@ -1348,6 +1356,10 @@ static int esw_probe(struct platform_device *pdev)
 	port_map = of_get_property(np, "mediatek,portmap", NULL);
 	if (port_map)
 		esw->port_map = be32_to_cpu(*port_map);
+
+	port_disable = of_get_property(np, "mediatek,portdisable", NULL);
+	if (port_disable)
+		esw->port_disable = be32_to_cpu(*port_disable);
 
 	reg_init = of_get_property(np, "mediatek,led_polarity", NULL);
 	if (reg_init)

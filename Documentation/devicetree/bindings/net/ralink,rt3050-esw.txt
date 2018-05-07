@@ -16,6 +16,7 @@ Required properties:
 Optional properties:
 - mediatek,portmap: can be used to choose if the default switch setup is
   llllw or wllll
+- mediatek,portdisable: disable unused ethernet PHYs to save power
 - mediatek,led_polarity: override the active high/low settings of the leds
 
 Example:
