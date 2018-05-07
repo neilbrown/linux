@@ -125,6 +125,7 @@ obj-$(CONFIG_RTC_DRV_RP5C01)	+= rtc-rp5c01.o
 obj-$(CONFIG_RTC_DRV_RS5C313)	+= rtc-rs5c313.o
 obj-$(CONFIG_RTC_DRV_RS5C348)	+= rtc-rs5c348.o
 obj-$(CONFIG_RTC_DRV_RS5C372)	+= rtc-rs5c372.o
+obj-$(CONFIG_RTC_DRV_RTC7301)	+= rtc-rtc7301.o
 obj-$(CONFIG_RTC_DRV_RV3029C2)	+= rtc-rv3029c2.o
 obj-$(CONFIG_RTC_DRV_RV8803)	+= rtc-rv8803.o
 obj-$(CONFIG_RTC_DRV_RX4581)	+= rtc-rx4581.o
