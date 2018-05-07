@@ -116,6 +116,7 @@ enum spi_nor_ops {
 
 enum spi_nor_option_flags {
 	SNOR_F_USE_FSR		= BIT(0),
+	SNOR_F_SST		= BIT(1),
 };
 
 /**
@@ -156,6 +157,7 @@ struct spi_nor {
 	struct device		*dev;
 	struct device_node	*flash_node;
 	u32			page_size;
+	u16			chunk_size;
 	u8			addr_width;
 	u8			erase_opcode;
 	u8			read_opcode;
