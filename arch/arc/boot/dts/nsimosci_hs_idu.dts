@@ -10,6 +10,7 @@
 /include/ "skeleton.dtsi"
 
 / {
+	model = "snps,nsimosci_hs-smp";
 	compatible = "snps,nsimosci_hs";
 	clock-frequency = <5000000>;	/* 5 MHZ */
 	#address-cells = <1>;
