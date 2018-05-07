@@ -157,7 +157,9 @@ struct net_bridge_port_group {
 	struct rcu_head			rcu;
 	struct timer_list		timer;
 	struct br_ip			addr;
+	unsigned char			eth_addr[ETH_ALEN];
 	unsigned char			state;
+	bool				unicast;
 };
 
 struct net_bridge_mdb_entry
@@ -555,7 +557,8 @@ void br_multicast_free_pg(struct rcu_head *head);
 struct net_bridge_port_group *
 br_multicast_new_port_group(struct net_bridge_port *port, struct br_ip *group,
 			    struct net_bridge_port_group __rcu *next,
-			    unsigned char state);
+			    unsigned char state,
+		       const unsigned char *src);
 void br_mdb_init(void);
 void br_mdb_uninit(void);
 void br_mdb_notify(struct net_device *dev, struct net_bridge_port *port,
