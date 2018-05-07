@@ -1776,6 +1776,7 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,
 {
 	struct sock *sk;
 	struct sockaddr_pkt *spkt;
+	struct packet_sock *po;
 
 	/*
 	 *	When we registered the protocol we saved the socket in the data
@@ -1783,6 +1784,7 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,
 	 */
 
 	sk = pt->af_packet_priv;
+	po = pkt_sk(sk);
 
 	/*
 	 *	Yank back the headers [hope the device set this
@@ -1795,7 +1797,7 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct net_device *dev,
 	 *	so that this procedure is noop.
 	 */
 
-	if (skb->pkt_type == PACKET_LOOPBACK)
+	if (!(po->pkt_type & (1 << skb->pkt_type)))
 		goto out;
 
 	if (!net_eq(dev_net(dev), sock_net(sk)))
@@ -1998,11 +2000,11 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 	int skb_len = skb->len;
 	unsigned int snaplen, res;
 
-	if (skb->pkt_type == PACKET_LOOPBACK)
-		goto drop;
-
 	sk = pt->af_packet_priv;
 	po = pkt_sk(sk);
+
+	if (!(po->pkt_type & (1 << skb->pkt_type)))
+		goto drop;
 
 	if (!net_eq(dev_net(dev), sock_net(sk)))
 		goto drop;
@@ -2123,11 +2125,11 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 	BUILD_BUG_ON(TPACKET_ALIGN(sizeof(*h.h2)) != 32);
 	BUILD_BUG_ON(TPACKET_ALIGN(sizeof(*h.h3)) != 48);
 
-	if (skb->pkt_type == PACKET_LOOPBACK)
-		goto drop;
-
 	sk = pt->af_packet_priv;
 	po = pkt_sk(sk);
+
+	if (!(po->pkt_type & (1 << skb->pkt_type)))
+		goto drop;
 
 	if (!net_eq(dev_net(dev), sock_net(sk)))
 		goto drop;
@@ -3115,6 +3117,7 @@ static int packet_create(struct net *net, struct socket *sock, int protocol,
 	mutex_init(&po->pg_vec_lock);
 	po->rollover = NULL;
 	po->prot_hook.func = packet_rcv;
+	po->pkt_type = PACKET_MASK_ANY & ~(1 << PACKET_LOOPBACK);
 
 	if (sock->type == SOCK_PACKET)
 		po->prot_hook.func = packet_rcv_spkt;
@@ -3744,6 +3747,16 @@ packet_setsockopt(struct socket *sock, int level, int optname, char __user *optv
 		po->xmit = val ? packet_direct_xmit : dev_queue_xmit;
 		return 0;
 	}
+        case PACKET_RECV_TYPE:
+        {
+                unsigned int val;
+                if (optlen != sizeof(val))
+                        return -EINVAL;
+                if (copy_from_user(&val, optval, sizeof(val)))
+                        return -EFAULT;
+                po->pkt_type = val & ~BIT(PACKET_LOOPBACK);
+                return 0;
+        }
 	default:
 		return -ENOPROTOOPT;
 	}
@@ -3795,6 +3808,13 @@ static int packet_getsockopt(struct socket *sock, int level, int optname,
 		break;
 	case PACKET_VNET_HDR:
 		val = po->has_vnet_hdr;
+		break;
+	case PACKET_RECV_TYPE:
+		if (len > sizeof(unsigned int))
+			len = sizeof(unsigned int);
+		val = po->pkt_type;
+
+		data = &val;
 		break;
 	case PACKET_VERSION:
 		val = po->tp_version;
