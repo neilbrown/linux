@@ -17,6 +17,7 @@ config BCMA
 config BCMA_BLOCKIO
 	bool
 	depends on BCMA
+	default y
 
 config BCMA_HOST_PCI_POSSIBLE
 	bool
