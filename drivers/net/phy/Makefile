@@ -32,6 +32,7 @@ obj-$(CONFIG_RTL8366_SMI)	+= rtl8366_smi.o
 obj-$(CONFIG_RTL8366S_PHY)	+= rtl8366s.o
 obj-$(CONFIG_RTL8366RB_PHY)	+= rtl8366rb.o
 obj-$(CONFIG_RTL8367_PHY)	+= rtl8367.o
+obj-$(CONFIG_RTL8367B_PHY)	+= rtl8367b.o
 obj-$(CONFIG_LSI_ET1011C_PHY)	+= et1011c.o
 obj-$(CONFIG_FIXED_PHY)		+= fixed_phy.o
 obj-$(CONFIG_MDIO_BITBANG)	+= mdio-bitbang.o
