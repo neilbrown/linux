@@ -316,6 +316,10 @@ config RTL8366RB_PHY
 	tristate "Driver for the Realtek RTL8366RB switch"
 	select SWCONFIG
 
+config RTL8367_PHY
+	tristate "Driver for the Realtek RTL8367R/M switches"
+	select SWCONFIG
+
 endif # RTL8366_SMI
 
 endif # PHYLIB
