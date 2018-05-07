@@ -192,8 +192,8 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 
 		unicast = false;
 		br->dev->stats.multicast++;
-	} else if ((dst = __br_fdb_get(br, dest, vid)) &&
-			dst->is_local) {
+	} else if ((p->flags & BR_ISOLATE_MODE) ||
+		   ((dst = __br_fdb_get(br, dest, vid)) && dst->is_local)) {
 		skb2 = skb;
 		/* Do not forward the packet since it's local. */
 		skb = NULL;
