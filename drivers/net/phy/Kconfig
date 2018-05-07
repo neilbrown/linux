@@ -170,6 +170,13 @@ config MICROCHIP_PHY
 	help
 	  Supports the LAN88XX PHYs.
 
+config ADM6996_PHY
+	tristate "Driver for ADM6996 switches"
+	select SWCONFIG
+	---help---
+	  Currently supports the ADM6996FC and ADM6996M switches.
+	  Support for FC is very limited.
+
 config FIXED_PHY
 	tristate "Driver for MDIO Bus/PHY emulation with fixed speed/link PHYs"
 	depends on PHYLIB
