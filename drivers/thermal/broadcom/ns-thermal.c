@@ -6,6 +6,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <asm/io.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
