@@ -219,7 +219,6 @@ static int fq_codel_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 		list_add_tail(&flow->flowchain, &q->new_flows);
 		q->new_flow_count++;
 		flow->deficit = q->quantum;
-		flow->dropped = 0;
 	}
 	q->memory_usage += skb->truesize;
 	memory_limited = q->memory_usage > q->memory_limit;
