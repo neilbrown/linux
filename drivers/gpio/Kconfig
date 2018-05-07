@@ -261,6 +261,12 @@ config GPIO_MB86S7X
 	help
 	  Say yes here to support the GPIO controller in Fujitsu MB86S70 SoCs.
 
+config GPIO_MT7621
+	bool "Mediatek GPIO Support"
+	depends on SOC_MT7620 || SOC_MT7621
+	help
+	  Say yes here to support the Mediatek SoC GPIO device
+
 config GPIO_MM_LANTIQ
 	bool "Lantiq Memory mapped GPIOs"
 	depends on LANTIQ && SOC_XWAY
