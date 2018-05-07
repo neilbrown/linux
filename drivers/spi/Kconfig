@@ -254,6 +254,15 @@ config SPI_IMG_SPFI
 	  This enables support for the SPFI master controller found on
 	  IMG SoCs.
 
+config SPI_GPIO_OLD
+	tristate "Old GPIO API based bitbanging SPI controller (DEPRECATED)"
+	depends on SPI_MASTER && GPIOLIB
+	select SPI_BITBANG
+	help
+	  This code is deprecated. Please use the new mainline SPI-GPIO driver.
+
+	  If unsure, say N.
+
 config SPI_IMX
 	tristate "Freescale i.MX SPI controllers"
 	depends on ARCH_MXC || COMPILE_TEST
