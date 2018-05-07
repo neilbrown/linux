@@ -1327,6 +1327,9 @@ static int fe_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		return -ENODEV;
 
 	switch (cmd) {
+	case SIOCETHTOOL:
+		return phy_ethtool_ioctl(priv->phy_dev,
+				(void *) ifr->ifr_data);
 	case SIOCGMIIPHY:
 	case SIOCGMIIREG:
 	case SIOCSMIIREG:
