@@ -326,6 +326,8 @@ config RTL8367B_PHY
 
 endif # RTL8366_SMI
 
+source "drivers/net/phy/b53/Kconfig"
+
 endif # PHYLIB
 
 config MICREL_KS8995MA
