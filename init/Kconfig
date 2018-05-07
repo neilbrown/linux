@@ -2026,6 +2026,13 @@ config MODULE_COMPRESS_XZ
 
 endchoice
 
+config MODULE_STRIPPED
+	bool "Reduce module size"
+	depends on MODULES
+	help
+	  Remove module parameter descriptions, author info, version, aliases,
+	  device tables, etc.
+
 endif # MODULES
 
 config MODULES_TREE_LOOKUP
