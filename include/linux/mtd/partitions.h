@@ -84,5 +84,7 @@ int mtd_add_partition(struct mtd_info *master, const char *name,
 		      long long offset, long long length);
 int mtd_del_partition(struct mtd_info *master, int partno);
 uint64_t mtd_get_device_size(const struct mtd_info *mtd);
+extern void __weak arch_split_mtd_part(struct mtd_info *master,
+				       const char *name, int offset, int size);
 
 #endif
