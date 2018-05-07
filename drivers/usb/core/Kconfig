@@ -103,3 +103,11 @@ config USB_ULPI_BUS
 
 	  To compile this driver as a module, choose M here: the module will
 	  be called ulpi.
+
+config USB_LEDS_TRIGGER_USBPORT
+	tristate "USB port LED trigger"
+	depends on USB && LEDS_TRIGGERS
+	help
+	  This driver allows LEDs to be controlled by USB events. Enabling this
+	  trigger allows specifying list of USB ports that should turn on LED
+	  when some USB device gets connected.
