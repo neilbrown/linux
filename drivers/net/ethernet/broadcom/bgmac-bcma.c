@@ -236,6 +236,7 @@ static int bgmac_probe(struct bcma_device *core)
 		bgmac->feature_flags |= BGMAC_FEAT_CLKCTLST;
 		bgmac->feature_flags |= BGMAC_FEAT_NO_RESET;
 		bgmac->feature_flags |= BGMAC_FEAT_FORCE_SPEED_2500;
+		bgmac->feature_flags |= BGMAC_FEAT_SRAB;
 		break;
 	case BCMA_CHIP_ID_BCM53573:
 		bgmac->feature_flags |= BGMAC_FEAT_CLKCTLST;
