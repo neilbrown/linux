@@ -55,6 +55,10 @@ extern char * strstr(const char * s1, const char *s2);
 #include "../../../../lib/decompress_unlz4.c"
 #endif
 
+#ifdef CONFIG_KERNEL_CAT
+#include "../../../../lib/decompress_uncat.c"
+#endif
+
 int do_decompress(u8 *input, int len, u8 *output, void (*error)(char *x))
 {
 	return __decompress(input, len, NULL, NULL, output, 0, NULL, error);

@@ -115,6 +115,9 @@ config HAVE_KERNEL_LZO
 config HAVE_KERNEL_LZ4
 	bool
 
+config HAVE_KERNEL_CAT
+	bool
+
 choice
 	prompt "Kernel compression mode"
 	default KERNEL_GZIP
@@ -181,9 +184,10 @@ config KERNEL_LZO
 	bool "LZO"
 	depends on HAVE_KERNEL_LZO
 	help
-	  Its compression ratio is the poorest among the choices. The kernel
-	  size is about 10% bigger than gzip; however its speed
-	  (both compression and decompression) is the fastest.
+	  Its compression ratio is the poorest among the choices (apart from
+	  uncompressed below). The kernel size is about 10% bigger than gzip;
+	  however its speed (both compression and decompression) is the
+	  fastest.
 
 config KERNEL_LZ4
 	bool "LZ4"
@@ -196,6 +200,12 @@ config KERNEL_LZ4
 	  Its compression ratio is worse than LZO. The size of the kernel
 	  is about 8% bigger than LZO. But the decompression speed is
 	  faster than LZO.
+
+config KERNEL_CAT
+	bool "uncompressed"
+	depends on HAVE_KERNEL_CAT
+	help
+	  Don't use compression at all.
 
 endchoice
 
