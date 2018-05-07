@@ -70,6 +70,8 @@ struct mtd_part_parser_data {
 
 enum mtd_parser_type {
 	MTD_PARSER_TYPE_DEVICE = 0,
+	MTD_PARSER_TYPE_ROOTFS,
+	MTD_PARSER_TYPE_FIRMWARE,
 };
 
 struct mtd_part_parser {
