@@ -20,6 +20,7 @@
 #include <asm/mips-cpc.h>
 #include <asm/mach-ralink/ralink_regs.h>
 #include <asm/mach-ralink/mt7621.h>
+#include <asm/mips-boards/launch.h>
 
 #include <pinmux.h>
 
@@ -161,6 +162,20 @@ void __init ralink_of_remap(void)
 
 	if (!rt_sysc_membase || !rt_memc_membase)
 		panic("Failed to remap core resources");
+}
+
+bool plat_cpu_core_present(int core)
+{
+	struct cpulaunch *launch = (struct cpulaunch *)CKSEG0ADDR(CPULAUNCH);
+
+	if (!core)
+		return true;
+	launch += core * 2; /* 2 VPEs per core */
+	if (!(launch->flags & LAUNCH_FREADY))
+		return false;
+	if (launch->flags & (LAUNCH_FGO | LAUNCH_FGONE))
+		return false;
+	return true;
 }
 
 void prom_soc_init(struct ralink_soc_info *soc_info)
