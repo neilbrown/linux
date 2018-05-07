@@ -77,8 +77,6 @@ static int __init early_init_dt_find_chosen(unsigned long node, const char *unam
 	return 0;
 }
 
-extern struct boot_param_header __image_dtb;
-
 void __init plat_mem_setup(void)
 {
 	set_io_port_base(KSEG1);
@@ -87,7 +85,7 @@ void __init plat_mem_setup(void)
 	 * Load the builtin devicetree. This causes the chosen node to be
 	 * parsed resulting in our memory appearing
 	 */
-	__dt_setup_arch(&__image_dtb);
+	__dt_setup_arch(__dtb_start);
 
 	of_scan_flat_dt(early_init_dt_find_chosen, NULL);
 	if (chosen_dtb)
