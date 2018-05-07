@@ -54,6 +54,7 @@ static irqreturn_t gsw_interrupt_mt7620(int irq, void *_priv)
 
 			priv->link[i] = link;
 		}
+	mt7620_handle_carrier(priv);
 	mtk_switch_w32(gsw, status, GSW_REG_ISR);
 
 	return IRQ_HANDLED;

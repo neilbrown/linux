@@ -137,6 +137,17 @@ int mt7620_has_carrier(struct fe_priv *priv)
 }
 
 
+void mt7620_handle_carrier(struct fe_priv *priv)
+{
+	if (!priv->phy)
+		return;
+
+	if (mt7620_has_carrier(priv))
+		netif_carrier_on(priv->netdev);
+	else
+		netif_carrier_off(priv->netdev);
+}
+
 void mt7620_print_link_state(struct fe_priv *priv, int port, int link,
 			     int speed, int duplex)
 {
@@ -153,4 +164,5 @@ void mt7620_mdio_link_adjust(struct fe_priv *priv, int port)
 	mt7620_print_link_state(priv, port, priv->link[port],
 				priv->phy->speed[port],
 				(priv->phy->duplex[port] == DUPLEX_FULL));
+	mt7620_handle_carrier(priv);
 }

@@ -89,6 +89,7 @@ int fe_connect_phy_node(struct fe_priv *priv, struct device_node *phy_node)
 
 	phydev->supported &= PHY_GBIT_FEATURES;
 	phydev->advertising = phydev->supported;
+	phydev->no_auto_carrier_off = 1;
 
 	dev_info(priv->device,
 		 "connected port %d to PHY at %s [uid=%08x, driver=%s]\n",

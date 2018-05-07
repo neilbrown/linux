@@ -60,6 +60,7 @@ static irqreturn_t gsw_interrupt_mt7621(int irq, void *_priv)
 			}
 		}
 
+	mt7620_handle_carrier(priv);
 	mt7530_mdio_w32(gsw, 0x700c, 0x1f);
 
 	return IRQ_HANDLED;
