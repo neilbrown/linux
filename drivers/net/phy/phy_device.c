@@ -995,6 +995,9 @@ int genphy_update_link(struct phy_device *phydev)
 {
 	int status;
 
+	if (phydev->drv->update_link)
+		return phydev->drv->update_link(phydev);
+
 	/* Do a fake read */
 	status = phy_read(phydev, MII_BMSR);
 	if (status < 0)
