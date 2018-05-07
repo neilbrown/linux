@@ -546,4 +546,10 @@ config MTD_NAND_HISI504
 	help
 	  Enables support for NAND controller on Hisilicon SoC Hip04.
 
+config MTK_MTD_NAND
+	tristate "Support for MTK SoC NAND controller"
+	depends on SOC_MT7621
+	select MTD_NAND_IDS
+	select MTD_NAND_ECC
+
 endif # MTD_NAND
