@@ -27,6 +27,8 @@ config MTD_SPLIT_FIRMWARE_NAME
 	depends on MTD_SPLIT_FIRMWARE
 	default "firmware"
 
+source "drivers/mtd/mtdsplit/Kconfig"
+
 endmenu
 
 config MTD_TESTS
