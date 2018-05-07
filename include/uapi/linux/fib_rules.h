@@ -71,6 +71,8 @@ enum {
 	__FR_ACT_MAX,
 };
 
+#define FR_ACT_FAILED_POLICY FR_ACT_POLICY_FAILED
+
 #define FR_ACT_MAX (__FR_ACT_MAX - 1)
 
 #endif

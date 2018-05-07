@@ -214,6 +214,8 @@ enum {
 	__RTN_MAX
 };
 
+#define RTN_FAILED_POLICY RTN_POLICY_FAILED
+
 #define RTN_MAX (__RTN_MAX - 1)
 
 
