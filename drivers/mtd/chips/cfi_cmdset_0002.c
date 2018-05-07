@@ -40,7 +40,7 @@
 #include <linux/mtd/xip.h>
 
 #define AMD_BOOTLOC_BUG
-#define FORCE_WORD_WRITE 0
+#define FORCE_WORD_WRITE 1
 
 #define MAX_WORD_RETRIES 3
 
@@ -51,7 +51,9 @@
 
 static int cfi_amdstd_read (struct mtd_info *, loff_t, size_t, size_t *, u_char *);
 static int cfi_amdstd_write_words(struct mtd_info *, loff_t, size_t, size_t *, const u_char *);
+#if !FORCE_WORD_WRITE
 static int cfi_amdstd_write_buffers(struct mtd_info *, loff_t, size_t, size_t *, const u_char *);
+#endif
 static int cfi_amdstd_erase_chip(struct mtd_info *, struct erase_info *);
 static int cfi_amdstd_erase_varsize(struct mtd_info *, struct erase_info *);
 static void cfi_amdstd_sync (struct mtd_info *);
@@ -202,6 +204,7 @@ static void fixup_amd_bootblock(struct mtd_info *mtd)
 }
 #endif
 
+#if !FORCE_WORD_WRITE
 static void fixup_use_write_buffers(struct mtd_info *mtd)
 {
 	struct map_info *map = mtd->priv;
@@ -211,6 +214,7 @@ static void fixup_use_write_buffers(struct mtd_info *mtd)
 		mtd->_write = cfi_amdstd_write_buffers;
 	}
 }
+#endif /* !FORCE_WORD_WRITE */
 
 /* Atmel chips don't use the same PRI format as AMD chips */
 static void fixup_convert_atmel_pri(struct mtd_info *mtd)
@@ -1789,6 +1793,7 @@ static int cfi_amdstd_write_words(struct mtd_info *mtd, loff_t to, size_t len,
 /*
  * FIXME: interleaved mode not tested, and probably not supported!
  */
+#if !FORCE_WORD_WRITE
 static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
 				    unsigned long adr, const u_char *buf,
 				    int len)
@@ -1917,7 +1922,6 @@ static int __xipram do_write_buffer(struct map_info *map, struct flchip *chip,
 	return ret;
 }
 
-
 static int cfi_amdstd_write_buffers(struct mtd_info *mtd, loff_t to, size_t len,
 				    size_t *retlen, const u_char *buf)
 {
@@ -1992,6 +1996,7 @@ static int cfi_amdstd_write_buffers(struct mtd_info *mtd, loff_t to, size_t len,
 
 	return 0;
 }
+#endif /* !FORCE_WORD_WRITE */
 
 /*
  * Wait for the flash chip to become ready to write data
