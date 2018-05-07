@@ -964,7 +964,8 @@ static int __ref kernel_init(void *unused)
 		panic("Requested init %s failed (error %d).",
 		      execute_command, ret);
 	}
-	if (!try_to_run_init_process("/sbin/init") ||
+	if (!try_to_run_init_process("/etc/preinit") ||
+	    !try_to_run_init_process("/sbin/init") ||
 	    !try_to_run_init_process("/etc/init") ||
 	    !try_to_run_init_process("/bin/init") ||
 	    !try_to_run_init_process("/bin/sh"))
