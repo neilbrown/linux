@@ -519,7 +519,7 @@ struct bgmac *bgmac_alloc(struct device *dev);
 int bgmac_enet_probe(struct bgmac *bgmac);
 void bgmac_enet_remove(struct bgmac *bgmac);
 
-struct mii_bus *bcma_mdio_mii_register(struct bcma_device *core, u8 phyaddr);
+struct mii_bus *bcma_mdio_mii_register(struct bgmac *bgmac);
 void bcma_mdio_mii_unregister(struct mii_bus *mii_bus);
 
 static inline u32 bgmac_read(struct bgmac *bgmac, u16 offset)
