@@ -241,6 +241,12 @@ config LZ4_DECOMPRESS
 
 source "lib/xz/Kconfig"
 
+config LZMA_COMPRESS
+    tristate
+
+config LZMA_DECOMPRESS
+    tristate
+
 #
 # These all provide a common interface (hence the apparent duplication with
 # ZLIB_INFLATE; DECOMPRESS_GZIP is just a wrapper.)
