@@ -181,6 +181,10 @@ config MVSWITCH_PHY
 	tristate "Driver for Marvell 88E6060 switches"
 	select ETHERNET_PACKET_MANGLE
 
+config MVSW61XX_PHY
+	tristate "Driver for Marvell 88E6171/6172 switches"
+	select SWCONFIG
+
 config IP17XX_PHY
 	tristate "Driver for IC+ IP17xx switches"
 	select SWCONFIG

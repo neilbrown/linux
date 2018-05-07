@@ -24,6 +24,7 @@ obj-$(CONFIG_BCM_CYGNUS_PHY)	+= bcm-cygnus.o
 obj-$(CONFIG_ICPLUS_PHY)	+= icplus.o
 obj-$(CONFIG_ADM6996_PHY)	+= adm6996.o
 obj-$(CONFIG_MVSWITCH_PHY)	+= mvswitch.o
+obj-$(CONFIG_MVSW61XX_PHY)	+= mvsw61xx.o
 obj-$(CONFIG_IP17XX_PHY)	+= ip17xx.o
 obj-$(CONFIG_REALTEK_PHY)	+= realtek.o
 obj-$(CONFIG_AR8216_PHY)	+= ar8216.o ar8327.o
