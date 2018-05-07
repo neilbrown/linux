@@ -16,6 +16,7 @@
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
 #include <asm/mach-ralink/ralink_regs.h>
+#include <linux/of_irq.h>
 
 #include <linux/switch.h>
 
@@ -1332,7 +1333,6 @@ static int esw_probe(struct platform_device *pdev)
 	const __be32 *port_map, *reg_init;
 	struct switch_dev *swdev;
 	struct rt305x_esw *esw;
-	struct resource *irq;
 	int ret;
 
 	esw = devm_kzalloc(&pdev->dev, sizeof(*esw), GFP_KERNEL);
@@ -1340,7 +1340,7 @@ static int esw_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	esw->dev = &pdev->dev;
-	esw->irq = irq->start;
+	esw->irq = irq_of_parse_and_map(np, 0);
 	esw->base = devm_ioremap_resource(&pdev->dev, res);
 	if (!esw->base)
 		return -EADDRNOTAVAIL;
@@ -1365,7 +1365,7 @@ static int esw_probe(struct platform_device *pdev)
 	ret = register_switch(swdev, NULL);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "register_switch failed\n");
-		goto unmap_base;
+		return ret;
 	}
 
 	platform_set_drvdata(pdev, esw);
@@ -1382,11 +1382,6 @@ static int esw_probe(struct platform_device *pdev)
 		esw_w32(esw, ~RT305X_ESW_PORT_ST_CHG, RT305X_ESW_REG_IMR);
 	}
 
-	return ret;
-
-unmap_base:
-	iounmap(esw->base);
-	kfree(esw);
 	return ret;
 }
 
