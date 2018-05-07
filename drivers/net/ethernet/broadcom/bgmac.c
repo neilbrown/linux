@@ -246,6 +246,8 @@ err_dma_head:
 
 err_drop:
 	dev_kfree_skb(skb);
+	net_dev->stats.tx_dropped++;
+	net_dev->stats.tx_errors++;
 	return NETDEV_TX_OK;
 }
 
@@ -285,6 +287,8 @@ static void bgmac_dma_tx_free(struct bgmac *bgmac, struct bgmac_dma_ring *ring)
 				       DMA_TO_DEVICE);
 
 		if (slot->skb) {
+			bgmac->net_dev->stats.tx_bytes += slot->skb->len;
+			bgmac->net_dev->stats.tx_packets++;
 			bytes_compl += slot->skb->len;
 			pkts_compl++;
 
@@ -468,6 +472,7 @@ static int bgmac_dma_rx_read(struct bgmac *bgmac, struct bgmac_dma_ring *ring,
 				bgmac_err(bgmac, "Found poisoned packet at slot %d, DMA issue!\n",
 					  ring->start);
 				put_page(virt_to_head_page(buf));
+				bgmac->net_dev->stats.rx_errors++;
 				break;
 			}
 
@@ -475,6 +480,8 @@ static int bgmac_dma_rx_read(struct bgmac *bgmac, struct bgmac_dma_ring *ring,
 				bgmac_err(bgmac, "Found oversized packet at slot %d, DMA issue!\n",
 					  ring->start);
 				put_page(virt_to_head_page(buf));
+				bgmac->net_dev->stats.rx_length_errors++;
+				bgmac->net_dev->stats.rx_errors++;
 				break;
 			}
 
@@ -485,6 +492,7 @@ static int bgmac_dma_rx_read(struct bgmac *bgmac, struct bgmac_dma_ring *ring,
 			if (unlikely(!skb)) {
 				bgmac_err(bgmac, "build_skb failed\n");
 				put_page(virt_to_head_page(buf));
+				bgmac->net_dev->stats.rx_errors++;
 				break;
 			}
 			skb_put(skb, BGMAC_RX_FRAME_OFFSET +
@@ -494,6 +502,8 @@ static int bgmac_dma_rx_read(struct bgmac *bgmac, struct bgmac_dma_ring *ring,
 
 			skb_checksum_none_assert(skb);
 			skb->protocol = eth_type_trans(skb, bgmac->net_dev);
+			bgmac->net_dev->stats.rx_bytes += len;
+			bgmac->net_dev->stats.rx_packets++;
 			napi_gro_receive(&bgmac->napi, skb);
 			handled++;
 		} while (0);
