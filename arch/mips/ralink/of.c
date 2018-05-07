@@ -15,6 +15,7 @@
 #include <linux/of_fdt.h>
 #include <linux/kernel.h>
 #include <linux/bootmem.h>
+#include <linux/module.h>
 #include <linux/of_platform.h>
 #include <linux/of_address.h>
 
@@ -26,6 +27,7 @@
 #include "common.h"
 
 __iomem void *rt_sysc_membase;
+EXPORT_SYMBOL(rt_sysc_membase);
 __iomem void *rt_memc_membase;
 
 __iomem void *plat_of_remap_node(const char *node)
