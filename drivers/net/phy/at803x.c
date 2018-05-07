@@ -374,27 +374,25 @@ static void at803x_link_change_notify(struct phy_device *phydev)
 	 * in the FIFO. In such cases, the FIFO enters an error mode it
 	 * cannot recover from by software.
 	 */
-	if (phydev->drv->phy_id == ATH8030_PHY_ID) {
-		if (phydev->state == PHY_NOLINK) {
-			if (priv->gpiod_reset && !priv->phy_reset) {
-				struct at803x_context context;
+	if (phydev->state == PHY_NOLINK) {
+		if (priv->gpiod_reset && !priv->phy_reset) {
+			struct at803x_context context;
 
-				at803x_context_save(phydev, &context);
+			at803x_context_save(phydev, &context);
 
-				gpiod_set_value(priv->gpiod_reset, 1);
-				msleep(1);
-				gpiod_set_value(priv->gpiod_reset, 0);
-				msleep(1);
+			gpiod_set_value(priv->gpiod_reset, 1);
+			msleep(1);
+			gpiod_set_value(priv->gpiod_reset, 0);
+			msleep(1);
 
-				at803x_context_restore(phydev, &context);
+			at803x_context_restore(phydev, &context);
 
-				dev_dbg(&phydev->dev, "%s(): phy was reset\n",
-					__func__);
-				priv->phy_reset = true;
-			}
-		} else {
-			priv->phy_reset = false;
+			dev_dbg(&phydev->dev, "%s(): phy was reset\n",
+				__func__);
+			priv->phy_reset = true;
 		}
+	} else {
+		priv->phy_reset = false;
 	}
 	if (pdata && pdata->fixup_rgmii_tx_delay &&
 	    phydev->speed != priv->prev_speed) {
@@ -426,7 +424,6 @@ static struct phy_driver at803x_driver[] = {
 	.phy_id_mask		= AT803X_PHY_ID_MASK,
 	.probe			= at803x_probe,
 	.config_init		= at803x_config_init,
-	.link_change_notify	= at803x_link_change_notify,
 	.set_wol		= at803x_set_wol,
 	.get_wol		= at803x_get_wol,
 	.suspend		= at803x_suspend,
@@ -468,7 +465,6 @@ static struct phy_driver at803x_driver[] = {
 	.phy_id_mask		= AT803X_PHY_ID_MASK,
 	.probe			= at803x_probe,
 	.config_init		= at803x_config_init,
-	.link_change_notify	= at803x_link_change_notify,
 	.set_wol		= at803x_set_wol,
 	.get_wol		= at803x_get_wol,
 	.suspend		= at803x_suspend,
