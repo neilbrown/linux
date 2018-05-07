@@ -12,6 +12,10 @@ menuconfig PHYLIB
 
 if PHYLIB
 
+config MDIO_BOARDINFO
+	bool
+	default y
+
 config SWCONFIG
 	tristate "Switch configuration API"
 	---help---
