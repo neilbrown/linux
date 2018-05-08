@@ -420,6 +420,7 @@ static void set_link_state_by_speed(struct dummy_hcd *dum_hcd)
 static void set_link_state(struct dummy_hcd *dum_hcd)
 {
 	struct dummy *dum = dum_hcd->dum;
+	unsigned int power_bit;
 
 	dum_hcd->active = 0;
 	if (dum->pullup)
@@ -430,17 +431,19 @@ static void set_link_state(struct dummy_hcd *dum_hcd)
 			return;
 
 	set_link_state_by_speed(dum_hcd);
+	power_bit = (dummy_hcd_to_hcd(dum_hcd)->speed == HCD_USB3 ?
+			USB_SS_PORT_STAT_POWER : USB_PORT_STAT_POWER);
 
 	if ((dum_hcd->port_status & USB_PORT_STAT_ENABLE) == 0 ||
 	     dum_hcd->active)
 		dum_hcd->resuming = 0;
 
 	/* Currently !connected or in reset */
-	if ((dum_hcd->port_status & USB_PORT_STAT_CONNECTION) == 0 ||
+	if ((dum_hcd->port_status & power_bit) == 0 ||
 			(dum_hcd->port_status & USB_PORT_STAT_RESET) != 0) {
-		unsigned disconnect = USB_PORT_STAT_CONNECTION &
+		unsigned int disconnect = power_bit &
 				dum_hcd->old_status & (~dum_hcd->port_status);
-		unsigned reset = USB_PORT_STAT_RESET &
+		unsigned int reset = USB_PORT_STAT_RESET &
 				(~dum_hcd->old_status) & dum_hcd->port_status;
 
 		/* Report reset and disconnect events to the driver */
@@ -2102,16 +2105,13 @@ static int dummy_hub_control(
 			}
 			break;
 		case USB_PORT_FEAT_POWER:
-			if (hcd->speed == HCD_USB3) {
-				if (dum_hcd->port_status & USB_PORT_STAT_POWER)
-					dev_dbg(dummy_dev(dum_hcd),
-						"power-off\n");
-			} else
-				if (dum_hcd->port_status &
-							USB_SS_PORT_STAT_POWER)
-					dev_dbg(dummy_dev(dum_hcd),
-						"power-off\n");
-			/* FALLS THROUGH */
+			dev_dbg(dummy_dev(dum_hcd), "power-off\n");
+			if (hcd->speed == HCD_USB3)
+				dum_hcd->port_status &= ~USB_SS_PORT_STAT_POWER;
+			else
+				dum_hcd->port_status &= ~USB_PORT_STAT_POWER;
+			set_link_state(dum_hcd);
+			break;
 		default:
 			dum_hcd->port_status &= ~(1 << wValue);
 			set_link_state(dum_hcd);
@@ -2282,14 +2282,13 @@ static int dummy_hub_control(
 				if ((dum_hcd->port_status &
 				     USB_SS_PORT_STAT_POWER) != 0) {
 					dum_hcd->port_status |= (1 << wValue);
-					set_link_state(dum_hcd);
 				}
 			} else
 				if ((dum_hcd->port_status &
 				     USB_PORT_STAT_POWER) != 0) {
 					dum_hcd->port_status |= (1 << wValue);
-					set_link_state(dum_hcd);
 				}
+			set_link_state(dum_hcd);
 		}
 		break;
 	case GetPortErrorCount:
