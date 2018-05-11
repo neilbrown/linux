@@ -1,0 +1,7 @@
+
+#include "gbpc1.dts"
+
+&cpuclock {
+			compatible = "fixed-clock";
+			clock-frequency = <880000000>;
+};
