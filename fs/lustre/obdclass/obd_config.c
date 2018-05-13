@@ -1255,10 +1255,9 @@ int class_config_llog_handler(const struct lu_env *env,
 			}
 		}
 		/* A config command without a start marker before it is
-		 * illegal (post 146)
+		 * illegal
 		 */
-		if (!(clli->cfg_flags & CFG_F_COMPAT146) &&
-		    !(clli->cfg_flags & CFG_F_MARKER) &&
+		if (!(clli->cfg_flags & CFG_F_MARKER) &&
 		    (lcfg->lcfg_command != LCFG_MARKER)) {
 			CWARN("Skip config outside markers, (inst: %016lx, uuid: %s, flags: %#x)\n",
 			      clli->cfg_instance,
