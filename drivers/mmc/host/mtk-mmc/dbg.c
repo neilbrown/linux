@@ -48,8 +48,6 @@
 #include "mt6575_sd.h"
 #include <linux/seq_file.h>
 
-static char cmd_buf[256];
-
 /* for debug zone */
 unsigned int sd_debug_zone[4]={
 	0,
@@ -253,6 +251,8 @@ static int msdc_debug_proc_read(struct seq_file *s, void *p)
 
 	return 0;
 }
+
+static char cmd_buf[256];
 
 static ssize_t msdc_debug_proc_write(struct file *file, 
 			const char __user *buf, size_t count, loff_t *data)

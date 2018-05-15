@@ -37,7 +37,6 @@ enum mediatek_gpio_reg {
 static void __iomem *mediatek_gpio_membase;
 static int mediatek_gpio_irq;
 static struct irq_domain *mediatek_gpio_irq_domain;
-static atomic_t irq_refcount = ATOMIC_INIT(0);
 
 struct mtk_gc {
 	struct gpio_chip chip;

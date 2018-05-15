@@ -132,6 +132,8 @@ static int xhci_mtk_host_enable(struct xhci_hcd_mtk *mtk)
 	return 0;
 }
 
+#ifdef CONFIG_PM_SLEEP
+
 static int xhci_mtk_host_disable(struct xhci_hcd_mtk *mtk)
 {
 	struct mu3c_ippc_regs __iomem *ippc = mtk->ippc_regs;
@@ -167,6 +169,8 @@ static int xhci_mtk_host_disable(struct xhci_hcd_mtk *mtk)
 	}
 	return 0;
 }
+
+#endif
 
 static int xhci_mtk_ssusb_config(struct xhci_hcd_mtk *mtk)
 {
@@ -240,6 +244,8 @@ static void xhci_mtk_clks_disable(struct xhci_hcd_mtk *mtk)
 	}
 	clk_disable_unprepare(mtk->sys_clk);
 }
+
+#ifdef CONFIG_PM_SLEEP
 
 /* only clocks can be turn off for ip-sleep wakeup mode */
 static void usb_wakeup_ip_sleep_en(struct xhci_hcd_mtk *mtk)
@@ -325,6 +331,8 @@ static void usb_wakeup_disable(struct xhci_hcd_mtk *mtk)
 	else if (mtk->wakeup_src == SSUSB_WK_LINE_STATE)
 		usb_wakeup_line_state_dis(mtk);
 }
+
+#endif
 
 static int usb_wakeup_of_property_parse(struct xhci_hcd_mtk *mtk,
 				struct device_node *dn)

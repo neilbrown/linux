@@ -1264,6 +1264,8 @@ static struct module_attribute *modinfo_attrs[] = {
 
 static const char vermagic[] = VERMAGIC_STRING;
 
+#ifndef CONFIG_MODULE_STRIPPED
+
 static int try_to_force_load(struct module *mod, const char *reason)
 {
 #ifdef CONFIG_MODULE_FORCE_LOAD
@@ -1275,6 +1277,8 @@ static int try_to_force_load(struct module *mod, const char *reason)
 	return -ENOEXEC;
 #endif
 }
+
+#endif
 
 #ifdef CONFIG_MODVERSIONS
 /* If the arch applies (non-zero) relocations to kernel kcrctab, unapply it. */
@@ -2872,6 +2876,8 @@ static struct module *setup_load_info(struct load_info *info, int flags)
 	return mod;
 }
 
+#ifndef CONFIG_MODULE_STRIPPED
+
 static void check_modinfo_retpoline(struct module *mod, struct load_info *info)
 {
 	if (retpoline_module_ok(get_modinfo(info, "retpoline")))
@@ -2880,6 +2886,8 @@ static void check_modinfo_retpoline(struct module *mod, struct load_info *info)
 	pr_warn("%s: loading module not compiled with retpoline compiler.\n",
 		mod->name);
 }
+
+#endif
 
 static int check_modinfo(struct module *mod, struct load_info *info, int flags)
 {

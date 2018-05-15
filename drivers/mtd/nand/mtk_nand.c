@@ -1855,7 +1855,7 @@ mtk_nand_block_bad(struct mtd_info *mtd, loff_t ofs, int getchip)
 		if (mapped_block == -1) {
 		if (getchip)
 			nand_release_device(mtd);
-			return NAND_STATUS_FAIL;
+		return NAND_STATUS_FAIL;
 		}
 	}
 #endif

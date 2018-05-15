@@ -146,12 +146,6 @@ static int create_gpio_led(const struct gpio_led *template,
 	return devm_of_led_classdev_register(parent, np, &led_dat->cdev);
 }
 
-static void delete_gpio_led(struct gpio_led_data *led)
-{
-	led_classdev_unregister(&led->cdev);
-	cancel_work_sync(&led->work);
-}
-
 struct gpio_leds_priv {
 	int num_leds;
 	struct gpio_led_data leds[];
