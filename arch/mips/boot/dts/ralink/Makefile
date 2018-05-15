@@ -6,5 +6,6 @@ dtb-$(CONFIG_DTB_MT7620A_EVAL)	+= mt7620a_eval.dtb
 dtb-$(CONFIG_DTB_OMEGA2P)	+= omega2p.dtb
 dtb-$(CONFIG_DTB_VOCORE2)	+= vocore2.dtb
 dtb-$(CONFIG_DTB_GNUBEE1)	+= gbpc1.dtb
+dtb-$(CONFIG_DTB_GNUBEE2)	+= gbpc2.dtb
 
 obj-y				+= $(patsubst %.dtb, %.dtb.o, $(dtb-y))
