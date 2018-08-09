@@ -1501,15 +1501,6 @@ static inline bool obd_mod_rpc_slot_avail(struct client_obd *cli,
 	return avail;
 }
 
-static inline bool obd_skip_mod_rpc_slot(const struct lookup_intent *it)
-{
-	if (it &&
-	    (it->it_op == IT_GETATTR || it->it_op == IT_LOOKUP ||
-	     it->it_op == IT_READDIR ||
-	     (it->it_op == IT_LAYOUT && !(it->it_flags & MDS_FMODE_WRITE))))
-		return true;
-	return false;
-}
 
 /* Get a modify RPC slot from the obd client @cli according
  * to the kind of operation @opc that is going to be sent
@@ -1519,17 +1510,10 @@ static inline bool obd_skip_mod_rpc_slot(const struct lookup_intent *it)
  * Returns the tag to be set in the request message. Tag 0
  * is reserved for non-modifying requests.
  */
-u16 obd_get_mod_rpc_slot(struct client_obd *cli, u32 opc,
-			 struct lookup_intent *it)
+u16 obd_get_mod_rpc_slot(struct client_obd *cli, u32 opc)
 {
 	bool close_req = false;
 	u16 i, max;
-
-	/* read-only metadata RPCs don't consume a slot on MDT
-	 * for reply reconstruction
-	 */
-	if (obd_skip_mod_rpc_slot(it))
-		return 0;
 
 	if (opc == MDS_CLOSE)
 		close_req = true;
@@ -1567,15 +1551,13 @@ EXPORT_SYMBOL(obd_get_mod_rpc_slot);
 
 /*
  * Put a modify RPC slot from the obd client @cli according
- * to the kind of operation @opc that has been sent and the
- * intent @it of the operation if it applies.
+ * to the kind of operation @opc that has been sent.
  */
-void obd_put_mod_rpc_slot(struct client_obd *cli, u32 opc,
-			  struct lookup_intent *it, u16 tag)
+void obd_put_mod_rpc_slot(struct client_obd *cli, u32 opc, u16 tag)
 {
 	bool close_req = false;
 
-	if (obd_skip_mod_rpc_slot(it))
+	if (tag == 0)
 		return;
 
 	if (opc == MDS_CLOSE)

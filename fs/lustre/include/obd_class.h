@@ -111,10 +111,8 @@ int obd_set_max_rpcs_in_flight(struct client_obd *cli, u32 max);
 int obd_set_max_mod_rpcs_in_flight(struct client_obd *cli, u16 max);
 int obd_mod_rpc_stats_seq_show(struct client_obd *cli, struct seq_file *seq);
 
-u16 obd_get_mod_rpc_slot(struct client_obd *cli, u32 opc,
-			 struct lookup_intent *it);
-void obd_put_mod_rpc_slot(struct client_obd *cli, u32 opc,
-			  struct lookup_intent *it, u16 tag);
+u16 obd_get_mod_rpc_slot(struct client_obd *cli, u32 opc);
+void obd_put_mod_rpc_slot(struct client_obd *cli, u32 opc, u16 tag);
 
 struct llog_handle;
 struct llog_rec_hdr;

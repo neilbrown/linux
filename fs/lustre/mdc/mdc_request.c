@@ -412,12 +412,12 @@ static int mdc_xattr_common(struct obd_export *exp,
 
 	/* make rpc */
 	if (opcode == MDS_REINT)
-		mdc_get_mod_rpc_slot(req, NULL);
+		ptlrpc_get_mod_rpc_slot(req);
 
 	rc = ptlrpc_queue_wait(req);
 
 	if (opcode == MDS_REINT)
-		mdc_put_mod_rpc_slot(req, NULL);
+		ptlrpc_put_mod_rpc_slot(req);
 
 	if (rc)
 		ptlrpc_req_finished(req);
@@ -935,9 +935,9 @@ static int mdc_close(struct obd_export *exp, struct md_op_data *op_data,
 
 	ptlrpc_request_set_replen(req);
 
-	mdc_get_mod_rpc_slot(req, NULL);
+	ptlrpc_get_mod_rpc_slot(req);
 	rc = ptlrpc_queue_wait(req);
-	mdc_put_mod_rpc_slot(req, NULL);
+	ptlrpc_put_mod_rpc_slot(req);
 
 	if (!req->rq_repmsg) {
 		CDEBUG(D_RPCTRACE, "request %p failed to send: rc = %d\n", req,
@@ -1724,9 +1724,9 @@ static int mdc_ioc_hsm_progress(struct obd_export *exp,
 
 	ptlrpc_request_set_replen(req);
 
-	mdc_get_mod_rpc_slot(req, NULL);
+	ptlrpc_get_mod_rpc_slot(req);
 	rc = ptlrpc_queue_wait(req);
-	mdc_put_mod_rpc_slot(req, NULL);
+	ptlrpc_put_mod_rpc_slot(req);
 out:
 	ptlrpc_req_finished(req);
 	return rc;
@@ -1904,9 +1904,9 @@ static int mdc_ioc_hsm_state_set(struct obd_export *exp,
 
 	ptlrpc_request_set_replen(req);
 
-	mdc_get_mod_rpc_slot(req, NULL);
+	ptlrpc_get_mod_rpc_slot(req);
 	rc = ptlrpc_queue_wait(req);
-	mdc_put_mod_rpc_slot(req, NULL);
+	ptlrpc_put_mod_rpc_slot(req);
 out:
 	ptlrpc_req_finished(req);
 	return rc;
@@ -1969,9 +1969,9 @@ static int mdc_ioc_hsm_request(struct obd_export *exp,
 
 	ptlrpc_request_set_replen(req);
 
-	mdc_get_mod_rpc_slot(req, NULL);
+	ptlrpc_get_mod_rpc_slot(req);
 	rc = ptlrpc_queue_wait(req);
-	mdc_put_mod_rpc_slot(req, NULL);
+	ptlrpc_put_mod_rpc_slot(req);
 out:
 	ptlrpc_req_finished(req);
 	return rc;

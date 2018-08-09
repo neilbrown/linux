@@ -988,6 +988,7 @@ struct ldlm_enqueue_info {
 	void			*ei_cbdata;
 	/* whether enqueue slave stripes */
 	unsigned int		ei_enq_slave:1;
+	unsigned int		ei_enq_slot:1;	/* whether acquire rpc slot */
 };
 
 extern struct obd_ops ldlm_obd_ops;
@@ -1329,6 +1330,8 @@ int ldlm_prep_elc_req(struct obd_export *exp,
 		      struct ptlrpc_request *req,
 		      int version, int opc, int canceloff,
 		      struct list_head *cancels, int count);
+
+struct ptlrpc_request *ldlm_enqueue_pack(struct obd_export *exp, int lvb_len);
 
 int ldlm_cli_enqueue_fini(struct obd_export *exp, struct ptlrpc_request *req,
 			  enum ldlm_type type, u8 with_policy,
