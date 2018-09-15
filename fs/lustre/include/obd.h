@@ -264,7 +264,7 @@ struct client_obd {
 	atomic_t		cl_pending_r_pages;
 	u32			cl_max_pages_per_rpc;
 	u32			cl_max_rpcs_in_flight;
-	u32			cl_short_io_bytes;
+	u32			cl_max_short_io_bytes;
 	struct obd_histogram    cl_read_rpc_hist;
 	struct obd_histogram    cl_write_rpc_hist;
 	struct obd_histogram    cl_read_page_hist;
