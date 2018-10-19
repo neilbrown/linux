@@ -468,8 +468,11 @@ static inline struct pcc_inode *ll_i2pcci(struct inode *inode)
 /* default to use at least 16M for fast read if possible */
 #define RA_REMAIN_WINDOW_MIN			MiB_TO_PAGES(16UL)
 
-/* default readahead on a given system. */
-#define SBI_DEFAULT_READ_AHEAD_MAX		MiB_TO_PAGES(64UL)
+/* default read-ahead on a given client mountpoint. */
+#define SBI_DEFAULT_READ_AHEAD_MAX		MiB_TO_PAGES(1024UL)
+
+/* default read-ahead for a single file descriptor */
+#define SBI_DEFAULT_READ_AHEAD_PER_FILE_MAX	MiB_TO_PAGES(256UL)
 
 /* default read-ahead full files smaller than limit on the second read */
 #define SBI_DEFAULT_READ_AHEAD_WHOLE_MAX	MiB_TO_PAGES(2UL)
