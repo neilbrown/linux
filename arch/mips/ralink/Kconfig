@@ -93,12 +93,7 @@ choice
 		depends on SOC_MT7621
 
 	config DTB_GNUBEE1
-		bool "GnuBee1 NAS - 880MHz clock"
-		depends on SOC_MT7621
-		select BUILTIN_DTB
-
-	config DTB_GNUBEE1_900
-		bool "GnuBee1 NAS - 900MHz clock"
+		bool "GnuBee1 NAS"
 		depends on SOC_MT7621
 		select BUILTIN_DTB
 
