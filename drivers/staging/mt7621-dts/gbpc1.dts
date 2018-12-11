@@ -106,11 +106,6 @@
 			clock-frequency = <225000000>;
 };
 
-&cpuclock {
-			compatible = "fixed-clock";
-			clock-frequency = <900000000>;
-};
-
 &pcie {
 	pinctrl-names = "default";
 	pinctrl-0 = <&pcie_pins>;
@@ -118,17 +113,27 @@
 };
 
 &ethernet {
-	//mtd-mac-address = <&factory 0xe000>;
-	gmac1: mac@0 {
+	gmac0: mac@0 {
 		compatible = "mediatek,eth-mac";
 		reg = <0>;
-		phy-handle = <&phy1>;
+		phy-mode = "rgmii";
+		mtd-mac-address = <&factory 0xe000>;
+		fixed-link {
+			speed = <1000>;
+			full-duplex;
+			pause;
+		};
 	};
-
-	mdio-bus {
-		phy1: ethernet-phy@1 {
-			reg = <1>;
-			phy-mode = "rgmii";
+	gmac1: mac@1 {
+		compatible = "mediatek,eth-mac";
+		reg = <1>;
+		mtd-mac-address = <&factory 0xe000>;
+		mtd-mac-address-increment = <1>;
+		phy-mode = "rgmii";
+		fixed-link {
+			speed = <1000>;
+			full-duplex;
+			pause;
 		};
 	};
 };
