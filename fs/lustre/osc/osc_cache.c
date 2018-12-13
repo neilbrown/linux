@@ -574,6 +574,14 @@ static int osc_extent_merge(const struct lu_env *env, struct osc_extent *cur,
 	if (cur->oe_max_end != victim->oe_max_end)
 		return -ERANGE;
 
+	/*
+	 * In the rare case max_pages_per_rpc (mppr) is changed, don't
+	 * merge extents until after old ones have been sent, or the
+	 * "extents are aligned to RPCs" checks are unhappy.
+	 */
+	if (cur->oe_mppr != victim->oe_mppr)
+		return -ERANGE;
+
 	LASSERT(cur->oe_dlmlock == victim->oe_dlmlock);
 	ppc_bits = osc_cli(obj)->cl_chunkbits - PAGE_SHIFT;
 	chunk_start = cur->oe_start >> ppc_bits;
@@ -601,7 +609,6 @@ static int osc_extent_merge(const struct lu_env *env, struct osc_extent *cur,
 	cur->oe_urgent |= victim->oe_urgent;
 	cur->oe_memalloc |= victim->oe_memalloc;
 	list_splice_init(&victim->oe_pages, &cur->oe_pages);
-	list_del_init(&victim->oe_link);
 	victim->oe_nr_pages = 0;
 
 	osc_extent_get(victim);
@@ -728,7 +735,7 @@ static struct osc_extent *osc_extent_find(const struct lu_env *env,
 	if (cur->oe_end > max_end)
 		cur->oe_end = max_end;
 	LASSERT(*grants >= chunksize);
-	cur->oe_grants = chunksize;
+	cur->oe_grants = chunksize + cli->cl_grant_extent_tax;
 	cur->oe_mppr = max_pages;
 	if (olck->ols_dlmlock) {
 		LASSERT(olck->ols_hold);
@@ -800,17 +807,8 @@ restart:
 			 */
 			continue;
 
-		/* it's required that an extent must be contiguous at chunk
-		 * level so that we know the whole extent is covered by grant
-		 * (the pages in the extent are NOT required to be contiguous).
-		 * Otherwise, it will be too much difficult to know which
-		 * chunks have grants allocated.
-		 */
-		/* On success, osc_extent_merge() will put cur,
-		 * so we take an extra reference
-		 */
-		osc_extent_get(cur);
 		if (osc_extent_merge(env, ext, cur) == 0) {
+			LASSERT(*grants >= chunksize);
 			*grants -= chunksize;
 			found = osc_extent_hold(ext);
 
@@ -824,7 +822,6 @@ restart:
 
 			break;
 		}
-		osc_extent_put(env, cur);
 	}
 
 	osc_extent_tree_dump(D_CACHE, obj);
@@ -836,7 +833,6 @@ restart:
 	} else if (!conflict) {
 		/* create a new extent */
 		EASSERT(osc_extent_is_overlapped(obj, cur) == 0, cur);
-		cur->oe_grants = chunksize + cli->cl_grant_extent_tax;
 		LASSERT(*grants >= cur->oe_grants);
 		*grants -= cur->oe_grants;
 
