@@ -1594,6 +1594,27 @@ out:
 	__ret;								\
 })
 
+/* Following two inlines exist to pass code fragments
+ * to wait_event_idle_exclusive_timeout_cmd().  Passing
+ * code fragments as macro args can look confusing, so
+ * we provide inlines to encapsulate them.
+ */
+static inline void cli_unlock_and_unplug(const struct lu_env *env,
+					 struct client_obd *cli,
+					 struct osc_async_page *oap)
+{
+	spin_unlock(&cli->cl_loi_list_lock);
+	osc_io_unplug_async(env, cli, NULL);
+	CDEBUG(D_CACHE,
+	       "%s: sleeping for cache space for %p\n",
+	       cli_name(cli), oap);
+}
+
+static inline void cli_lock_after_unplug(struct client_obd *cli)
+{
+	spin_lock(&cli->cl_loi_list_lock);
+}
+
 /**
  * The main entry to reserve dirty page accounting. Usually the grant reserved
  * in this function will be freed in bulk in osc_free_grant() unless it fails
@@ -1631,25 +1652,17 @@ static int osc_enter_cache(const struct lu_env *env, struct client_obd *cli,
 	 * run out of grants. In both cases we should write dirty pages out.
 	 * Adding a cache waiter will trigger urgent write-out no matter what
 	 * RPC size will be.
-	 * The exiting condition (other then success) is no avail grants
+	 * The exiting condition (other than success) is no avail grants
 	 * and no dirty pages caching, that really means there is no space
 	 * on the OST.
 	 */
 	remain = wait_event_idle_exclusive_timeout_cmd(
 		cli->cl_cache_waiters,
-		(entered = osc_enter_cache_try(
-			cli, oap, bytes)) ||
-		(cli->cl_dirty_pages == 0 &&
-		 cli->cl_w_in_flight == 0),
+		(entered = osc_enter_cache_try(cli, oap, bytes)) ||
+		(cli->cl_dirty_pages == 0 && cli->cl_w_in_flight == 0),
 		timeout,
-
-		spin_unlock(&cli->cl_loi_list_lock);
-		osc_io_unplug_async(env, cli, NULL);
-		CDEBUG(D_CACHE,
-		       "%s: sleeping for cache space for %p\n",
-		       cli_name(cli), oap);
-		,
-		spin_lock(&cli->cl_loi_list_lock));
+		cli_unlock_and_unplug(env, cli, oap),
+		cli_lock_after_unplug(cli));
 
 	if (entered) {
 		if (remain == timeout)
