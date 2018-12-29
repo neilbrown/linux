@@ -220,9 +220,6 @@ KBUILD_CFLAGS += -fno-asynchronous-unwind-tables
 
 # Avoid indirect branches in kernel to deal with Spectre
 ifdef CONFIG_RETPOLINE
-ifeq ($(RETPOLINE_CFLAGS),)
-  $(error You are building kernel with non-retpoline compiler, please update your compiler.)
-endif
   KBUILD_CFLAGS += $(RETPOLINE_CFLAGS)
 endif
 
@@ -234,13 +231,6 @@ archscripts: scripts_basic
 
 archheaders:
 	$(Q)$(MAKE) $(build)=arch/x86/entry/syscalls all
-
-archmacros:
-	$(Q)$(MAKE) $(build)=arch/x86/kernel arch/x86/kernel/macros.s
-
-ASM_MACRO_FLAGS = -Wa,arch/x86/kernel/macros.s
-export ASM_MACRO_FLAGS
-KBUILD_CFLAGS += $(ASM_MACRO_FLAGS)
 
 ###
 # Kernel objects
@@ -306,6 +296,13 @@ checkbin:
 ifndef CC_HAVE_ASM_GOTO
 	@echo Compiler lacks asm-goto support.
 	@exit 1
+endif
+ifdef CONFIG_RETPOLINE
+ifeq ($(RETPOLINE_CFLAGS),)
+	@echo "You are building kernel with non-retpoline compiler." >&2
+	@echo "Please update your compiler." >&2
+	@false
+endif
 endif
 
 archclean:

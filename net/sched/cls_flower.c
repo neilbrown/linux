@@ -1238,17 +1238,15 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 	if (err)
 		goto errout_idr;
 
-	if (!tc_skip_sw(fnew->flags)) {
-		if (!fold && fl_lookup(fnew->mask, &fnew->mkey)) {
-			err = -EEXIST;
-			goto errout_mask;
-		}
-
-		err = rhashtable_insert_fast(&fnew->mask->ht, &fnew->ht_node,
-					     fnew->mask->filter_ht_params);
-		if (err)
-			goto errout_mask;
+	if (!fold && fl_lookup(fnew->mask, &fnew->mkey)) {
+		err = -EEXIST;
+		goto errout_mask;
 	}
+
+	err = rhashtable_insert_fast(&fnew->mask->ht, &fnew->ht_node,
+				     fnew->mask->filter_ht_params);
+	if (err)
+		goto errout_mask;
 
 	if (!tc_skip_hw(fnew->flags)) {
 		err = fl_hw_replace_filter(tp, fnew, extack);
@@ -1260,10 +1258,9 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 		fnew->flags |= TCA_CLS_FLAGS_NOT_IN_HW;
 
 	if (fold) {
-		if (!tc_skip_sw(fold->flags))
-			rhashtable_remove_fast(&fold->mask->ht,
-					       &fold->ht_node,
-					       fold->mask->filter_ht_params);
+		rhashtable_remove_fast(&fold->mask->ht,
+				       &fold->ht_node,
+				       fold->mask->filter_ht_params);
 		if (!tc_skip_hw(fold->flags))
 			fl_hw_destroy_filter(tp, fold, NULL);
 	}
@@ -1303,9 +1300,8 @@ static int fl_delete(struct tcf_proto *tp, void *arg, bool *last,
 	struct cls_fl_head *head = rtnl_dereference(tp->root);
 	struct cls_fl_filter *f = arg;
 
-	if (!tc_skip_sw(f->flags))
-		rhashtable_remove_fast(&f->mask->ht, &f->ht_node,
-				       f->mask->filter_ht_params);
+	rhashtable_remove_fast(&f->mask->ht, &f->ht_node,
+			       f->mask->filter_ht_params);
 	__fl_delete(tp, f, extack);
 	*last = list_empty(&head->masks);
 	return 0;

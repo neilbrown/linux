@@ -345,13 +345,29 @@ nfp_flower_calculate_key_layers(struct nfp_app *app,
 		    !(tcp_flags & (TCPHDR_FIN | TCPHDR_SYN | TCPHDR_RST)))
 			return -EOPNOTSUPP;
 
-		/* We need to store TCP flags in the IPv4 key space, thus
-		 * we need to ensure we include a IPv4 key layer if we have
-		 * not done so already.
+		/* We need to store TCP flags in the either the IPv4 or IPv6 key
+		 * space, thus we need to ensure we include a IPv4/IPv6 key
+		 * layer if we have not done so already.
 		 */
-		if (!(key_layer & NFP_FLOWER_LAYER_IPV4)) {
-			key_layer |= NFP_FLOWER_LAYER_IPV4;
-			key_size += sizeof(struct nfp_flower_ipv4);
+		if (!key_basic)
+			return -EOPNOTSUPP;
+
+		if (!(key_layer & NFP_FLOWER_LAYER_IPV4) &&
+		    !(key_layer & NFP_FLOWER_LAYER_IPV6)) {
+			switch (key_basic->n_proto) {
+			case cpu_to_be16(ETH_P_IP):
+				key_layer |= NFP_FLOWER_LAYER_IPV4;
+				key_size += sizeof(struct nfp_flower_ipv4);
+				break;
+
+			case cpu_to_be16(ETH_P_IPV6):
+				key_layer |= NFP_FLOWER_LAYER_IPV6;
+				key_size += sizeof(struct nfp_flower_ipv6);
+				break;
+
+			default:
+				return -EOPNOTSUPP;
+			}
 		}
 	}
 
@@ -476,16 +492,16 @@ nfp_flower_add_offload(struct nfp_app *app, struct net_device *netdev,
 	if (err)
 		goto err_destroy_flow;
 
-	err = nfp_flower_xmit_flow(netdev, flow_pay,
-				   NFP_FLOWER_CMSG_TYPE_FLOW_ADD);
-	if (err)
-		goto err_destroy_flow;
-
 	flow_pay->tc_flower_cookie = flow->cookie;
 	err = rhashtable_insert_fast(&priv->flow_table, &flow_pay->fl_node,
 				     nfp_flower_table_params);
 	if (err)
-		goto err_destroy_flow;
+		goto err_release_metadata;
+
+	err = nfp_flower_xmit_flow(netdev, flow_pay,
+				   NFP_FLOWER_CMSG_TYPE_FLOW_ADD);
+	if (err)
+		goto err_remove_rhash;
 
 	port->tc_offload_cnt++;
 
@@ -494,6 +510,12 @@ nfp_flower_add_offload(struct nfp_app *app, struct net_device *netdev,
 
 	return 0;
 
+err_remove_rhash:
+	WARN_ON_ONCE(rhashtable_remove_fast(&priv->flow_table,
+					    &flow_pay->fl_node,
+					    nfp_flower_table_params));
+err_release_metadata:
+	nfp_modify_flow_metadata(app, flow_pay);
 err_destroy_flow:
 	kfree(flow_pay->action_data);
 	kfree(flow_pay->mask_data);
