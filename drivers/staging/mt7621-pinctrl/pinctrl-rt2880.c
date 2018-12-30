@@ -88,6 +88,7 @@ static int rt2880_pinctrl_dt_node_to_map(struct pinctrl_dev *pctrldev,
 	for_each_node_with_property(np_config, "group")
 		ngroups++;
 
+	*num_maps = 0;
 	*map = NULL;
 	ret = pinctrl_utils_reserve_map(pctrldev, map, &reserved_maps,
 					num_maps, ngroups);
