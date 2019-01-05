@@ -122,6 +122,7 @@ void rt2x00crypto_tx_remove_iv(struct sk_buff *skb, struct txentry_desc *txdesc)
 
 	/* Move ieee80211 header */
 	memmove(skb->data + txdesc->iv_len, skb->data, txdesc->iv_offset);
+	skb->data_len -= txdesc->iv_len;
 
 	/* Pull buffer to correct size */
 	skb_pull(skb, txdesc->iv_len);
