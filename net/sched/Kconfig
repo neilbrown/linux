@@ -3,7 +3,9 @@
 # 
 
 menuconfig NET_SCHED
-	def_bool y
+	bool "QoS and/or fair queueing"
+	default y
+
 	select NET_SCH_FIFO
 	select NET_SCH_FQ_CODEL
 	---help---
