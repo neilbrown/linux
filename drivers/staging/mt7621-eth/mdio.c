@@ -89,8 +89,8 @@ int mtk_connect_phy_node(struct mtk_eth *eth, struct mtk_mac *mac,
 		return -ENODEV;
 	}
 
-	phydev->supported &= PHY_1000BT_FEATURES;
-	phydev->advertising = phydev->supported;
+//	phydev->supported &= PHY_1000BT_FEATURES;
+//	phydev->advertising = phydev->supported;
 
 	dev_info(eth->dev,
 		 "connected port %d to PHY at %s [uid=%08x, driver=%s]\n",
@@ -113,7 +113,7 @@ static void phy_init(struct mtk_eth *eth, struct mtk_mac *mac,
 	phy->speed = 0;
 	phy->duplex = 0;
 	phy_set_max_speed(phy, SPEED_100);
-	phy->advertising = phy->supported | ADVERTISED_Autoneg;
+//	phy->advertising = phy->supported | ADVERTISED_Autoneg;
 
 	phy_start_aneg(phy);
 }
