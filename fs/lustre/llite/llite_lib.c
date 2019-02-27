@@ -1898,7 +1898,7 @@ int ll_statfs_internal(struct ll_sb_info *sbi, struct obd_statfs *osfs,
 	       osfs->os_bavail, osfs->os_blocks, osfs->os_ffree,
 	       osfs->os_files);
 
-	if (osfs->os_state & OS_STATE_SUM)
+	if (osfs->os_state & OS_STATFS_SUM)
 		goto out;
 
 	rc = obd_statfs(NULL, sbi->ll_dt_exp, &obd_osfs, max_age, flags);
