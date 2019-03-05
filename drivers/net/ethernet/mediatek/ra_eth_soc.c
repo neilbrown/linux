@@ -1040,6 +1040,8 @@ static int mtk_poll_rx(struct napi_struct *napi, int budget,
 	struct mtk_rx_dma *rxd, trxd;
 	int done = 0, pad;
 
+	mtk_irq_ack(eth, rx_intr);
+
 	if (eth->soc->hw_features & NETIF_F_RXCSUM)
 		checksum_bit = soc->checksum_bit;
 	else
@@ -1139,9 +1141,6 @@ release_desc:
 				    MTK_REG_RX_CALC_IDX0);
 		done++;
 	}
-
-	if (done < budget)
-		mtk_irq_ack(eth, rx_intr);
 
 	return done;
 }
@@ -1262,9 +1261,8 @@ static int mtk_poll_tx(struct mtk_eth *eth, int budget, u32 tx_intr,
 	struct net_device *netdev = eth->netdev[0];
 	int done;
 
+	mtk_irq_ack(eth, tx_intr);
 	done = eth->tx_ring.tx_poll(eth, budget, tx_again);
-	if (!*tx_again)
-		mtk_irq_ack(eth, tx_intr);
 
 	if (!done)
 		return 0;
