@@ -122,7 +122,7 @@ static DEFINE_SPINLOCK(config_list_lock);	/* protects config_llog_list */
 static int config_log_get(struct config_llog_data *cld)
 {
 	atomic_inc(&cld->cld_refcount);
-	CDEBUG(D_INFO, "log %s refs %d\n", cld->cld_logname,
+	CDEBUG(D_INFO, "log %s (%p) refs %d\n", cld->cld_logname, cld,
 	       atomic_read(&cld->cld_refcount));
 	return 0;
 }
@@ -135,7 +135,7 @@ static void config_log_put(struct config_llog_data *cld)
 	if (!cld)
 		return;
 
-	CDEBUG(D_INFO, "log %s refs %d\n", cld->cld_logname,
+	CDEBUG(D_INFO, "log %s(%p) refs %d\n", cld->cld_logname, cld,
 	       atomic_read(&cld->cld_refcount));
 	LASSERT(atomic_read(&cld->cld_refcount) > 0);
 
@@ -382,16 +382,26 @@ out_err:
 	return ERR_PTR(rc);
 }
 
-static inline void config_mark_cld_stop(struct config_llog_data *cld)
-{
-	if (!cld)
-		return;
+DEFINE_MUTEX(llog_process_lock);
 
-	mutex_lock(&cld->cld_lock);
+static inline void config_mark_cld_stop_nolock(struct config_llog_data *cld)
+{
 	spin_lock(&config_list_lock);
 	cld->cld_stopping = 1;
 	spin_unlock(&config_list_lock);
-	mutex_unlock(&cld->cld_lock);
+
+	CDEBUG(D_INFO, "lockh %#llx\n", cld->cld_lockh.cookie);
+	if (!ldlm_lock_addref_try(&cld->cld_lockh, LCK_CR))
+		ldlm_lock_decref_and_cancel(&cld->cld_lockh, LCK_CR);
+}
+
+static inline void config_mark_cld_stop(struct config_llog_data *cld)
+{
+	if (cld) {
+		mutex_lock(&cld->cld_lock);
+		config_mark_cld_stop_nolock(cld);
+		mutex_unlock(&cld->cld_lock);
+	}
 }
 
 /** Stop watching for updates on this log.
@@ -423,10 +433,6 @@ static int config_log_end(char *logname, struct config_llog_instance *cfg)
 		return rc;
 	}
 
-	spin_lock(&config_list_lock);
-	cld->cld_stopping = 1;
-	spin_unlock(&config_list_lock);
-
 	cld_recover = cld->cld_recover;
 	cld->cld_recover = NULL;
 
@@ -434,21 +440,22 @@ static int config_log_end(char *logname, struct config_llog_instance *cfg)
 	cld->cld_params = NULL;
 	cld_sptlrpc = cld->cld_sptlrpc;
 	cld->cld_sptlrpc = NULL;
+
+	config_mark_cld_stop_nolock(cld);
 	mutex_unlock(&cld->cld_lock);
 
 	config_mark_cld_stop(cld_recover);
-	config_log_put(cld_recover);
-
 	config_mark_cld_stop(cld_params);
-	config_log_put(cld_params);
+	config_mark_cld_stop(cld_sptlrpc);
 
+	config_log_put(cld_params);
+	config_log_put(cld_recover);
 	config_log_put(cld_sptlrpc);
 
 	/* drop the ref from the find */
 	config_log_put(cld);
 	/* drop the start ref */
 	config_log_put(cld);
-
 	CDEBUG(D_MGC, "end config log %s (%d)\n", logname ? logname : "client",
 	       rc);
 	return rc;
@@ -625,9 +632,14 @@ static void mgc_requeue_add(struct config_llog_data *cld)
 	       cld->cld_stopping, rq_state);
 	LASSERT(atomic_read(&cld->cld_refcount) > 0);
 
+	/* lets cancel an existent lock to mark cld as "lostlock" */
+	CDEBUG(D_INFO, "lockh %#llx\n", cld->cld_lockh.cookie);
+	if (!ldlm_lock_addref_try(&cld->cld_lockh, LCK_CR))
+		ldlm_lock_decref_and_cancel(&cld->cld_lockh, LCK_CR);
+
 	mutex_lock(&cld->cld_lock);
 	spin_lock(&config_list_lock);
-	if (!(rq_state & RQ_STOP) && !cld->cld_stopping && !cld->cld_lostlock) {
+	if (!(rq_state & RQ_STOP) && !cld->cld_stopping) {
 		cld->cld_lostlock = 1;
 		rq_state |= RQ_NOW;
 		wakeup = true;
@@ -801,6 +813,7 @@ static int mgc_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
 		LASSERT(atomic_read(&cld->cld_refcount) > 0);
 
 		lock->l_ast_data = NULL;
+		cld->cld_lockh.cookie = 0;
 		/* Are we done with this log? */
 		if (cld->cld_stopping) {
 			CDEBUG(D_MGC, "log %s: stopping, won't requeue\n",
@@ -1663,9 +1676,12 @@ restart:
 		/* Get the cld, it will be released in mgc_blocking_ast. */
 		config_log_get(cld);
 		rc = ldlm_lock_set_data(&lockh, (void *)cld);
+		LASSERT(!lustre_handle_is_used(&cld->cld_lockh));
 		LASSERT(rc == 0);
+		cld->cld_lockh = lockh;
 	} else {
 		CDEBUG(D_MGC, "Can't get cfg lock: %d\n", rcl);
+		cld->cld_lockh.cookie = 0;
 
 		if (rcl == -ESHUTDOWN &&
 		    atomic_read(&mgc->u.cli.cl_mgc_refcount) > 0 && !retry) {
@@ -1720,9 +1736,6 @@ restart:
 				CERROR("%s: recover log %s failed: rc = %d not fatal.\n",
 				       mgc->obd_name, cld->cld_logname, rc);
 				rc = 0;
-				spin_lock(&config_list_lock);
-				cld->cld_lostlock = 1;
-				spin_unlock(&config_list_lock);
 			}
 		}
 	} else {
@@ -1732,11 +1745,11 @@ restart:
 	CDEBUG(D_MGC, "%s: configuration from log '%s' %sed (%d).\n",
 	       mgc->obd_name, cld->cld_logname, rc ? "fail" : "succeed", rc);
 
-	mutex_unlock(&cld->cld_lock);
-
 	/* Now drop the lock so MGS can revoke it */
 	if (!rcl)
 		ldlm_lock_decref(&lockh, LCK_CR);
+
+	mutex_unlock(&cld->cld_lock);
 
 	return rc;
 }
