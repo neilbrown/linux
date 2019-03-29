@@ -50,7 +50,6 @@
 #include "mt6575_sd.h"
 #include <linux/seq_file.h>
 
-
 /* for debug zone */
 unsigned int sd_debug_zone[4] = {
 	0,
@@ -233,7 +232,6 @@ static ssize_t msdc_debug_proc_write(struct file *file,
 
 	int cmd, p1, p2;
 	int id, zone;
-	int mode, size;
 
 	if (count == 0)
 		return -1;
@@ -296,9 +294,18 @@ static const struct file_operations msdc_debug_fops = {
 	.release	= single_release,
 };
 
-void msdc_debug_proc_init(void)
+// Keep ahold of the proc entry we create so it can be freed during
+// module removal
+struct proc_dir_entry *msdc_debug_proc_entry;
+
+void __init msdc_debug_proc_init(void)
 {
-	proc_create("msdc_debug", 0660, NULL, &msdc_debug_fops);
+	msdc_debug_proc_entry = proc_create("msdc_debug", 0660,
+					    NULL, &msdc_debug_fops);
 }
-EXPORT_SYMBOL_GPL(msdc_debug_proc_init);
+
+void __exit msdc_debug_proc_deinit(void)
+{
+	proc_remove(msdc_debug_proc_entry);
+}
 #endif

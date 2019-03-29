@@ -14,69 +14,71 @@
 #include <mt7621.h>
 #include <ralink_regs.h>
 
-#define RALINK_CLKCFG1			0x30
-#define CHIP_REV_MT7621_E2		0x0101
+#define RALINK_CLKCFG1				0x30
+#define CHIP_REV_MT7621_E2			0x0101
 
-#define PCIE_PORT_CLK_EN(x)		BIT(24 + (x))
+#define PCIE_PORT_CLK_EN(x)			BIT(24 + (x))
 
-#define RG_PE1_PIPE_REG			0x02c
-#define RG_PE1_PIPE_RST			BIT(12)
-#define RG_PE1_PIPE_CMD_FRC		BIT(4)
+#define RG_PE1_PIPE_REG				0x02c
+#define RG_PE1_PIPE_RST				BIT(12)
+#define RG_PE1_PIPE_CMD_FRC			BIT(4)
 
-#define RG_P0_TO_P1_WIDTH		0x100
-#define RG_PE1_H_LCDDS_REG		0x49c
-#define RG_PE1_H_LCDDS_PCW		GENMASK(30, 0)
-#define RG_PE1_H_LCDDS_PCW_VAL(x)	((0x7fffffff & (x)) << 0)
+#define RG_P0_TO_P1_WIDTH			0x100
+#define RG_PE1_H_LCDDS_REG			0x49c
+#define RG_PE1_H_LCDDS_PCW			GENMASK(30, 0)
+#define RG_PE1_H_LCDDS_PCW_VAL(x)		((0x7fffffff & (x)) << 0)
 
-#define RG_PE1_FRC_H_XTAL_REG		0x400
-#define RG_PE1_FRC_H_XTAL_TYPE          BIT(8)
-#define RG_PE1_H_XTAL_TYPE              GENMASK(10, 9)
-#define RG_PE1_H_XTAL_TYPE_VAL(x)       ((0x3 & (x)) << 9)
+#define RG_PE1_FRC_H_XTAL_REG			0x400
+#define RG_PE1_FRC_H_XTAL_TYPE			BIT(8)
+#define RG_PE1_H_XTAL_TYPE			GENMASK(10, 9)
+#define RG_PE1_H_XTAL_TYPE_VAL(x)		((0x3 & (x)) << 9)
 
-#define RG_PE1_FRC_PHY_REG		0x000
-#define RG_PE1_FRC_PHY_EN               BIT(4)
-#define RG_PE1_PHY_EN                   BIT(5)
+#define RG_PE1_FRC_PHY_REG			0x000
+#define RG_PE1_FRC_PHY_EN			BIT(4)
+#define RG_PE1_PHY_EN				BIT(5)
 
-#define RG_PE1_H_PLL_REG		0x490
-#define RG_PE1_H_PLL_BC			GENMASK(23, 22)
-#define RG_PE1_H_PLL_BC_VAL(x)		((0x3 & (x)) << 22)
-#define RG_PE1_H_PLL_BP			GENMASK(21, 18)
-#define RG_PE1_H_PLL_BP_VAL(x)		((0xf & (x)) << 18)
-#define RG_PE1_H_PLL_IR			GENMASK(15, 12)
-#define RG_PE1_H_PLL_IR_VAL(x)		((0xf & (x)) << 12)
-#define RG_PE1_H_PLL_IC			GENMASK(11, 8)
-#define RG_PE1_H_PLL_IC_VAL(x)		((0xf & (x)) << 8)
-#define RG_PE1_H_PLL_PREDIV             GENMASK(7, 6)
-#define RG_PE1_H_PLL_PREDIV_VAL(x)      ((0x3 & (x)) << 6)
-#define RG_PE1_PLL_DIVEN		GENMASK(3, 1)
-#define RG_PE1_PLL_DIVEN_VAL(x)		((0x7 & (x)) << 1)
+#define RG_PE1_H_PLL_REG			0x490
+#define RG_PE1_H_PLL_BC				GENMASK(23, 22)
+#define RG_PE1_H_PLL_BC_VAL(x)			((0x3 & (x)) << 22)
+#define RG_PE1_H_PLL_BP				GENMASK(21, 18)
+#define RG_PE1_H_PLL_BP_VAL(x)			((0xf & (x)) << 18)
+#define RG_PE1_H_PLL_IR				GENMASK(15, 12)
+#define RG_PE1_H_PLL_IR_VAL(x)			((0xf & (x)) << 12)
+#define RG_PE1_H_PLL_IC				GENMASK(11, 8)
+#define RG_PE1_H_PLL_IC_VAL(x)			((0xf & (x)) << 8)
+#define RG_PE1_H_PLL_PREDIV			GENMASK(7, 6)
+#define RG_PE1_H_PLL_PREDIV_VAL(x)		((0x3 & (x)) << 6)
+#define RG_PE1_PLL_DIVEN			GENMASK(3, 1)
+#define RG_PE1_PLL_DIVEN_VAL(x)			((0x7 & (x)) << 1)
 
-#define RG_PE1_H_PLL_FBKSEL_REG		0x4bc
-#define RG_PE1_H_PLL_FBKSEL             GENMASK(5, 4)
-#define RG_PE1_H_PLL_FBKSEL_VAL(x)      ((0x3 & (x)) << 4)
+#define RG_PE1_H_PLL_FBKSEL_REG			0x4bc
+#define RG_PE1_H_PLL_FBKSEL			GENMASK(5, 4)
+#define RG_PE1_H_PLL_FBKSEL_VAL(x)		((0x3 & (x)) << 4)
 
-#define	RG_PE1_H_LCDDS_SSC_PRD_REG	0x4a4
-#define RG_PE1_H_LCDDS_SSC_PRD          GENMASK(15, 0)
-#define RG_PE1_H_LCDDS_SSC_PRD_VAL(x)   ((0xffff & (x)) << 0)
+#define	RG_PE1_H_LCDDS_SSC_PRD_REG		0x4a4
+#define RG_PE1_H_LCDDS_SSC_PRD			GENMASK(15, 0)
+#define RG_PE1_H_LCDDS_SSC_PRD_VAL(x)		((0xffff & (x)) << 0)
 
-#define RG_PE1_H_LCDDS_SSC_DELTA_REG	0x4a8
-#define RG_PE1_H_LCDDS_SSC_DELTA        GENMASK(11, 0)
-#define RG_PE1_H_LCDDS_SSC_DELTA_VAL(x) ((0xfff & (x)) << 0)
-#define RG_PE1_H_LCDDS_SSC_DELTA1       GENMASK(27, 16)
-#define RG_PE1_H_LCDDS_SSC_DELTA1_VAL(x) ((0xff & (x)) << 16)
+#define RG_PE1_H_LCDDS_SSC_DELTA_REG		0x4a8
+#define RG_PE1_H_LCDDS_SSC_DELTA		GENMASK(11, 0)
+#define RG_PE1_H_LCDDS_SSC_DELTA_VAL(x)		((0xfff & (x)) << 0)
+#define RG_PE1_H_LCDDS_SSC_DELTA1		GENMASK(27, 16)
+#define RG_PE1_H_LCDDS_SSC_DELTA1_VAL(x)	((0xff & (x)) << 16)
 
-#define RG_PE1_LCDDS_CLK_PH_INV_REG	0x4a0
-#define RG_PE1_LCDDS_CLK_PH_INV		BIT(5)
+#define RG_PE1_LCDDS_CLK_PH_INV_REG		0x4a0
+#define RG_PE1_LCDDS_CLK_PH_INV			BIT(5)
 
-#define RG_PE1_H_PLL_BR_REG		0x4ac
-#define RG_PE1_H_PLL_BR			GENMASK(18, 16)
-#define RG_PE1_H_PLL_BR_VAL(x)		((0x7 & (x)) << 16)
+#define RG_PE1_H_PLL_BR_REG			0x4ac
+#define RG_PE1_H_PLL_BR				GENMASK(18, 16)
+#define RG_PE1_H_PLL_BR_VAL(x)			((0x7 & (x)) << 16)
 
-#define	RG_PE1_MSTCKDIV_REG		0x414
-#define RG_PE1_MSTCKDIV			GENMASK(7, 6)
-#define RG_PE1_MSTCKDIV_VAL(x)		((0x3 & (x)) << 6)
+#define	RG_PE1_MSTCKDIV_REG			0x414
+#define RG_PE1_MSTCKDIV				GENMASK(7, 6)
+#define RG_PE1_MSTCKDIV_VAL(x)			((0x3 & (x)) << 6)
 
-#define RG_PE1_FRC_MSTCKDIV		BIT(5)
+#define RG_PE1_FRC_MSTCKDIV			BIT(5)
+
+#define MAX_PHYS	2
 
 /**
  * struct mt7621_pci_phy_instance - Mt7621 Pcie PHY device
@@ -289,6 +291,20 @@ static const struct phy_ops mt7621_pci_phy_ops = {
 	.owner		= THIS_MODULE,
 };
 
+static struct phy *mt7621_pcie_phy_of_xlate(struct device *dev,
+					    struct of_phandle_args *args)
+{
+	struct mt7621_pci_phy *mt7621_phy = dev_get_drvdata(dev);
+
+	if (args->args_count == 0)
+		return mt7621_phy->phys[0]->phy;
+
+	if (WARN_ON(args->args[0] >= MAX_PHYS))
+		return ERR_PTR(-ENODEV);
+
+	return mt7621_phy->phys[args->args[0]]->phy;
+}
+
 static int mt7621_pci_phy_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -304,7 +320,7 @@ static int mt7621_pci_phy_probe(struct platform_device *pdev)
 	if (!phy)
 		return -ENOMEM;
 
-	phy->nphys = of_get_child_count(np);
+	phy->nphys = MAX_PHYS;
 	phy->phys = devm_kcalloc(dev, phy->nphys,
 				 sizeof(*phy->phys), GFP_KERNEL);
 	if (!phy->phys)
@@ -325,8 +341,7 @@ static int mt7621_pci_phy_probe(struct platform_device *pdev)
 		return PTR_ERR(port_base);
 	}
 
-	port = 0;
-	for_each_child_of_node(np, child_np) {
+	for (port = 0; port < MAX_PHYS; port++) {
 		struct mt7621_pci_phy_instance *instance;
 		struct phy *pphy;
 
@@ -338,7 +353,7 @@ static int mt7621_pci_phy_probe(struct platform_device *pdev)
 
 		phy->phys[port] = instance;
 
-		pphy = devm_phy_create(dev, child_np, &mt7621_pci_phy_ops);
+		pphy = devm_phy_create(dev, dev->of_node, &mt7621_pci_phy_ops);
 		if (IS_ERR(phy)) {
 			dev_err(dev, "failed to create phy\n");
 			ret = PTR_ERR(phy);
@@ -349,10 +364,9 @@ static int mt7621_pci_phy_probe(struct platform_device *pdev)
 		instance->phy = pphy;
 		instance->index = port;
 		phy_set_drvdata(pphy, instance);
-		port++;
 	}
 
-	provider = devm_of_phy_provider_register(dev, of_phy_simple_xlate);
+	provider = devm_of_phy_provider_register(dev, mt7621_pcie_phy_of_xlate);
 
 	return PTR_ERR_OR_ZERO(provider);
 

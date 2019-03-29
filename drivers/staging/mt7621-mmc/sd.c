@@ -100,7 +100,6 @@ static int cd_active_low = 1;
 struct msdc_hw msdc0_hw = {
 	.clk_src        = 0,
 	.flags          = MSDC_CD_PIN_EN | MSDC_REMOVABLE,
-//	.flags          = MSDC_WP_PIN_EN | MSDC_CD_PIN_EN | MSDC_REMOVABLE,
 };
 
 /* end of +++ */
@@ -168,10 +167,10 @@ static u32 hclks[] = {50000000}; /* +/- by chhung */
 #define PHYSADDR(a)             ((a) & 0x1fffffff)
 #endif
 /* end of +++ */
-static unsigned int msdc_do_command(struct msdc_host   *host,
-				    struct mmc_command *cmd,
-				    int                 tune,
-				    unsigned long       timeout);
+static int msdc_do_command(struct msdc_host   *host,
+		           struct mmc_command *cmd,
+			   int                 tune,
+		           unsigned long       timeout);
 
 static int msdc_tune_cmdrsp(struct msdc_host *host, struct mmc_command *cmd);
 
@@ -210,7 +209,6 @@ static void msdc_tasklet_card(struct work_struct *work)
 	host->card_inserted = inserted;
 
 	if (!host->suspend) {
-		host->mmc->f_max = HOST_MAX_MCLK;
 		mmc_detect_change(host->mmc, msecs_to_jiffies(20));
 	}
 
@@ -468,7 +466,11 @@ static unsigned int msdc_command_start(struct msdc_host   *host,
 	host->cmd     = cmd;
 	host->cmd_rsp = resp;
 
-	init_completion(&host->cmd_done);
+	// The completion should have been consumed by the previous command
+	// response handler, because the mmc requests should be serialized
+	if (completion_done(&host->cmd_done))
+		dev_err(mmc_dev(host->mmc),
+			"previous command was not handled\n");
 
 	sdr_set_bits(host->base + MSDC_INTEN, wints);
 	sdc_send_cmd(rawcmd, cmd->arg);
@@ -490,11 +492,10 @@ static unsigned int msdc_command_resp(struct msdc_host   *host,
 		    MSDC_INT_ACMD19_DONE;
 
 	BUG_ON(in_interrupt());
-	//init_completion(&host->cmd_done);
 	//sdr_set_bits(host->base + MSDC_INTEN, wints);
 
 	spin_unlock(&host->lock);
-	if (!wait_for_completion_timeout(&host->cmd_done, 10 * timeout)) {
+	if (!wait_for_completion_io_timeout(&host->cmd_done, 10 * timeout)) {
 		dev_err(mmc_dev(host->mmc),
 			"%d -> XXX CMD<%d> wait_for_completion timeout ARG<0x%.8x>\n",
 			host->id, opcode, cmd->arg);
@@ -535,10 +536,10 @@ static unsigned int msdc_command_resp(struct msdc_host   *host,
 	return cmd->error;
 }
 
-static unsigned int msdc_do_command(struct msdc_host   *host,
-				    struct mmc_command *cmd,
-				    int                 tune,
-				    unsigned long       timeout)
+static int msdc_do_command(struct msdc_host   *host,
+			   struct mmc_command *cmd,
+			   int                 tune,
+		           unsigned long       timeout)
 {
 	if (msdc_command_start(host, cmd, timeout))
 		goto end;
@@ -593,8 +594,6 @@ static void msdc_dma_setup(struct msdc_host *host, struct msdc_dma *dma,
 	struct bd *bd;
 	u32 j;
 
-	BUG_ON(sglen > MAX_BD_NUM); /* not support currently */
-
 	gpd = dma->gpd;
 	bd  = dma->bd;
 
@@ -622,8 +621,8 @@ static void msdc_dma_setup(struct msdc_host *host, struct msdc_dma *dma,
 	}
 
 	sdr_set_field(host->base + MSDC_DMA_CFG, MSDC_DMA_CFG_DECSEN, 1);
-	sdr_set_field(host->base + MSDC_DMA_CTRL, MSDC_DMA_CTRL_BRUSTSZ,
-		      MSDC_BRUST_64B);
+	sdr_set_field(host->base + MSDC_DMA_CTRL, MSDC_DMA_CTRL_BURSTSZ,
+		      MSDC_BURST_64B);
 	sdr_set_field(host->base + MSDC_DMA_CTRL, MSDC_DMA_CTRL_MODE, 1);
 
 	writel(PHYSADDR((u32)dma->gpd_addr), host->base + MSDC_DMA_SA);
@@ -674,7 +673,13 @@ static int msdc_do_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		//msdc_clr_fifo(host);  /* no need */
 
 		msdc_dma_on();  /* enable DMA mode first!! */
-		init_completion(&host->xfer_done);
+
+		// The completion should have been consumed by the previous
+		// xfer response handler, because the mmc requests should be
+		// serialized
+		if (completion_done(&host->cmd_done))
+			dev_err(mmc_dev(host->mmc),
+				"previous transfer was not handled\n");
 
 		/* start the command first*/
 		if (msdc_command_start(host, cmd, CMD_TIMEOUT) != 0)
@@ -683,21 +688,27 @@ static int msdc_do_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		data->sg_count = dma_map_sg(mmc_dev(mmc), data->sg,
 					    data->sg_len,
 					    mmc_get_dma_dir(data));
+
+		if (data->sg_count == 0) {
+			dev_err(mmc_dev(host->mmc), "failed to map DMA for transfer\n");
+			data->error = -ENOMEM;
+			goto done;
+		}
+
 		msdc_dma_setup(host, &host->dma, data->sg,
 			       data->sg_count);
 
 		/* then wait command done */
 		if (msdc_command_resp(host, cmd, 1, CMD_TIMEOUT) != 0)
-			goto done;
+			goto unmap;
 
 		/* for read, the data coming too fast, then CRC error
 		 *  start DMA no business with CRC.
 		 */
-		//init_completion(&host->xfer_done);
 		msdc_dma_start(host);
 
 		spin_unlock(&host->lock);
-		if (!wait_for_completion_timeout(&host->xfer_done, DAT_TIMEOUT)) {
+		if (!wait_for_completion_io_timeout(&host->xfer_done, DAT_TIMEOUT)) {
 			dev_err(mmc_dev(host->mmc),
 				"%d -> XXX CMD<%d> wait xfer_done<%d> timeout!!\n",
 				host->id, cmd->opcode,
@@ -726,18 +737,17 @@ static int msdc_do_request(struct mmc_host *mmc, struct mmc_request *mrq)
 		/* Last: stop transfer */
 		if (data->stop) {
 			if (msdc_do_command(host, data->stop, 0, CMD_TIMEOUT) != 0)
-				goto done;
+				goto unmap;
 		}
-	}
 
-done:
-	if (data) {
+unmap:
 		host->data = NULL;
 		dma_unmap_sg(mmc_dev(mmc), data->sg, data->sg_len,
 			     mmc_get_dma_dir(data));
 		host->blksz = 0;
 	}
 
+done:
 	if (mrq->cmd->error)
 		host->error = 0x001;
 	if (mrq->data && mrq->data->error)
@@ -752,7 +762,6 @@ static int msdc_app_cmd(struct mmc_host *mmc, struct msdc_host *host)
 {
 	struct mmc_command cmd;
 	struct mmc_request mrq;
-	u32 err;
 
 	memset(&cmd, 0, sizeof(struct mmc_command));
 	cmd.opcode = MMC_APP_CMD;
@@ -763,8 +772,7 @@ static int msdc_app_cmd(struct mmc_host *mmc, struct msdc_host *host)
 	mrq.cmd = &cmd; cmd.mrq = &mrq;
 	cmd.data = NULL;
 
-	err = msdc_do_command(host, &cmd, 0, CMD_TIMEOUT);
-	return err;
+	return msdc_do_command(host, &cmd, 0, CMD_TIMEOUT);
 }
 
 static int msdc_tune_cmdrsp(struct msdc_host *host, struct mmc_command *cmd)
@@ -1348,7 +1356,7 @@ static irqreturn_t msdc_irq(int irq, void *dev_id)
 	if (intsts & MSDC_INT_CDSC) {
 		if (host->mmc->caps & MMC_CAP_NEEDS_POLL)
 			return IRQ_HANDLED;
-		schedule_delayed_work(&host->card_delaywork, HZ);
+		schedule_delayed_work(&host->card_delaywork, 0);
 		/* tuning when plug card ? */
 	}
 
@@ -1671,7 +1679,6 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	host->timeout_clks = DEFAULT_DTOC * 65536;
 
 	host->mrq = NULL;
-	//init_MUTEX(&host->sem); /* we don't need to support multiple threads access */
 
 	dma_coerce_mask_and_coherent(mmc_dev(mmc), DMA_BIT_MASK(32));
 
@@ -1688,6 +1695,8 @@ static int msdc_drv_probe(struct platform_device *pdev)
 	}
 	msdc_init_gpd_bd(host, &host->dma);
 
+	init_completion(&host->cmd_done);
+	init_completion(&host->xfer_done);
 	INIT_DELAYED_WORK(&host->card_delaywork, msdc_tasklet_card);
 	spin_lock_init(&host->lock);
 	msdc_init_hw(host);
@@ -1824,12 +1833,6 @@ static struct platform_driver mt_msdc_driver = {
 static int __init mt_msdc_init(void)
 {
 	int ret;
-	u32 reg;
-
-	// Set the pins for sdxc to sdxc mode
-	//FIXME: this should be done by pinctl and not by the sd driver
-	reg = readl((void __iomem *)(RALINK_SYSCTL_BASE + 0x60)) & ~(0x3 << 18);
-	writel(reg, (void __iomem *)(RALINK_SYSCTL_BASE + 0x60));
 
 	ret = platform_driver_register(&mt_msdc_driver);
 	if (ret) {
@@ -1837,14 +1840,15 @@ static int __init mt_msdc_init(void)
 		return ret;
 	}
 
-#if defined(MT6575_SD_DEBUG)
 	msdc_debug_proc_init();
-#endif
+
 	return 0;
 }
 
 static void __exit mt_msdc_exit(void)
 {
+	msdc_debug_proc_deinit();
+
 	platform_driver_unregister(&mt_msdc_driver);
 }
 

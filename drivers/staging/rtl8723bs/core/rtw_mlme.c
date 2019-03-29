@@ -13,13 +13,13 @@
 
 extern u8 rtw_do_join(struct adapter *padapter);
 
-sint	_rtw_init_mlme_priv(struct adapter *padapter)
+int	rtw_init_mlme_priv(struct adapter *padapter)
 {
-	sint	i;
+	int	i;
 	u8 *pbuf;
 	struct wlan_network	*pnetwork;
 	struct mlme_priv 	*pmlmepriv = &padapter->mlmepriv;
-	sint	res = _SUCCESS;
+	int	res = _SUCCESS;
 
 	pmlmepriv->nic_hdl = (u8 *)padapter;
 
@@ -29,9 +29,9 @@ sint	_rtw_init_mlme_priv(struct adapter *padapter)
 	pmlmepriv->cur_network.network.InfrastructureMode = Ndis802_11AutoUnknown;
 	pmlmepriv->scan_mode = SCAN_ACTIVE;/*  1: active, 0: pasive. Maybe someday we should rename this varable to "active_mode" (Jeff) */
 
-	spin_lock_init(&(pmlmepriv->lock));
-	_rtw_init_queue(&(pmlmepriv->free_bss_pool));
-	_rtw_init_queue(&(pmlmepriv->scanned_queue));
+	spin_lock_init(&pmlmepriv->lock);
+	_rtw_init_queue(&pmlmepriv->free_bss_pool);
+	_rtw_init_queue(&pmlmepriv->scanned_queue);
 
 	set_scanned_network_val(pmlmepriv, 0);
 
@@ -48,9 +48,9 @@ sint	_rtw_init_mlme_priv(struct adapter *padapter)
 	pnetwork = (struct wlan_network *)pbuf;
 
 	for (i = 0; i < MAX_BSS_CNT; i++) {
-		INIT_LIST_HEAD(&(pnetwork->list));
+		INIT_LIST_HEAD(&pnetwork->list);
 
-		list_add_tail(&(pnetwork->list), &(pmlmepriv->free_bss_pool.queue));
+		list_add_tail(&pnetwork->list, &pmlmepriv->free_bss_pool.queue);
 
 		pnetwork++;
 	}
@@ -143,7 +143,7 @@ struct	wlan_network *_rtw_dequeue_network(struct __queue *queue)
 }
 */
 
-struct	wlan_network *_rtw_alloc_network(struct	mlme_priv *pmlmepriv)/* _queue *free_queue) */
+struct	wlan_network *rtw_alloc_network(struct	mlme_priv *pmlmepriv)
 {
 	struct	wlan_network	*pnetwork;
 	struct __queue *free_queue = &pmlmepriv->free_bss_pool;
@@ -161,7 +161,8 @@ struct	wlan_network *_rtw_alloc_network(struct	mlme_priv *pmlmepriv)/* _queue *f
 
 	list_del_init(&pnetwork->list);
 
-	RT_TRACE(_module_rtl871x_mlme_c_, _drv_info_, ("_rtw_alloc_network: ptr =%p\n", plist));
+	RT_TRACE(_module_rtl871x_mlme_c_, _drv_info_,
+		 ("rtw_alloc_network: ptr =%p\n", plist));
 	pnetwork->network_type = 0;
 	pnetwork->fixed = false;
 	pnetwork->last_scanned = jiffies;
@@ -350,15 +351,6 @@ u8 *rtw_get_beacon_interval_from_ie(u8 *ie)
 	return (ie + 8);
 }
 
-
-int	rtw_init_mlme_priv(struct adapter *padapter)/* struct	mlme_priv *pmlmepriv) */
-{
-	int	res;
-
-	res = _rtw_init_mlme_priv(padapter);/*  (pmlmepriv); */
-	return res;
-}
-
 void rtw_free_mlme_priv(struct mlme_priv *pmlmepriv)
 {
 	RT_TRACE(_module_rtl871x_mlme_c_, _drv_err_, ("rtw_free_mlme_priv\n"));
@@ -374,15 +366,6 @@ static struct	wlan_network *rtw_dequeue_network(struct __queue *queue)
 	return pnetwork;
 }
 */
-
-struct	wlan_network *rtw_alloc_network(struct	mlme_priv *pmlmepriv);
-struct	wlan_network *rtw_alloc_network(struct	mlme_priv *pmlmepriv)/* _queue	*free_queue) */
-{
-	struct	wlan_network	*pnetwork;
-
-	pnetwork = _rtw_alloc_network(pmlmepriv);
-	return pnetwork;
-}
 
 void rtw_free_network_nolock(struct adapter *padapter, struct wlan_network *pnetwork);
 void rtw_free_network_nolock(struct adapter *padapter, struct wlan_network *pnetwork)
@@ -943,13 +926,6 @@ void rtw_surveydone_event_callback(struct adapter	*adapter, u8 *pbuf)
 						|| _SUCCESS != rtw_sitesurvey_cmd(adapter, &pmlmepriv->assoc_ssid, 1, NULL, 0)
 					) {
 						rtw_set_to_roam(adapter, 0);
-#ifdef CONFIG_INTEL_WIDI
-						if (adapter->mlmepriv.widi_state == INTEL_WIDI_STATE_ROAMING) {
-							memset(pmlmepriv->sa_ext, 0x00, L2SDTA_SERVICE_VE_LEN);
-							intel_widi_wk_cmd(adapter, INTEL_WIDI_LISTEN_WK, NULL, 0);
-							DBG_871X("change to widi listen\n");
-						}
-#endif /*  CONFIG_INTEL_WIDI */
 						rtw_free_assoc_resources(adapter, 1);
 						rtw_indicate_disconnect(adapter);
 					} else {
@@ -1108,14 +1084,6 @@ void rtw_indicate_connect(struct adapter *padapter)
 	}
 
 	rtw_set_to_roam(padapter, 0);
-#ifdef CONFIG_INTEL_WIDI
-	if (padapter->mlmepriv.widi_state == INTEL_WIDI_STATE_ROAMING) {
-		memset(pmlmepriv->sa_ext, 0x00, L2SDTA_SERVICE_VE_LEN);
-		intel_widi_wk_cmd(padapter, INTEL_WIDI_LISTEN_WK, NULL, 0);
-		DBG_871X("change to widi listen\n");
-	}
-#endif /*  CONFIG_INTEL_WIDI */
-
 	rtw_set_scan_deny(padapter, 3000);
 
 	RT_TRACE(_module_rtl871x_mlme_c_, _drv_err_, ("-rtw_indicate_connect: fw_state = 0x%08x\n", get_fwstate(pmlmepriv)));
@@ -1703,11 +1671,6 @@ void rtw_stadel_event_callback(struct adapter *adapter, u8 *pbuf)
 			roam = true;
 			roam_target = pmlmepriv->roam_network;
 		}
-#ifdef CONFIG_INTEL_WIDI
-		else if (adapter->mlmepriv.widi_state == INTEL_WIDI_STATE_CONNECTED) {
-			roam = true;
-		}
-#endif /*  CONFIG_INTEL_WIDI */
 
 		if (roam == true) {
 			if (rtw_to_roam(adapter) > 0)
@@ -1731,11 +1694,6 @@ void rtw_stadel_event_callback(struct adapter *adapter, u8 *pbuf)
 			rtw_free_network_nolock(adapter, pwlan);
 		}
 		spin_unlock_bh(&(pmlmepriv->scanned_queue.lock));
-
-#ifdef CONFIG_INTEL_WIDI
-		if (!rtw_to_roam(adapter))
-			process_intel_widi_disconnect(adapter, 1);
-#endif /*  CONFIG_INTEL_WIDI */
 
 		_rtw_roaming(adapter, roam_target);
 	}
@@ -1833,13 +1791,6 @@ void _rtw_join_timeout_handler(struct timer_list *t)
 				}
 				break;
 			} else {
-#ifdef CONFIG_INTEL_WIDI
-				if (adapter->mlmepriv.widi_state == INTEL_WIDI_STATE_ROAMING) {
-					memset(pmlmepriv->sa_ext, 0x00, L2SDTA_SERVICE_VE_LEN);
-					intel_widi_wk_cmd(adapter, INTEL_WIDI_LISTEN_WK, NULL, 0);
-					DBG_871X("change to widi listen\n");
-				}
-#endif /*  CONFIG_INTEL_WIDI */
 				DBG_871X("%s We've try roaming but fail\n", __func__);
 				rtw_indicate_disconnect(adapter);
 				break;
