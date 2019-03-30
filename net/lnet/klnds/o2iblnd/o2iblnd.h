@@ -106,9 +106,8 @@ extern struct kib_tunables  kiblnd_tunables;
 	 min((t)->lnd_peercredits_hiw,				\
 	     (u32)(conn)->ibc_queue_depth - 1))
 
-# define kiblnd_rdma_create_id(ns, cb, dev, ps, qpt) rdma_create_id(ns, cb, \
-								    dev, ps, \
-								    qpt)
+# define kiblnd_rdma_create_id(ns, cb, dev, ps, qpt) \
+	 rdma_create_id((ns) ? (ns) : &init_net, cb, dev, ps, qpt)
 /* 2 OOB shall suffice for 1 keepalive and 1 returning credits */
 #define IBLND_OOB_CAPABLE(v)	((v) != IBLND_MSG_VERSION_1)
 #define IBLND_OOB_MSGS(v)	(IBLND_OOB_CAPABLE(v) ? 2 : 0)

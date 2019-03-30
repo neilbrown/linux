@@ -4823,9 +4823,9 @@ LNetDist(lnet_nid_t dstnid, lnet_nid_t *srcnidp, u32 *orderp)
 			 * If not, assign order above 0xffff0000,
 			 * to make this ni not a priority.
 			 */
-			if (!net_eq(ni->ni_net_ns, current->nsproxy->net_ns))
+			if (current->nsproxy &&
+			    !net_eq(ni->ni_net_ns, current->nsproxy->net_ns))
 				order += 0xffff0000;
-
 			if (srcnidp)
 				*srcnidp = ni->ni_nid;
 			if (orderp)
