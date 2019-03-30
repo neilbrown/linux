@@ -381,17 +381,11 @@
 			compatible = "mediatek,eth-mac";
 			reg = <1>;
 			status = "off";
-			phy-mode = "rgmii";
-			phy-handle = <&phy5>;
+			phy-mode = "rgmii-rxid";
 		};
-		mdio-bus {
+		mdio: mdio-bus {
 			#address-cells = <1>;
 			#size-cells = <0>;
-
-			phy5: ethernet-phy@5 {
-				reg = <5>;
-				phy-mode = "rgmii";
-			};
 
 			switch0: switch0@0 {
 				compatible = "mediatek,mt7621";
