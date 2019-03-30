@@ -292,6 +292,9 @@
 		compatible = "ralink,mt7620-sdhci";
 		reg = <0x1E130000 0x4000>;
 
+		pinctrl-names = "default";
+		pinctrl-0 = <&sdhci_pins>;
+
 		interrupt-parent = <&gic>;
 		interrupts = <GIC_SHARED 20 IRQ_TYPE_LEVEL_HIGH>;
 	};
