@@ -2956,8 +2956,8 @@ static int spi_nor_init(struct spi_nor *nor)
 		 * reboots (e.g., crashes). Warn the user (or hopefully, system
 		 * designer) that this is bad.
 		 */
-		WARN_ONCE(nor->flags & SNOR_F_BROKEN_RESET,
-			  "enabling reset hack; may not recover from unexpected reboots\n");
+		//WARN_ONCE(nor->flags & SNOR_F_BROKEN_RESET,
+		//	  "enabling reset hack; may not recover from unexpected reboots\n");
 		nor->params->set_4byte_addr_mode(nor, true);
 	}
 
