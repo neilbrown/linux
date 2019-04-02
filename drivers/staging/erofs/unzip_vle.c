@@ -980,11 +980,13 @@ repeat:
 		DBG_BUGON(!page->mapping);
 
 		if (!z_erofs_is_stagingpage(page)) {
-			if (erofs_page_is_managed(sbi, page)) {
+#ifdef EROFS_FS_HAS_MANAGED_CACHE
+			if (page->mapping == MNGD_MAPPING(sbi)) {
 				if (unlikely(!PageUptodate(page)))
 					err = -EIO;
 				continue;
 			}
+#endif
 
 			/*
 			 * only if non-head page can be selected
@@ -1038,6 +1040,10 @@ repeat:
 
 skip_allocpage:
 	vout = erofs_vmap(pages, nr_pages);
+	if (!vout) {
+		err = -ENOMEM;
+		goto out;
+	}
 
 	err = z_erofs_vle_unzip_vmap(compressed_pages, clusterpages, vout,
 				     llen, work->pageofs, overlapped);
