@@ -722,7 +722,7 @@ unsigned long osc_ldlm_weigh_ast(struct ldlm_lock *dlmlock)
 	unlock_res_and_lock(dlmlock);
 
 	if (!obj) {
-		weight = 1;
+		weight = 0;
 		goto out;
 	}
 
