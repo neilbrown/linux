@@ -1037,13 +1037,14 @@ EXPORT_SYMBOL(cl_req_attr_set);
  *		anchor->csi_waitq.lock
  */
 void cl_sync_io_init_notify(struct cl_sync_io *anchor, int nr,
-			    cl_sync_io_end_t *end)
+			    struct cl_dio_aio *aio, cl_sync_io_end_t *end)
 {
 	memset(anchor, 0, sizeof(*anchor));
 	init_waitqueue_head(&anchor->csi_waitq);
 	atomic_set(&anchor->csi_sync_nr, nr);
 	anchor->csi_sync_rc = 0;
 	anchor->csi_end_io = end;
+	anchor->csi_aio = aio;
 }
 EXPORT_SYMBOL(cl_sync_io_init_notify);
 
@@ -1097,6 +1098,7 @@ void cl_sync_io_note(const struct lu_env *env, struct cl_sync_io *anchor,
 	LASSERT(atomic_read(&anchor->csi_sync_nr) > 0);
 	if (atomic_dec_and_lock(&anchor->csi_sync_nr,
 				&anchor->csi_waitq.lock)) {
+		struct cl_dio_aio *aio = NULL;
 
 		cl_sync_io_end_t *end_io = anchor->csi_end_io;
 
@@ -1108,10 +1110,16 @@ void cl_sync_io_note(const struct lu_env *env, struct cl_sync_io *anchor,
 		wake_up_all_locked(&anchor->csi_waitq);
 		if (end_io)
 			end_io(env, anchor);
+		if (anchor->csi_aio)
+			aio = anchor->csi_aio;
 
 		spin_unlock(&anchor->csi_waitq.lock);
 
-		/* Can't access anchor any more */
+		/**
+		 * If anchor->csi_aio is set, we are responsible for freeing
+		 * memory here rather than when cl_sync_io_wait() completes.
+		 */
+		kfree(aio);
 	}
 }
 EXPORT_SYMBOL(cl_sync_io_note);

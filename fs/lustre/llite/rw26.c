@@ -151,121 +151,155 @@ static int ll_releasepage(struct page *vmpage, gfp_t gfp_mask)
 	return result;
 }
 
-#define MAX_DIRECTIO_SIZE (2 * 1024 * 1024 * 1024UL)
-
-/*  ll_free_user_pages - tear down page struct array
- *  @pages: array of page struct pointers underlying target buffer
+/*
+ * ll_free_user_pages - tear down page struct array
+ * @pages: array of page struct pointers underlying target buffer
  */
-static void ll_free_user_pages(struct page **pages, int npages, int do_dirty)
+static void ll_free_user_pages(struct page **pages, int npages)
 {
 	int i;
 
-	for (i = 0; i < npages; i++) {
-		if (do_dirty)
-			set_page_dirty_lock(pages[i]);
+	for (i = 0; i < npages; i++)
 		put_page(pages[i]);
-	}
 	kvfree(pages);
 }
 
-static ssize_t ll_direct_IO_seg(const struct lu_env *env, struct cl_io *io,
-				int rw, struct inode *inode, size_t size,
-				loff_t file_offset, struct page **pages,
-				int page_count)
+static ssize_t ll_get_user_pages(int rw, struct iov_iter *iter,
+				struct page ***pages, ssize_t *npages,
+				size_t maxsize)
 {
-	struct cl_page *clp;
-	struct cl_2queue *queue;
+	size_t start;
+	size_t result;
+
+	result = iov_iter_get_pages_alloc(iter, pages, maxsize, &start);
+	if (result > 0)
+		*npages = DIV_ROUND_UP(result + start, PAGE_SIZE);
+
+	return result;
+}
+
+/* direct IO pages */
+struct ll_dio_pages {
+	struct cl_dio_aio	*ldp_aio;
+	/*
+	 * page array to be written. we don't support
+	 * partial pages except the last one.
+	 */
+	struct page		**ldp_pages;
+	/* # of pages in the array. */
+	size_t			ldp_count;
+	/* the file offset of the first page. */
+	loff_t			ldp_file_offset;
+};
+
+static void ll_aio_end(const struct lu_env *env, struct cl_sync_io *anchor)
+{
+	struct cl_dio_aio *aio = container_of(anchor, typeof(*aio), cda_sync);
+	ssize_t ret = anchor->csi_sync_rc;
+
+	/* release pages */
+	while (aio->cda_pages.pl_nr > 0) {
+		struct cl_page *page = cl_page_list_first(&aio->cda_pages);
+
+		cl_page_get(page);
+		cl_page_list_del(env, &aio->cda_pages, page);
+		cl_page_delete(env, page);
+		cl_page_put(env, page);
+	}
+
+	if (!is_sync_kiocb(aio->cda_iocb) && aio->cda_iocb->ki_complete)
+		aio->cda_iocb->ki_complete(aio->cda_iocb, ret ?: aio->cda_bytes,
+					   0);
+}
+
+static struct cl_dio_aio *ll_aio_alloc(struct kiocb *iocb)
+{
+	struct cl_dio_aio *aio;
+
+	aio = kzalloc(sizeof(*aio), GFP_NOFS);
+	if (aio) {
+		/*
+		 * Hold one ref so that it won't be released until
+		 * every pages is added.
+		 */
+		cl_sync_io_init_notify(&aio->cda_sync, 1,
+				       is_sync_kiocb(iocb) ? NULL : aio,
+				       ll_aio_end);
+		cl_page_list_init(&aio->cda_pages);
+		aio->cda_iocb = iocb;
+	}
+	return aio;
+}
+
+static int
+ll_direct_rw_pages(const struct lu_env *env, struct cl_io *io, size_t size,
+		   int rw, struct inode *inode, struct ll_dio_pages *pv)
+{
+	struct cl_page *page;
+	struct cl_2queue *queue = &io->ci_queue;
 	struct cl_object *obj = io->ci_obj;
+	struct cl_sync_io *anchor = &pv->ldp_aio->cda_sync;
+	loff_t offset = pv->ldp_file_offset;
+	int io_pages = 0;
+	size_t page_size = cl_page_size(obj);
 	int i;
 	ssize_t rc = 0;
-	size_t page_size = cl_page_size(obj);
-	size_t orig_size = size;
-	bool do_io;
-	int io_pages = 0;
 
-	queue = &io->ci_queue;
 	cl_2queue_init(queue);
-	for (i = 0; i < page_count; i++) {
-		LASSERT(!(file_offset & (page_size - 1)));
-		clp = cl_page_find(env, obj, cl_index(obj, file_offset),
-				   pages[i], CPT_TRANSIENT);
-		if (IS_ERR(clp)) {
-			rc = PTR_ERR(clp);
+	for (i = 0; i < pv->ldp_count; i++) {
+		LASSERT(!(offset & (PAGE_SIZE - 1)));
+		page = cl_page_find(env, obj, cl_index(obj, offset),
+				    pv->ldp_pages[i], CPT_TRANSIENT);
+		if (IS_ERR(page)) {
+			rc = PTR_ERR(page);
 			break;
 		}
-
-		rc = cl_page_own(env, io, clp);
+		LASSERT(page->cp_type == CPT_TRANSIENT);
+		rc = cl_page_own(env, io, page);
 		if (rc) {
-			LASSERT(clp->cp_state == CPS_FREEING);
-			cl_page_put(env, clp);
+			cl_page_put(env, page);
 			break;
 		}
 
-		do_io = true;
+		page->cp_sync_io = anchor;
+		cl_page_list_add(&queue->c2_qin, page);
 
-		/* check the page type: if the page is a host page, then do
-		 * write directly
+		/*
+		 * Set page clip to tell transfer formation engine
+		 * that page has to be sent even if it is beyond KMS.
 		 */
-		if (clp->cp_type == CPT_CACHEABLE) {
-			struct page *vmpage = cl_page_vmpage(clp);
-			struct page *src_page;
-			struct page *dst_page;
-			void *src;
-			void *dst;
-
-			src_page = (rw == WRITE) ? pages[i] : vmpage;
-			dst_page = (rw == WRITE) ? vmpage : pages[i];
-
-			src = kmap_atomic(src_page);
-			dst = kmap_atomic(dst_page);
-			memcpy(dst, src, min(page_size, size));
-			kunmap_atomic(dst);
-			kunmap_atomic(src);
-
-			/* make sure page will be added to the transfer by
-			 * cl_io_submit()->...->vvp_page_prep_write().
-			 */
-			if (rw == WRITE)
-				set_page_dirty(vmpage);
-
-			if (rw == READ) {
-				/* do not issue the page for read, since it
-				 * may reread a ra page which has NOT uptodate
-				 * bit set.
-				 */
-				cl_page_disown(env, io, clp);
-				do_io = false;
-			}
-		}
-
-		if (likely(do_io)) {
-			/*
-			 * Add a page to the incoming page list of 2-queue.
-			 */
-			cl_page_list_add(&queue->c2_qin, clp);
-
-			/*
-			 * Set page clip to tell transfer formation engine
-			 * that page has to be sent even if it is beyond KMS.
-			 */
-			cl_page_clip(env, clp, 0, min(size, page_size));
-
-			++io_pages;
-		}
+		cl_page_clip(env, page, 0, min(size, page_size));
+		++io_pages;
 
 		/* drop the reference count for cl_page_find */
-		cl_page_put(env, clp);
+		cl_page_put(env, page);
+		offset += page_size;
 		size -= page_size;
-		file_offset += page_size;
 	}
+	if (rc == 0 && io_pages > 0) {
+		int iot = rw == READ ? CRT_READ : CRT_WRITE;
 
-	if (rc == 0 && io_pages) {
-		rc = cl_io_submit_sync(env, io,
-				       rw == READ ? CRT_READ : CRT_WRITE,
-				       queue, 0);
+		atomic_add(io_pages, &anchor->csi_sync_nr);
+		rc = cl_io_submit_rw(env, io, iot, queue);
+		if (rc == 0) {
+			cl_page_list_splice(&queue->c2_qout,
+					&pv->ldp_aio->cda_pages);
+		} else {
+			atomic_add(-queue->c2_qin.pl_nr,
+				   &anchor->csi_sync_nr);
+			cl_page_list_for_each(page, &queue->c2_qin)
+				page->cp_sync_io = NULL;
+		}
+
+		/* handle partially submitted reqs */
+		if (queue->c2_qin.pl_nr > 0) {
+			CERROR(DFID " failed to submit %d dio pages: %zd\n",
+			       PFID(lu_object_fid(&obj->co_lu)),
+			       queue->c2_qin.pl_nr, rc);
+			if (rc == 0)
+				rc = -EIO;
+		}
 	}
-	if (rc == 0)
-		rc = orig_size;
 
 	cl_2queue_discard(env, io, queue);
 	cl_2queue_disown(env, io, queue);
@@ -289,13 +323,14 @@ static ssize_t ll_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	struct cl_io *io;
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file->f_mapping->host;
-	loff_t file_offset = iocb->ki_pos;
-	ssize_t count = iov_iter_count(iter);
+	struct cl_dio_aio *aio;
+	size_t count = iov_iter_count(iter);
 	ssize_t tot_bytes = 0, result = 0;
-	long size = MAX_DIO_SIZE;
+	loff_t file_offset = iocb->ki_pos;
+	int rw = iov_iter_rw(iter);
 
 	/* Check EOF by ourselves */
-	if (iov_iter_rw(iter) == READ && file_offset >= i_size_read(inode))
+	if (rw == READ && file_offset >= i_size_read(inode))
 		return 0;
 
 	/* FIXME: io smaller than PAGE_SIZE is broken on ia64 ??? */
@@ -321,60 +356,67 @@ static ssize_t ll_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	io = lcc->lcc_io;
 	LASSERT(io);
 
-	while (iov_iter_count(iter)) {
-		struct page **pages;
-		size_t offs;
+	aio = ll_aio_alloc(iocb);
+	if (!aio)
+		return -ENOMEM;
 
-		count = min_t(size_t, iov_iter_count(iter), size);
-		if (iov_iter_rw(iter) == READ) {
+	while (iov_iter_count(iter)) {
+		struct ll_dio_pages pvec = { .ldp_aio = aio };
+		struct page **pages;
+
+		count = min_t(size_t, iov_iter_count(iter), MAX_DIO_SIZE);
+		if (rw == READ) {
 			if (file_offset >= i_size_read(inode))
 				break;
 			if (file_offset + count > i_size_read(inode))
 				count = i_size_read(inode) - file_offset;
 		}
 
-		result = iov_iter_get_pages_alloc(iter, &pages, count, &offs);
-		if (likely(result > 0)) {
-			int n = DIV_ROUND_UP(result + offs, PAGE_SIZE);
-
-			result = ll_direct_IO_seg(env, io, iov_iter_rw(iter),
-						  inode, result, file_offset,
-						  pages, n);
-			ll_free_user_pages(pages, n, iov_iter_rw(iter) == READ);
-		}
-		if (unlikely(result <= 0)) {
-			/* If we can't allocate a large enough buffer
-			 * for the request, shrink it to a smaller
-			 * PAGE_SIZE multiple and try again.
-			 * We should always be able to kmalloc for a
-			 * page worth of page pointers = 4MB on i386.
-			 */
-			if (result == -ENOMEM &&
-			    size > (PAGE_SIZE / sizeof(*pages)) *
-			    PAGE_SIZE) {
-				size = ((((size / 2) - 1) |
-					 ~PAGE_MASK) + 1) &
-					PAGE_MASK;
-				CDEBUG(D_VFSTRACE, "DIO size now %lu\n",
-				       size);
-				continue;
-			}
-
+		result = ll_get_user_pages(rw, iter, &pages,
+					   &pvec.ldp_count, count);
+		if (unlikely(result <= 0))
 			goto out;
-		}
-		iov_iter_advance(iter, result);
-		tot_bytes += result;
-		file_offset += result;
+
+		count = result;
+		pvec.ldp_file_offset = file_offset;
+		pvec.ldp_pages = pages;
+
+		result = ll_direct_rw_pages(env, io, count,
+					    rw, inode, &pvec);
+		ll_free_user_pages(pages, pvec.ldp_count);
+
+		if (unlikely(result < 0))
+			goto out;
+
+		iov_iter_advance(iter, count);
+		tot_bytes += count;
+		file_offset += count;
 	}
+
 out:
-	if (tot_bytes > 0) {
-		struct vvp_io *vio = vvp_env_io(env);
+	aio->cda_bytes = tot_bytes;
+	cl_sync_io_note(env, &aio->cda_sync, result);
 
-		/* no commit async for direct IO */
-		vio->u.write.vui_written += tot_bytes;
+	if (is_sync_kiocb(iocb)) {
+		ssize_t rc2;
+
+		rc2 = cl_sync_io_wait(env, &aio->cda_sync, 0);
+		if (result == 0 && rc2)
+			result = rc2;
+
+		if (result == 0) {
+			struct vvp_io *vio = vvp_env_io(env);
+
+			/* no commit async for direct IO */
+			vio->u.write.vui_written += tot_bytes;
+			result = tot_bytes;
+		}
+		kfree(aio);
+	} else {
+		result = -EIOCBQUEUED;
 	}
 
-	return tot_bytes ? tot_bytes : result;
+	return result;
 }
 
 /**
