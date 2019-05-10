@@ -396,261 +396,6 @@ int sysfs_memparse(const char *buffer, size_t count, u64 *val,
 }
 EXPORT_SYMBOL(sysfs_memparse);
 
-/* Obtains the conversion factor for the unit specified */
-static int get_mult(char unit, u64 *mult)
-{
-	u64 units = 1;
-
-	switch (unit) {
-	/* peta, tera, giga, mega, and kilo */
-	case 'p':
-	case 'P':
-		units <<= 10;
-		/* fallthrough */
-	case 't':
-	case 'T':
-		units <<= 10;
-		/* fallthrough */
-	case 'g':
-	case 'G':
-		units <<= 10;
-		/* fallthrough */
-	case 'm':
-	case 'M':
-		units <<= 10;
-		/* fallthrough */
-	case 'k':
-	case 'K':
-		units <<= 10;
-		break;
-	/* some tests expect % to be accepted */
-	case '%':
-		units = 1;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	*mult = units;
-
-	return 0;
-}
-
-/*
- * Ensures the numeric string is valid. The function provides the final
- * multiplier in the case a unit exists at the end of the string. It also
- * locates the start of the whole and fractional parts (if any). This
- * function modifies the string so kstrtoull can be used to parse both
- * the whole and fraction portions. This function also figures out
- * the base of the number.
- */
-static int preprocess_numeric_str(char *buffer,u64 *mult, u64 def_mult,
-				  bool allow_units, char **whole, char **frac,
-				  unsigned int *base)
-{
-	bool hit_decimal = false;
-	bool hit_unit = false;
-	int rc = 0;
-	char *start;
-	*mult = def_mult;
-	*whole = NULL;
-	*frac = NULL;
-	*base = 10;
-
-	/* a hex string if it starts with "0x" */
-	if (buffer[0] == '0' && tolower(buffer[1]) == 'x') {
-		*base = 16;
-		buffer += 2;
-	}
-
-	start = buffer;
-
-	while (*buffer) {
-		/* allow for a single new line before the null terminator */
-		if (*buffer == '\n') {
-			*buffer = '\0';
-			buffer++;
-
-			if (*buffer)
-				return -EINVAL;
-
-			break;
-		}
-
-		/* any chars after our unit indicates a malformed string */
-		if (hit_unit)
-			return -EINVAL;
-
-		/* ensure we only hit one decimal */
-		if (*buffer == '.') {
-			if (hit_decimal)
-				return -EINVAL;
-
-			/* if past start, there's a whole part */
-			if (start != buffer)
-				*whole = start;
-
-			*buffer = '\0';
-			start = buffer + 1;
-			hit_decimal = true;
-		} else if (!isdigit(*buffer) &&
-			   !(*base == 16 && isxdigit(*buffer))) {
-			if (allow_units) {
-				/* if we allow units, attempt to get mult */
-				hit_unit = true;
-				rc = get_mult(*buffer, mult);
-				if (rc)
-					return rc;
-
-				/* string stops here, but keep processing */
-				*buffer = '\0';
-			} else {
-				/* bad string */
-				return -EINVAL;
-			}
-		}
-
-		buffer++;
-	}
-
-	if (hit_decimal) {
-		/* hit a decimal, make sure there's a fractional part */
-		if (!*start)
-			return -EINVAL;
-
-		*frac = start;
-	} else {
-		/* didn't hit a decimal, but may have a whole part */
-		if (start != buffer && *start)
-			*whole = start;
-	}
-
-	/* malformed string if we didn't get anything */
-	if (!*frac && !*whole)
-		return -EINVAL;
-
-	return 0;
-}
-
-/*
- * Parses a numeric string which can contain a whole and fraction portion
- * into a u64. Accepts a multiplier to apply to the value parsed. Also
- * allows the string to have a unit at the end. The function handles
- * wrapping of the final unsigned value.
- */
-static int str_to_u64_parse(char *buffer, unsigned long count,
-			    u64 *val, u64 def_mult, bool allow_units)
-{
-	u64 whole = 0;
-	u64 frac = 0;
-	unsigned int frac_d = 1;
-	u64 wrap_indicator = ULLONG_MAX;
-	int rc = 0;
-	u64 mult;
-	char *strwhole;
-	char *strfrac;
-	unsigned int base = 10;
-
-	rc = preprocess_numeric_str(buffer, &mult, def_mult, allow_units,
-				    &strwhole, &strfrac, &base);
-
-	if (rc)
-		return rc;
-
-	if (mult == 0) {
-		*val = 0;
-		return 0;
-	}
-
-	/* the multiplier limits how large the value can be */
-	wrap_indicator = div64_u64(wrap_indicator, mult);
-
-	if (strwhole) {
-		rc = kstrtoull(strwhole, base, &whole);
-		if (rc)
-			return rc;
-
-		if (whole > wrap_indicator)
-			return -ERANGE;
-
-		whole *= mult;
-	}
-
-	if (strfrac) {
-		if (strlen(strfrac) > 10)
-			strfrac[10] = '\0';
-
-		rc = kstrtoull(strfrac, base, &frac);
-		if (rc)
-			return rc;
-
-		/* determine power of fractional portion */
-		while (*strfrac) {
-			frac_d *= base;
-			strfrac++;
-		}
-
-		/* fractional portion is too large to perform calculation */
-		if (frac > wrap_indicator)
-			return -ERANGE;
-
-		frac *= mult;
-		do_div(frac, frac_d);
-	}
-
-	/* check that the sum of whole and fraction fits in u64 */
-	if (whole > (ULLONG_MAX - frac))
-		return -ERANGE;
-
-	*val = whole + frac;
-
-	return 0;
-}
-
-/*
- * This function parses numeric/hex strings into __s64. It accepts a multiplier
- * which will apply to the value parsed. It also can allow the string to
- * have a unit as the last character. The function handles overflow/underflow
- * of the signed integer.
- */
-static int lu_str_to_s64(char *buffer, unsigned long count, s64 *val,
-			 char defunit)
-{
-	u64 mult = 1;
-	u64 tmp;
-	unsigned int offset = 0;
-	signed int sign = 1;
-	u64 max = LLONG_MAX;
-	int rc = 0;
-
-	if (defunit != '1') {
-		rc = get_mult(defunit, &mult);
-		if (rc)
-			return rc;
-	}
-
-	/* keep track of our sign */
-	if (*buffer == '-') {
-		sign = -1;
-		offset++;
-		/* equivalent to max = -LLONG_MIN, avoids overflow */
-		max++;
-	}
-
-	rc = str_to_u64_parse(buffer + offset, count - offset,
-			      &tmp, mult, true);
-	if (rc)
-		return rc;
-
-	/* check for overflow/underflow */
-	if (max < tmp)
-		return -ERANGE;
-
-	*val = (s64)tmp * sign;
-
-	return 0;
-}
-
 int lprocfs_read_frac_helper(char *buffer, unsigned long count, long val,
 			     int mult)
 {
@@ -2241,14 +1986,20 @@ ssize_t max_pages_per_rpc_store(struct kobject *kobj, struct attribute *attr,
 	struct client_obd *cli = &obd->u.cli;
 	struct obd_import *imp;
 	struct obd_connect_data *ocd;
-	unsigned long long val;
-	int chunk_mask;
-	char *endp;
-	int rc;
+	int chunk_mask, rc;
+	char kernbuf[22];
+	u64 val;
 
-	val = memparse(buffer, &endp);
-	if (*endp)
+	if (count > sizeof(kernbuf) - 1)
 		return -EINVAL;
+	if (copy_from_user(kernbuf, buffer, count))
+		return -EFAULT;
+
+	kernbuf[count] = '\0';
+
+	rc = sysfs_memparse(kernbuf, count, &val, "B");
+	if (rc)
+		return rc;
 
 	/* if the max_pages is specified in bytes, convert to pages */
 	if (val >= ONE_MB_BRW_SIZE)
@@ -2300,21 +2051,16 @@ ssize_t short_io_bytes_store(struct kobject *kobj, struct attribute *attr,
 					      obd_kset.kobj);
 	struct client_obd *cli = &obd->u.cli;
 	struct obd_import *imp;
-	char kernbuf[32];
-	s64 val;
+	u64 val;
 	int rc;
 
-	if (count >= sizeof(kernbuf))
-		return -EINVAL;
-
-	memcpy(kernbuf, buffer, count);
-	kernbuf[count] = '\0';
-	rc = lu_str_to_s64(kernbuf, count, &val, '1');
-	if (rc)
-		goto out;
-
-	if (val == -1)
+	if (strcmp(buffer, "-1") == 0) {
 		val = OBD_DEF_SHORT_IO_BYTES;
+	} else {
+		rc = sysfs_memparse(buffer, count, &val, "B");
+		if (rc)
+			goto out;
+	}
 
 	if (val && (val < MIN_SHORT_IO_BYTES || val > LNET_MTU)) {
 		rc = -ERANGE;
