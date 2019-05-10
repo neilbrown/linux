@@ -1985,14 +1985,20 @@ ssize_t max_pages_per_rpc_store(struct kobject *kobj, struct attribute *attr,
 	struct client_obd *cli = &obd->u.cli;
 	struct obd_import *imp;
 	struct obd_connect_data *ocd;
-	unsigned long long val;
-	int chunk_mask;
-	char *endp;
-	int rc;
+	int chunk_mask, rc;
+	char kernbuf[22];
+	u64 val;
 
-	val = memparse(buffer, &endp);
-	if (*endp)
+	if (count > sizeof(kernbuf) - 1)
 		return -EINVAL;
+	if (copy_from_user(kernbuf, buffer, count))
+		return -EFAULT;
+
+	kernbuf[count] = '\0';
+
+	rc = sysfs_memparse(kernbuf, count, &val, "B");
+	if (rc)
+		return rc;
 
 	/* if the max_pages is specified in bytes, convert to pages */
 	if (val >= ONE_MB_BRW_SIZE)
@@ -2043,19 +2049,17 @@ ssize_t short_io_bytes_store(struct kobject *kobj, struct attribute *attr,
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct client_obd *cli = &obd->u.cli;
-	unsigned long long val;
 	struct obd_import *imp;
-	char *endp;
+	u64 val;
 	int rc;
 
-	val = memparse(buffer, &endp);
-	if (*endp) {
-		rc = -EINVAL;
-		goto out;
-	}
-
-	if (val == -1)
+	if (strcmp(buffer, "-1") == 0) {
 		val = OBD_DEF_SHORT_IO_BYTES;
+	} else {
+		rc = sysfs_memparse(buffer, count, &val, "B");
+		if (rc)
+			goto out;
+	}
 
 	if (val && (val < MIN_SHORT_IO_BYTES || val > LNET_MTU)) {
 		rc = -ERANGE;
