@@ -178,7 +178,9 @@ void fuse_finish_open(struct inode *inode, struct file *file)
 
 	if (!(ff->open_flags & FOPEN_KEEP_CACHE))
 		invalidate_inode_pages2(inode->i_mapping);
-	if (ff->open_flags & FOPEN_NONSEEKABLE)
+	if (ff->open_flags & FOPEN_STREAM)
+		stream_open(inode, file);
+	else if (ff->open_flags & FOPEN_NONSEEKABLE)
 		nonseekable_open(inode, file);
 	if (fc->atomic_o_trunc && (file->f_flags & O_TRUNC)) {
 		struct fuse_inode *fi = get_fuse_inode(inode);
@@ -1586,7 +1588,7 @@ __acquires(fi->lock)
 {
 	struct fuse_conn *fc = get_fuse_conn(inode);
 	struct fuse_inode *fi = get_fuse_inode(inode);
-	size_t crop = i_size_read(inode);
+	loff_t crop = i_size_read(inode);
 	struct fuse_req *req;
 
 	while (fi->writectr >= 0 && !list_empty(&fi->queued_writes)) {
@@ -3044,6 +3046,13 @@ static long fuse_file_fallocate(struct file *file, int mode, loff_t offset,
 		}
 	}
 
+	if (!(mode & FALLOC_FL_KEEP_SIZE) &&
+	    offset + length > i_size_read(inode)) {
+		err = inode_newsize_ok(inode, offset + length);
+		if (err)
+			goto out;
+	}
+
 	if (!(mode & FALLOC_FL_KEEP_SIZE))
 		set_bit(FUSE_I_SIZE_UNSTABLE, &fi->state);
 
@@ -3089,6 +3098,7 @@ static ssize_t fuse_copy_file_range(struct file *file_in, loff_t pos_in,
 {
 	struct fuse_file *ff_in = file_in->private_data;
 	struct fuse_file *ff_out = file_out->private_data;
+	struct inode *inode_in = file_inode(file_in);
 	struct inode *inode_out = file_inode(file_out);
 	struct fuse_inode *fi_out = get_fuse_inode(inode_out);
 	struct fuse_conn *fc = ff_in->fc;
@@ -3111,6 +3121,17 @@ static ssize_t fuse_copy_file_range(struct file *file_in, loff_t pos_in,
 
 	if (fc->no_copy_file_range)
 		return -EOPNOTSUPP;
+
+	if (fc->writeback_cache) {
+		inode_lock(inode_in);
+		err = filemap_write_and_wait_range(inode_in->i_mapping,
+						   pos_in, pos_in + len);
+		if (!err)
+			fuse_sync_writes(inode_in);
+		inode_unlock(inode_in);
+		if (err)
+			return err;
+	}
 
 	inode_lock(inode_out);
 

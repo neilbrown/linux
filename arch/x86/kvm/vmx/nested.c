@@ -2792,14 +2792,13 @@ static int nested_vmx_check_vmentry_hw(struct kvm_vcpu *vcpu)
 	      : "cc", "memory"
 	);
 
-	preempt_enable();
-
 	if (vmx->msr_autoload.host.nr)
 		vmcs_write32(VM_EXIT_MSR_LOAD_COUNT, vmx->msr_autoload.host.nr);
 	if (vmx->msr_autoload.guest.nr)
 		vmcs_write32(VM_ENTRY_MSR_LOAD_COUNT, vmx->msr_autoload.guest.nr);
 
 	if (vm_fail) {
+		preempt_enable();
 		WARN_ON_ONCE(vmcs_read32(VM_INSTRUCTION_ERROR) !=
 			     VMXERR_ENTRY_INVALID_CONTROL_FIELD);
 		return 1;
@@ -2811,6 +2810,7 @@ static int nested_vmx_check_vmentry_hw(struct kvm_vcpu *vcpu)
 	local_irq_enable();
 	if (hw_breakpoint_active())
 		set_debugreg(__this_cpu_read(cpu_dr7), 7);
+	preempt_enable();
 
 	/*
 	 * A non-failing VMEntry means we somehow entered guest mode with
@@ -5467,7 +5467,7 @@ static int vmx_set_nested_state(struct kvm_vcpu *vcpu,
 	    vmcs12->vmcs_link_pointer != -1ull) {
 		struct vmcs12 *shadow_vmcs12 = get_shadow_vmcs12(vcpu);
 
-		if (kvm_state->size < sizeof(*kvm_state) + 2 * sizeof(*vmcs12))
+		if (kvm_state->size < sizeof(*kvm_state) + VMCS12_SIZE + sizeof(*vmcs12))
 			return -EINVAL;
 
 		if (copy_from_user(shadow_vmcs12,

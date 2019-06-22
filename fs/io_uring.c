@@ -2330,11 +2330,12 @@ static int io_sq_offload_start(struct io_ring_ctx *ctx,
 			ctx->sq_thread_idle = HZ;
 
 		if (p->flags & IORING_SETUP_SQ_AFF) {
-			int cpu = array_index_nospec(p->sq_thread_cpu,
-							nr_cpu_ids);
+			int cpu = p->sq_thread_cpu;
 
 			ret = -EINVAL;
-			if (!cpu_possible(cpu))
+			if (cpu >= nr_cpu_ids)
+				goto err;
+			if (!cpu_online(cpu))
 				goto err;
 
 			ctx->sqo_thread = kthread_create_on_cpu(io_sq_thread,
@@ -2632,8 +2633,10 @@ static void io_ring_ctx_free(struct io_ring_ctx *ctx)
 	io_sqe_files_unregister(ctx);
 
 #if defined(CONFIG_UNIX)
-	if (ctx->ring_sock)
+	if (ctx->ring_sock) {
+		ctx->ring_sock->file = NULL; /* so that iput() is called */
 		sock_release(ctx->ring_sock);
+	}
 #endif
 
 	io_mem_free(ctx->sq_ring);
