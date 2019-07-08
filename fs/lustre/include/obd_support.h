@@ -560,6 +560,7 @@ static inline int ll_ext_to_inode_flags(int flags)
 		((flags & LUSTRE_NOATIME_FL)   ? S_NOATIME   : 0) |
 		((flags & LUSTRE_APPEND_FL)    ? S_APPEND    : 0) |
 		((flags & LUSTRE_DIRSYNC_FL)   ? S_DIRSYNC   : 0) |
+		((flags & LUSTRE_ENCRYPT_FL)   ? S_ENCRYPTED : 0) |
 		((flags & LUSTRE_IMMUTABLE_FL) ? S_IMMUTABLE : 0));
 }
 
@@ -569,6 +570,7 @@ static inline int ll_inode_to_ext_flags(int iflags)
 		((iflags & S_NOATIME)   ? LUSTRE_NOATIME_FL   : 0) |
 		((iflags & S_APPEND)    ? LUSTRE_APPEND_FL    : 0) |
 		((iflags & S_DIRSYNC)   ? LUSTRE_DIRSYNC_FL   : 0) |
+		((iflags & S_ENCRYPTED) ? LUSTRE_ENCRYPT_FL   : 0) |
 		((iflags & S_IMMUTABLE) ? LUSTRE_IMMUTABLE_FL : 0));
 }
 

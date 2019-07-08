@@ -1104,6 +1104,8 @@ struct lov_mds_md_v1 {		/* LOV EA mds/wire data (little-endian) */
 #define XATTR_NAME_VERSION	"trusted.version"
 #define XATTR_NAME_SOM		"trusted.som"
 #define XATTR_NAME_HSM		"trusted.hsm"
+#define LL_XATTR_NAME_ENCRYPTION_CONTEXT XATTR_SECURITY_PREFIX"c"
+
 #define XATTR_NAME_LFSCK_NAMESPACE "trusted.lfsck_namespace"
 
 struct lov_mds_md_v3 {		/* LOV EA mds/wire data (little-endian) */
@@ -1564,6 +1566,7 @@ enum {
 #define LUSTRE_INDEX_FL		0x00001000 /* hash-indexed directory */
 #define LUSTRE_DIRSYNC_FL	0x00010000 /* dirsync behaviour (dir only) */
 #define LUSTRE_TOPDIR_FL	0x00020000 /* Top of directory hierarchies*/
+#define LUSTRE_ENCRYPT_FL	0x00800000 /* encrypted file */
 #define LUSTRE_INLINE_DATA_FL	0x10000000 /* Inode has inline data. */
 #define LUSTRE_PROJINHERIT_FL	0x20000000 /* Create with parents projid */
 

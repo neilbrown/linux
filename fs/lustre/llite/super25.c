@@ -63,6 +63,7 @@ static void ll_inode_destroy_callback(struct rcu_head *head)
 	struct inode *inode = container_of(head, struct inode, i_rcu);
 	struct ll_inode_info *ptr = ll_i2info(inode);
 
+	fscrypt_free_inode(inode);
 	kmem_cache_free(ll_inode_cachep, ptr);
 }
 

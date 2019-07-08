@@ -430,7 +430,6 @@ static inline bool lov_pattern_supported_normal_comp(__u32 pattern)
 {
 	return pattern == LOV_PATTERN_RAID0 ||
 	       pattern == (LOV_PATTERN_RAID0 | LOV_PATTERN_OVERSTRIPING);
-
 }
 
 #define LOV_MAXPOOLNAME 15
