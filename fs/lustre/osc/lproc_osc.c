@@ -707,15 +707,13 @@ static ssize_t grant_shrink_show(struct kobject *kobj, struct attribute *attr,
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct obd_import *imp;
-	struct obd_connect_data *ocd;
 	ssize_t len;
 
-	with_obd_cl_sem(len, obd, imp) {
-		ocd = &imp->imp_connect_data;
-
+	with_obd_cl_sem(len, obd, imp)
 		len = snprintf(buf, PAGE_SIZE, "%d\n",
-			       !!OCD_HAS_FLAG(ocd, GRANT_SHRINK));
-	}
+			       !imp->imp_grant_shrink_disabled &&
+			       OCD_HAS_FLAG(&imp->imp_connect_data,
+					    GRANT_SHRINK));
 
 	return len;
 }
@@ -726,7 +724,6 @@ static ssize_t grant_shrink_store(struct kobject *kobj, struct attribute *attr,
 	struct obd_device *dev = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct obd_import *imp;
-	struct obd_connect_data *ocd;
 	bool val;
 	int rc;
 
@@ -738,24 +735,9 @@ static ssize_t grant_shrink_store(struct kobject *kobj, struct attribute *attr,
 		return rc;
 
 	with_obd_cl_sem(count, dev, imp) {
-		ocd = &imp->imp_connect_data;
-
-		if (!val) {
-			if (OCD_HAS_FLAG(ocd, GRANT_SHRINK))
-				ocd->ocd_connect_flags &=
-					~OBD_CONNECT_GRANT_SHRINK;
-		} else {
-			/**
-			 * server replied obd_connect_data is always
-			 * bigger, so client's imp_connect_flags_orig
-			 * are always supported by the server
-			 */
-			if (!OCD_HAS_FLAG(ocd, GRANT_SHRINK) &&
-			    imp->imp_connect_flags_orig &
-			    OBD_CONNECT_GRANT_SHRINK)
-				ocd->ocd_connect_flags |=
-					OBD_CONNECT_GRANT_SHRINK;
-		}
+		spin_lock(&imp->imp_lock);
+		imp->imp_grant_shrink_disabled = !val;
+		spin_unlock(&imp->imp_lock);
 	}
 
 	return count;
