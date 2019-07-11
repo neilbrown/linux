@@ -697,11 +697,6 @@ out:
 	return rc;
 }
 
-struct pcc_create_attach {
-	struct pcc_dataset *pca_dataset;
-	struct dentry *pca_dentry;
-};
-
 static struct dentry *ll_lookup_it(struct inode *parent, struct dentry *dentry,
 				   struct lookup_intent *it, void **secctx,
 				   u32 *secctxlen,
@@ -951,8 +946,7 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 	u32 secctxlen = 0;
 	struct dentry *de;
 	struct ll_sb_info *sbi;
-	struct pcc_create_attach pca = {NULL, NULL};
-	struct pcc_dataset *dataset = NULL;
+	struct pcc_create_attach pca = { NULL, NULL };
 	int rc = 0;
 
 	CDEBUG(D_VFSTRACE,
@@ -989,6 +983,7 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 		if (!filename_is_volatile(dentry->d_name.name,
 					  dentry->d_name.len, NULL)) {
 			struct pcc_matcher item;
+			struct pcc_dataset *dataset;
 
 			item.pm_uid = from_kuid(&init_user_ns, current_uid());
 			item.pm_gid = from_kgid(&init_user_ns, current_gid());
@@ -1021,18 +1016,30 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 					dput(de);
 				goto out_release;
 			}
-			if (dataset && dentry->d_inode) {
-				rc = pcc_inode_create_fini(dataset,
-							   dentry->d_inode,
-							   pca.pca_dentry);
-				if (rc) {
-					if (de)
-						dput(de);
-					goto out_release;
-				}
+
+			rc = pcc_inode_create_fini(dentry->d_inode, &pca);
+			if (rc) {
+				if (de)
+					dput(de);
+				goto out_release;
 			}
 
 			file->f_mode |= FMODE_CREATED;
+		} else {
+			/* Open the file with O_CREAT, but the file already
+			 * existed on MDT. This may happened in the case that
+			 * the LOOKUP ibits lock is revoked and the
+			 * corresponding dentry cache is deleted.
+			 * i.e. In the current Lustre, the truncate operation
+			 * will revoke the LOOKUP ibits lock, and the file
+			 * dentry cache will be invalidated. The following open
+			 * with O_CREAT flag will call into ->atomic_open, the
+			 * file was wrongly though as newly created file and
+			 * try to auto cache the file. So after client knows it
+			 * is not a DISP_OPEN_CREATE, it should cleanup the
+			 * already created PCC copy.
+			 */
+			pcc_create_attach_cleanup(dir->i_sb, &pca);
 		}
 
 		if (d_really_is_positive(dentry) &&
@@ -1056,11 +1063,11 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 		} else {
 			rc = finish_no_open(file, de);
 		}
+	} else {
+		pcc_create_attach_cleanup(dir->i_sb, &pca);
 	}
 
 out_release:
-	if (dataset)
-		pcc_dataset_put(dataset);
 	ll_intent_release(it);
 	kfree(it);
 
