@@ -40,6 +40,7 @@
 #include <uapi/linux/lustre/lustre_idl.h>
 #include <lu_ref.h>
 #include <linux/ctype.h>
+#include <obd_target.h>
 
 struct seq_file;
 struct lustre_cfg;
@@ -1398,7 +1399,6 @@ void lu_kmem_fini(struct lu_kmem_descr *caches);
 
 extern u32 lu_context_tags_default;
 extern u32 lu_session_tags_default;
-
 /* Generic subset of tgts */
 struct lu_tgt_pool {
 	u32		   *op_array;	/* array of index of

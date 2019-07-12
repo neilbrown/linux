@@ -60,7 +60,7 @@ void lustre_swab_obd_ioobj(struct obd_ioobj *ioo);
 void lustre_swab_niobuf_remote(struct niobuf_remote *nbr);
 void lustre_swab_ost_lvb_v1(struct ost_lvb_v1 *lvb);
 void lustre_swab_ost_lvb(struct ost_lvb *lvb);
-void lustre_swab_obd_quotactl(struct obd_quotactl *q);
+int lustre_swab_obd_quotactl(struct obd_quotactl *q, u32 len);
 void lustre_swab_lquota_lvb(struct lquota_lvb *lvb);
 void lustre_swab_generic_32s(u32 *val);
 void lustre_swab_mdt_body(struct mdt_body *b);

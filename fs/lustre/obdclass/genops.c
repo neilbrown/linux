@@ -540,6 +540,7 @@ struct obd_device *class_num2obd(int num)
 
 	return obd;
 }
+EXPORT_SYMBOL(class_num2obd);
 
 /* Search for a client OBD connected to tgt_uuid.  If grp_uuid is
  * specified, then only the client with that uuid is returned,

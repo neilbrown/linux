@@ -1085,15 +1085,19 @@ static int quotactl_ioctl(struct ll_sb_info *sbi, struct if_quotactl *qctl)
 	case Q_SETQUOTA:
 	case Q_SETINFO:
 	case LUSTRE_Q_SETDEFAULT:
+	case LUSTRE_Q_SETQUOTAPOOL:
+	case LUSTRE_Q_SETINFOPOOL:
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		break;
 	case Q_GETQUOTA:
 	case LUSTRE_Q_GETDEFAULT:
+	case LUSTRE_Q_GETQUOTAPOOL:
 		if (check_owner(type, id) && !capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		break;
 	case Q_GETINFO:
+	case LUSTRE_Q_GETINFOPOOL:
 		break;
 	default:
 		CERROR("unsupported quotactl op: %#x\n", cmd);
@@ -1103,7 +1107,8 @@ static int quotactl_ioctl(struct ll_sb_info *sbi, struct if_quotactl *qctl)
 	if (valid != QC_GENERAL) {
 		if (cmd == Q_GETINFO)
 			qctl->qc_cmd = Q_GETOINFO;
-		else if (cmd == Q_GETQUOTA)
+		else if (cmd == Q_GETQUOTA ||
+			 cmd == LUSTRE_Q_GETQUOTAPOOL)
 			qctl->qc_cmd = Q_GETOQUOTA;
 		else
 			return -EINVAL;
@@ -1136,8 +1141,12 @@ static int quotactl_ioctl(struct ll_sb_info *sbi, struct if_quotactl *qctl)
 		qctl->qc_cmd = cmd;
 	} else {
 		struct obd_quotactl *oqctl;
+		int oqctl_len = sizeof(*oqctl);
 
-		oqctl = kzalloc(sizeof(*oqctl), GFP_NOFS);
+		if (LUSTRE_Q_CMD_IS_POOL(cmd))
+			oqctl_len += LOV_MAXPOOLNAME + 1;
+
+		oqctl = kzalloc(oqctl_len, GFP_NOFS);
 		if (!oqctl)
 			return -ENOMEM;
 
@@ -1150,7 +1159,7 @@ static int quotactl_ioctl(struct ll_sb_info *sbi, struct if_quotactl *qctl)
 		/* If QIF_SPACE is not set, client should collect the
 		 * space usage from OSSs by itself
 		 */
-		if (cmd == Q_GETQUOTA &&
+		if ((cmd == Q_GETQUOTA || cmd == LUSTRE_Q_GETQUOTAPOOL) &&
 		    !(oqctl->qc_dqblk.dqb_valid & QIF_SPACE) &&
 		    !oqctl->qc_dqblk.dqb_curspace) {
 			struct obd_quotactl *oqctl_tmp;
@@ -1809,8 +1818,9 @@ out_req:
 	}
 	case OBD_IOC_QUOTACTL: {
 		struct if_quotactl *qctl;
+		int qctl_len = sizeof(*qctl) + LOV_MAXPOOLNAME + 1;
 
-		qctl = kzalloc(sizeof(*qctl), GFP_NOFS);
+		qctl = kzalloc(qctl_len, GFP_NOFS);
 		if (!qctl)
 			return -ENOMEM;
 
@@ -1819,8 +1829,17 @@ out_req:
 			goto out_quotactl;
 		}
 
-		rc = quotactl_ioctl(sbi, qctl);
+		if (LUSTRE_Q_CMD_IS_POOL(qctl->qc_cmd)) {
+			char __user *from = (char __user *)arg +
+				offsetof(typeof(*qctl), qc_poolname);
+			if (copy_from_user(qctl->qc_poolname, from,
+					   LOV_MAXPOOLNAME + 1)) {
+				rc = -EFAULT;
+				goto out_quotactl;
+			}
+		}
 
+		rc = quotactl_ioctl(sbi, qctl);
 		if (rc == 0 && copy_to_user((void __user *)arg, qctl,
 					    sizeof(*qctl)))
 			rc = -EFAULT;
