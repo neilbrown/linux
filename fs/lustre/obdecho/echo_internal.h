@@ -43,4 +43,7 @@
 int block_debug_setup(void *addr, int len, u64 off, u64 id);
 int block_debug_check(char *who, void *addr, int len, u64 off, u64 id);
 
+/* mapping value to tell page is not encrypted */
+#define ECHO_MAPPING_UNENCRYPTED ((void *)1)
+
 #endif

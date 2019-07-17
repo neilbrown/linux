@@ -47,7 +47,8 @@
 #include "llite_internal.h"
 
 static int ll_create_it(struct inode *dir, struct dentry *dentry,
-			struct lookup_intent *it, void *secctx, u32 secctxlen);
+			struct lookup_intent *it, void *secctx, u32 secctxlen,
+			bool encrypt);
 
 /* called from iget5_locked->find_inode() under inode_hash_lock spinlock */
 static int ll_test_inode(struct inode *inode, void *opaque)
@@ -605,7 +606,7 @@ static int ll_lookup_it_finish(struct ptlrpc_request *request,
 			       struct lookup_intent *it,
 			       struct inode *parent, struct dentry **de,
 			       void *secctx, u32 secctxlen,
-			       ktime_t kstart)
+			       ktime_t kstart, bool encrypt)
 {
 	struct inode *inode = NULL;
 	u64 bits = 0;
@@ -679,6 +680,16 @@ static int ll_lookup_it_finish(struct ptlrpc_request *request,
 		/* We have the "lookup" lock, so unhide dentry */
 		if (bits & MDS_INODELOCK_LOOKUP)
 			d_lustre_revalidate(*de);
+
+		if (encrypt) {
+			rc = fscrypt_get_encryption_info(inode);
+			if (rc)
+				goto out;
+			if (!fscrypt_has_encryption_key(inode)) {
+				rc = -ENOKEY;
+				goto out;
+			}
+		}
 	} else if (!it_disposition(it, DISP_OPEN_CREATE)) {
 		/*
 		 * If file was created on the server, the dentry is revalidated
@@ -725,7 +736,8 @@ out:
 static struct dentry *ll_lookup_it(struct inode *parent, struct dentry *dentry,
 				   struct lookup_intent *it, void **secctx,
 				   u32 *secctxlen,
-				   struct pcc_create_attach *pca)
+				   struct pcc_create_attach *pca,
+				   bool encrypt)
 {
 	ktime_t kstart = ktime_get();
 	struct lookup_intent lookup_it = { .it_op = IT_LOOKUP };
@@ -894,14 +906,14 @@ static struct dentry *ll_lookup_it(struct inode *parent, struct dentry *dentry,
 	rc = ll_lookup_it_finish(req, it, parent, &dentry,
 				 secctx ? *secctx : NULL,
 				 secctxlen ? *secctxlen : 0,
-				kstart);
+				 kstart, encrypt);
 	if (rc != 0) {
 		ll_intent_release(it);
 		retval = ERR_PTR(rc);
 		goto out;
 	}
-
 	inode = d_inode(dentry);
+
 	if ((it->it_op & IT_OPEN) && inode &&
 	    !S_ISREG(inode->i_mode) &&
 	    !S_ISDIR(inode->i_mode)) {
@@ -952,7 +964,7 @@ static struct dentry *ll_lookup_nd(struct inode *parent, struct dentry *dentry,
 		itp = NULL;
 	else
 		itp = &it;
-	de = ll_lookup_it(parent, dentry, itp, NULL, NULL, NULL);
+	de = ll_lookup_it(parent, dentry, itp, NULL, NULL, NULL, false);
 
 	if (itp)
 		ll_intent_release(itp);
@@ -972,8 +984,9 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 	void *secctx = NULL;
 	u32 secctxlen = 0;
 	struct dentry *de;
-	struct ll_sb_info *sbi;
+	struct ll_sb_info *sbi = NULL;
 	struct pcc_create_attach pca = { NULL, NULL };
+	bool encrypt = false;
 	int rc = 0;
 
 	CDEBUG(D_VFSTRACE,
@@ -1025,8 +1038,23 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 	it->it_flags = (open_flags & ~O_ACCMODE) | OPEN_FMODE(open_flags);
 	it->it_flags &= ~MDS_OPEN_FL_INTERNAL;
 
+	if (IS_ENCRYPTED(dir)) {
+		/* we know that we are going to create a regular file because
+		 * we set S_IFREG bit on it->it_create_mode above
+		 */
+		rc = fscrypt_get_encryption_info(dir);
+		if (rc)
+			goto out_release;
+		if (!fscrypt_has_encryption_key(dir)) {
+			rc = -ENOKEY;
+			goto out_release;
+		}
+		encrypt = true;
+		rc = 0;
+	}
+
 	/* Dentry added to dcache tree in ll_lookup_it */
-	de = ll_lookup_it(dir, dentry, it, &secctx, &secctxlen, &pca);
+	de = ll_lookup_it(dir, dentry, it, &secctx, &secctxlen, &pca, encrypt);
 	if (IS_ERR(de))
 		rc = PTR_ERR(de);
 	else if (de)
@@ -1035,7 +1063,8 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 	if (!rc) {
 		if (it_disposition(it, DISP_OPEN_CREATE)) {
 			/* Dentry instantiated in ll_create_it. */
-			rc = ll_create_it(dir, dentry, it, secctx, secctxlen);
+			rc = ll_create_it(dir, dentry, it, secctx, secctxlen,
+					  encrypt);
 			security_release_secctx(secctx, secctxlen);
 			if (rc) {
 				/* We dget in ll_splice_alias. */
@@ -1150,7 +1179,8 @@ static struct inode *ll_create_node(struct inode *dir, struct lookup_intent *it)
  * with d_instantiate().
  */
 static int ll_create_it(struct inode *dir, struct dentry *dentry,
-			struct lookup_intent *it, void *secctx, u32 secctxlen)
+			struct lookup_intent *it, void *secctx, u32 secctxlen,
+			bool encrypt)
 {
 	struct inode *inode;
 	u64 bits = 0;
@@ -1185,6 +1215,12 @@ static int ll_create_it(struct inode *dir, struct dentry *dentry,
 
 	d_instantiate(dentry, inode);
 
+	if (encrypt) {
+		rc = fscrypt_inherit_context(dir, inode, dentry, true);
+		if (rc)
+			return rc;
+	}
+
 	if (!(ll_i2sbi(inode)->ll_flags & LL_SBI_FILE_SECCTX))
 		rc = ll_inode_init_security(dentry, inode, dir);
 
@@ -1218,6 +1254,7 @@ static int ll_new_node(struct inode *dir, struct dentry *dentry,
 	struct inode *inode = NULL;
 	struct ll_sb_info *sbi = ll_i2sbi(dir);
 	int tgt_len = 0;
+	int encrypt = 0;
 	int err;
 
 	if (unlikely(tgt))
@@ -1239,6 +1276,19 @@ again:
 					      &op_data->op_file_secctx_size);
 		if (err < 0)
 			goto err_exit;
+	}
+
+	if ((IS_ENCRYPTED(dir) &&
+	    (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode))) ||
+	    (unlikely(fscrypt_dummy_context_enabled(dir)) && S_ISDIR(mode))) {
+		err = fscrypt_get_encryption_info(dir);
+		if (err)
+			goto err_exit;
+		if (!fscrypt_has_encryption_key(dir)) {
+			err = -ENOKEY;
+			goto err_exit;
+		}
+		encrypt = 1;
 	}
 
 	err = md_create(sbi->ll_md_exp, op_data, tgt, tgt_len, mode,
@@ -1334,6 +1384,12 @@ again:
 	}
 
 	d_instantiate(dentry, inode);
+
+	if (encrypt) {
+		err = fscrypt_inherit_context(dir, inode, NULL, true);
+		if (err)
+			goto err_exit;
+	}
 
 	if (!(sbi->ll_flags & LL_SBI_FILE_SECCTX))
 		err = ll_inode_init_security(dentry, inode, dir);
@@ -1547,6 +1603,10 @@ static int ll_link(struct dentry *old_dentry, struct inode *dir,
 	       PFID(ll_inode2fid(src)), src, PFID(ll_inode2fid(dir)), dir,
 	       new_dentry);
 
+	err = fscrypt_prepare_link(old_dentry, dir, new_dentry);
+	if (err)
+		return err;
+
 	op_data = ll_prep_md_op_data(NULL, src, dir, new_dentry->d_name.name,
 				     new_dentry->d_name.len,
 				     0, LUSTRE_OPC_ANY, NULL);
@@ -1583,6 +1643,10 @@ static int ll_rename(struct inode *src, struct dentry *src_dchild,
 	       "VFS Op:oldname=%pd, src_dir=" DFID "(%p), newname=%pd, tgt_dir=" DFID "(%p)\n",
 	       src_dchild, PFID(ll_inode2fid(src)), src,
 	       tgt_dchild, PFID(ll_inode2fid(tgt)), tgt);
+
+	err = fscrypt_prepare_rename(src, src_dchild, tgt, tgt_dchild, flags);
+	if (err)
+		return err;
 
 	op_data = ll_prep_md_op_data(NULL, src, tgt, NULL, 0, 0,
 				     LUSTRE_OPC_ANY, NULL);

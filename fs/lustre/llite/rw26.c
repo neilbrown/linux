@@ -290,6 +290,10 @@ static ssize_t ll_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	loff_t file_offset = iocb->ki_pos;
 	int rw = iov_iter_rw(iter);
 
+	/* if file is encrypted, return 0 so that we fall back to buffered IO */
+	if (IS_ENCRYPTED(inode))
+		return 0;
+
 	/* Check EOF by ourselves */
 	if (rw == READ && file_offset >= i_size_read(inode))
 		return 0;

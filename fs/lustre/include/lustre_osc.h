@@ -51,6 +51,7 @@
 
 #include <obd.h>
 #include <cl_object.h>
+#include <lustre_crypto.h>
 #include <linux/libcfs/libcfs_hash.h>
 
 struct osc_quota_info {
