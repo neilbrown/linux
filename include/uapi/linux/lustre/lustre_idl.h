@@ -2037,6 +2037,9 @@ static inline __u64 lustre_hash_fnv_1a_64(const void *buf, size_t size)
 	return hash;
 }
 
+/* CRUSH placement group count */
+#define LMV_CRUSH_PG_COUNT	4096
+
 union lmv_mds_md {
 	__u32			lmv_magic;
 	struct lmv_mds_md_v1	lmv_md_v1;
