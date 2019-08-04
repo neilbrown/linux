@@ -430,6 +430,7 @@ static inline bool lov_pattern_supported_normal_comp(__u32 pattern)
 #define LOV_MAXPOOLNAME 15
 #define LOV_POOLNAMEF "%.15s"
 #define LOV_OFFSET_DEFAULT      ((__u16)-1)
+#define LMV_OFFSET_DEFAULT      ((__u32)-1)
 
 #define LOV_MIN_STRIPE_BITS	16	/* maximum PAGE_SIZE (ia64), power of 2 */
 #define LOV_MIN_STRIPE_SIZE	(1 << LOV_MIN_STRIPE_BITS)
@@ -688,10 +689,11 @@ enum lmv_hash_type {
  */
 #define LMV_HASH_TYPE_MASK 0x0000ffff
 
-/* once this is set on a plain directory default layout, newly created
- * subdirectories will be distributed on all MDTs by space usage.
- */
-#define LMV_HASH_FLAG_SPACE	0x08000000
+static inline bool lmv_is_known_hash_type(__u32 type)
+{
+	return (type & LMV_HASH_TYPE_MASK) == LMV_HASH_TYPE_FNV_1A_64 ||
+	       (type & LMV_HASH_TYPE_MASK) == LMV_HASH_TYPE_ALL_CHARS;
+}
 
 /* The striped directory has ever lost its master LMV EA, then LFSCK
  * re-generated it. This flag is used to indicate such case. It is an
