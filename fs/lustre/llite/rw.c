@@ -1492,6 +1492,34 @@ static int kickoff_async_readahead(struct file *file, unsigned long pages)
 	return 2;
 }
 
+/*
+ * Check if we can issue a readahead RPC, if that is
+ * the case, we can't do fast IO because we will need
+ * a cl_io to issue the RPC.
+ */
+static bool ll_use_fast_io(struct file *file,
+			   struct ll_readahead_state *ras, pgoff_t index)
+{
+	unsigned long fast_read_pages =
+		max(RA_REMAIN_WINDOW_MIN, ras->ras_rpc_pages);
+	loff_t skip_pages;
+
+	if (stride_io_mode(ras)) {
+		skip_pages = (ras->ras_stride_length +
+			ras->ras_stride_bytes - 1) / ras->ras_stride_bytes;
+		skip_pages *= fast_read_pages;
+	} else {
+		skip_pages = fast_read_pages;
+	}
+
+	if (ras->ras_window_start_idx + ras->ras_window_pages <
+	    ras->ras_next_readahead_idx + skip_pages ||
+	    kickoff_async_readahead(file, fast_read_pages) > 0)
+		return true;
+
+	return false;
+}
+
 int ll_readpage(struct file *file, struct page *vmpage)
 {
 	struct cl_object *clob = ll_i2info(file_inode(file))->lli_clob;
@@ -1513,8 +1541,6 @@ int ll_readpage(struct file *file, struct page *vmpage)
 		struct ll_readahead_state *ras = &fd->fd_ras;
 		struct lu_env *local_env = NULL;
 		struct inode *inode = file_inode(file);
-		unsigned long fast_read_pages =
-			max(RA_REMAIN_WINDOW_MIN, ras->ras_rpc_pages);
 		struct vvp_page *vpg;
 
 		result = -ENODATA;
@@ -1546,14 +1572,7 @@ int ll_readpage(struct file *file, struct page *vmpage)
 			/* avoid duplicate ras_update() call */
 			vpg->vpg_ra_updated = 1;
 
-			/*
-			 * Check if we can issue a readahead RPC, if that is
-			 * the case, we can't do fast IO because we will need
-			 * a cl_io to issue the RPC.
-			 */
-			if (ras->ras_window_start_idx + ras->ras_window_pages <
-			    ras->ras_next_readahead_idx + fast_read_pages ||
-			    kickoff_async_readahead(file, fast_read_pages) > 0)
+			if (ll_use_fast_io(file, ras, vvp_index(vpg)))
 				result = 0;
 		}
 
