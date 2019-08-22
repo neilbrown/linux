@@ -1866,6 +1866,7 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
 	const char *obd_name = cli->cl_import->imp_obd->obd_name;
 	struct ost_body *body;
 	u32 client_cksum = 0;
+	struct inode *inode;
 
 	if (rc < 0 && rc != -EDQUOT) {
 		DEBUG_REQ(D_INFO, req, "Failed request: rc = %d", rc);
@@ -2058,6 +2059,36 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
 	} else {
 		rc = 0;
 	}
+
+	inode = page2inode(aa->aa_ppga[0]->pg);
+	if (inode && IS_ENCRYPTED(inode)) {
+		int idx;
+
+		if (!fscrypt_has_encryption_key(inode)) {
+			CDEBUG(D_SEC, "no enc key for ino %lu\n", inode->i_ino);
+			goto out;
+		}
+		for (idx = 0; idx < aa->aa_page_count; idx++) {
+			struct brw_page *pg = aa->aa_ppga[idx];
+			u64 *p, *q;
+
+			/* do not decrypt if page is all 0s */
+			p = q = page_address(pg->pg);
+			while (p - q < PAGE_SIZE / sizeof(*p)) {
+				if (*p != 0)
+					break;
+				p++;
+			}
+			if (p - q == PAGE_SIZE / sizeof(*p))
+				continue;
+
+			rc = fscrypt_decrypt_pagecache_blocks(pg->pg,
+							      PAGE_SIZE, 0);
+			if (rc)
+				goto out;
+		}
+	}
+
 out:
 	if (rc >= 0)
 		lustre_get_wire_obdo(&req->rq_import->imp_connect_data,

@@ -713,6 +713,12 @@ int ll_file_open(struct inode *inode, struct file *file)
 	it = file->private_data; /* XXX: compat macro */
 	file->private_data = NULL; /* prevent ll_local_open assertion */
 
+	if (S_ISREG(inode->i_mode)) {
+		rc = fscrypt_file_open(inode, file);
+		if (rc)
+			goto out_nofiledata;
+	}
+
 	fd = ll_file_data_get();
 	if (!fd) {
 		rc = -ENOMEM;
