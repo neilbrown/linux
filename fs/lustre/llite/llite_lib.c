@@ -43,6 +43,7 @@
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/uuid.h>
+#include <linux/delay.h>
 #include <linux/random.h>
 #include <linux/security.h>
 #include <linux/fs_struct.h>
@@ -2287,7 +2288,7 @@ void ll_umount_begin(struct super_block *sb)
 	struct ll_sb_info *sbi = ll_s2sbi(sb);
 	struct obd_device *obd;
 	struct obd_ioctl_data *ioc_data;
-	int cnt = 0;
+	int cnt;
 
 	CDEBUG(D_VFSTRACE, "VFS Op: superblock %p count %d active %d\n", sb,
 	       sb->s_count, atomic_read(&sb->s_active));
@@ -2323,12 +2324,12 @@ void ll_umount_begin(struct super_block *sb)
 	 * and then continue. For now, we just periodically checking for vfs
 	 * to decrement mnt_cnt and hope to finish it within 10sec.
 	 */
-	while (cnt < 10 && !may_umount(sbi->ll_mnt.mnt)) {
-		schedule_timeout_uninterruptible(HZ);
-		cnt++;
+	cnt = 10;
+	while (cnt > 0 &&
+	       !may_umount(sbi->ll_mnt.mnt)) {
+		ssleep(1);
+		cnt -= 1;
 	}
-
-	schedule();
 }
 
 int ll_remount_fs(struct super_block *sb, int *flags, char *data)
