@@ -383,13 +383,12 @@ int ll_file_release(struct inode *inode, struct file *file)
 	struct ll_file_data *fd;
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
 	struct ll_inode_info *lli = ll_i2info(inode);
+	ktime_t kstart = ktime_get();
 	int rc;
 
 	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID "(%p)\n",
 	       PFID(ll_inode2fid(inode)), inode);
 
-	if (!is_root_inode(inode))
-		ll_stats_ops_tally(sbi, LPROC_LL_RELEASE, 1);
 	fd = LUSTRE_FPRIVATE(file);
 	LASSERT(fd);
 
@@ -402,7 +401,8 @@ int ll_file_release(struct inode *inode, struct file *file)
 	if (is_root_inode(inode)) {
 		LUSTRE_FPRIVATE(file) = NULL;
 		ll_file_data_put(fd);
-		return 0;
+		rc = 0;
+		goto out;
 	}
 
 	pcc_file_release(inode, file);
@@ -418,6 +418,10 @@ int ll_file_release(struct inode *inode, struct file *file)
 	if (CFS_FAIL_TIMEOUT_MS(OBD_FAIL_PTLRPC_DUMP_LOG, cfs_fail_val))
 		libcfs_debug_dumplog();
 
+out:
+	if (!rc && inode->i_sb->s_root != file_dentry(file))
+		ll_stats_ops_tally(sbi, LPROC_LL_RELEASE,
+				   ktime_us_delta(ktime_get(), kstart));
 	return rc;
 }
 
@@ -699,6 +703,7 @@ int ll_file_open(struct inode *inode, struct file *file)
 	struct obd_client_handle **och_p = NULL;
 	u64 *och_usecount = NULL;
 	struct ll_file_data *fd;
+	ktime_t kstart = ktime_get();
 	int rc = 0;
 
 	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID "(%p), flags %o\n",
@@ -896,7 +901,8 @@ out_openerr:
 		if (fd)
 			ll_file_data_put(fd);
 	} else {
-		ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_OPEN, 1);
+		ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_OPEN,
+				   ktime_us_delta(ktime_get(), kstart));
 	}
 
 out_nofiledata:
@@ -1676,6 +1682,7 @@ static ssize_t ll_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	ssize_t result;
 	u16 refcheck;
 	ssize_t rc2;
+	ktime_t kstart = ktime_get();
 	bool cached;
 
 	if (!iov_iter_count(to))
@@ -1694,7 +1701,7 @@ static ssize_t ll_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	 */
 	result = pcc_file_read_iter(iocb, to, &cached);
 	if (cached)
-		return result;
+		goto out;
 
 	ll_ras_enter(file);
 
@@ -1719,10 +1726,13 @@ static ssize_t ll_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 
 	cl_env_put(env, &refcheck);
 out:
-	if (result > 0)
+	if (result > 0) {
 		ll_rw_stats_tally(ll_i2sbi(file_inode(file)), current->pid,
 				  LUSTRE_FPRIVATE(file), iocb->ki_pos, result,
 				  READ);
+		ll_stats_ops_tally(ll_i2sbi(file_inode(file)), LPROC_LL_READ,
+				   ktime_us_delta(ktime_get(), kstart));
+	}
 
 	return result;
 }
@@ -1795,6 +1805,7 @@ static ssize_t ll_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct file *file = iocb->ki_filp;
 	u16 refcheck;
 	bool cached;
+	ktime_t kstart = ktime_get();
 	int result;
 
 	if (!iov_iter_count(from)) {
@@ -1813,8 +1824,10 @@ static ssize_t ll_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	 * from PCC cache automatically.
 	 */
 	result = pcc_file_write_iter(iocb, from, &cached);
-	if (cached && result != -ENOSPC && result != -EDQUOT)
-		return result;
+	if (cached && result != -ENOSPC && result != -EDQUOT) {
+		rc_normal = result;
+		goto out;
+	}
 
 	/* NB: we can't do direct IO for tiny writes because they use the page
 	 * cache, we can't do sync writes because tiny writes can't flush
@@ -1855,10 +1868,14 @@ static ssize_t ll_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 
 	cl_env_put(env, &refcheck);
 out:
-	if (rc_normal > 0)
+	if (rc_normal > 0) {
 		ll_rw_stats_tally(ll_i2sbi(file_inode(file)), current->pid,
 				  LUSTRE_FPRIVATE(file), iocb->ki_pos,
 				  rc_normal, WRITE);
+		ll_stats_ops_tally(ll_i2sbi(file_inode(file)), LPROC_LL_WRITE,
+				   ktime_us_delta(ktime_get(), kstart));
+	}
+
 	return rc_normal;
 }
 
@@ -3847,12 +3864,12 @@ static loff_t ll_file_seek(struct file *file, loff_t offset, int origin)
 {
 	struct inode *inode = file_inode(file);
 	loff_t retval, eof = 0;
+	ktime_t kstart = ktime_get();
 
 	retval = offset + ((origin == SEEK_END) ? i_size_read(inode) :
 			   (origin == SEEK_CUR) ? file->f_pos : 0);
 	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID "(%p), to=%llu=%#llx(%d)\n",
 	       PFID(ll_inode2fid(inode)), inode, retval, retval, origin);
-	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_LLSEEK, 1);
 
 	if (origin == SEEK_END || origin == SEEK_HOLE || origin == SEEK_DATA) {
 		retval = ll_glimpse_size(inode);
@@ -3861,8 +3878,12 @@ static loff_t ll_file_seek(struct file *file, loff_t offset, int origin)
 		eof = i_size_read(inode);
 	}
 
-	return generic_file_llseek_size(file, offset, origin,
-					ll_file_maxbytes(inode), eof);
+	retval = generic_file_llseek_size(file, offset, origin,
+					  ll_file_maxbytes(inode), eof);
+	if (retval >= 0)
+		ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_LLSEEK,
+				   ktime_us_delta(ktime_get(), kstart));
+	return retval;
 }
 
 static int ll_flush(struct file *file, fl_owner_t id)
@@ -3945,13 +3966,12 @@ int ll_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	struct inode *inode = file_inode(file);
 	struct ll_inode_info *lli = ll_i2info(inode);
 	struct ptlrpc_request *req;
+	ktime_t kstart = ktime_get();
 	int rc, err;
 
 	CDEBUG(D_VFSTRACE,
 	       "VFS Op:inode=" DFID "(%p), start %lld, end %lld, datasync %d\n",
 	       PFID(ll_inode2fid(inode)), inode, start, end, datasync);
-
-	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FSYNC, 1);
 
 
 	rc = file_write_and_wait_range(file, start, end);
@@ -3999,6 +4019,10 @@ int ll_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	}
 
 	inode_unlock(inode);
+
+	if (!rc)
+		ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FSYNC,
+				   ktime_us_delta(ktime_get(), kstart));
 	return rc;
 }
 
@@ -4016,6 +4040,7 @@ ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 	struct lustre_handle lockh = {0};
 	union ldlm_policy_data flock = { { 0 } };
 	int fl_type = file_lock->fl_type;
+	ktime_t kstart = ktime_get();
 	u64 flags = 0;
 	int rc;
 	int rc2 = 0;
@@ -4023,7 +4048,6 @@ ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID " file_lock=%p\n",
 	       PFID(ll_inode2fid(inode)), file_lock);
 
-	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FLOCK, 1);
 
 	if (file_lock->fl_flags & FL_FLOCK)
 		LASSERT((cmd == F_SETLKW) || (cmd == F_SETLK));
@@ -4119,6 +4143,9 @@ ll_file_flock(struct file *file, int cmd, struct file_lock *file_lock)
 
 	ll_finish_md_op_data(op_data);
 
+	if (!rc)
+		ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FLOCK,
+				   ktime_us_delta(ktime_get(), kstart));
 	return rc;
 }
 
@@ -4511,9 +4538,8 @@ int ll_getattr_dentry(struct dentry *de, struct kstat *stat)
 	struct inode *inode = de->d_inode;
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
 	struct ll_inode_info *lli = ll_i2info(inode);
+	ktime_t kstart = ktime_get();
 	int rc;
-
-	ll_stats_ops_tally(sbi, LPROC_LL_GETATTR, 1);
 
 	rc = ll_inode_revalidate(de, IT_GETATTR);
 	if (rc < 0)
@@ -4578,6 +4604,9 @@ int ll_getattr_dentry(struct dentry *de, struct kstat *stat)
 	stat->size = i_size_read(inode);
 	stat->blocks = inode->i_blocks;
 
+	ll_stats_ops_tally(sbi, LPROC_LL_GETATTR,
+			   ktime_us_delta(ktime_get(), kstart));
+
 	return 0;
 }
 
@@ -4638,6 +4667,7 @@ int ll_inode_permission(struct inode *inode, int mask)
 	const struct cred *old_cred = NULL;
 	struct cred *cred = NULL;
 	bool squash_id = false;
+	ktime_t kstart = ktime_get();
 	int rc = 0;
 
 	if (mask & MAY_NOT_BLOCK)
@@ -4686,7 +4716,6 @@ int ll_inode_permission(struct inode *inode, int mask)
 		old_cred = override_creds(cred);
 	}
 
-	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_INODE_PERM, 1);
 	rc = generic_permission(inode, mask);
 
 	/* restore current process's credentials and FS capability */
@@ -4694,6 +4723,10 @@ int ll_inode_permission(struct inode *inode, int mask)
 		revert_creds(old_cred);
 		put_cred(cred);
 	}
+
+	if (!rc)
+		ll_stats_ops_tally(sbi, LPROC_LL_INODE_PERM,
+				   ktime_us_delta(ktime_get(), kstart));
 
 	return rc;
 }

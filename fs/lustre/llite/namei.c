@@ -1323,6 +1323,7 @@ err_exit:
 static int ll_mknod(struct inode *dir, struct dentry *dchild,
 		    umode_t mode, dev_t rdev)
 {
+	ktime_t kstart = ktime_get();
 	int err;
 
 	CDEBUG(D_VFSTRACE, "VFS Op:name=%pd, dir=" DFID "(%p) mode %o dev %x\n",
@@ -1354,7 +1355,8 @@ static int ll_mknod(struct inode *dir, struct dentry *dchild,
 	}
 
 	if (!err)
-		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_MKNOD, 1);
+		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_MKNOD,
+				   ktime_us_delta(ktime_get(), kstart));
 
 	return err;
 }
@@ -1365,6 +1367,7 @@ static int ll_mknod(struct inode *dir, struct dentry *dchild,
 static int ll_create_nd(struct inode *dir, struct dentry *dentry,
 			umode_t mode, bool want_excl)
 {
+	ktime_t kstart = ktime_get();
 	int rc;
 
 	CDEBUG(D_VFSTRACE,
@@ -1373,10 +1376,12 @@ static int ll_create_nd(struct inode *dir, struct dentry *dentry,
 
 	rc = ll_mknod(dir, dentry, mode, 0);
 
-	ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_CREATE, 1);
-
 	CDEBUG(D_VFSTRACE, "VFS Op:name=%pd, unhashed %d\n",
 	       dentry, d_unhashed(dentry));
+
+	if (!rc)
+		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_CREATE,
+				   ktime_us_delta(ktime_get(), kstart));
 
 	return rc;
 }
@@ -1386,6 +1391,7 @@ static int ll_unlink(struct inode *dir, struct dentry *dchild)
 	struct ptlrpc_request *request = NULL;
 	struct md_op_data *op_data;
 	struct mdt_body *body;
+	ktime_t kstart = ktime_get();
 	int rc;
 
 	CDEBUG(D_VFSTRACE, "VFS Op:name=%pd,dir=%lu/%u(%p)\n",
@@ -1415,7 +1421,8 @@ static int ll_unlink(struct inode *dir, struct dentry *dchild)
 		set_nlink(dchild->d_inode, body->mbo_nlink);
 
 	ll_update_times(request, dir);
-	ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_UNLINK, 1);
+	ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_UNLINK,
+				   ktime_us_delta(ktime_get(), kstart));
 
  out:
 	ptlrpc_req_finished(request);
@@ -1424,6 +1431,7 @@ static int ll_unlink(struct inode *dir, struct dentry *dchild)
 
 static int ll_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 {
+	ktime_t kstart = ktime_get();
 	int err;
 
 	CDEBUG(D_VFSTRACE, "VFS Op:name=%pd, dir" DFID "(%p)\n",
@@ -1435,13 +1443,15 @@ static int ll_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 
 	err = ll_new_node(dir, dentry, NULL, mode, 0, LUSTRE_OPC_MKDIR);
 	if (!err)
-		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_MKDIR, 1);
+		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_MKDIR,
+				   ktime_us_delta(ktime_get(), kstart));
 
 	return err;
 }
 
 static int ll_rmdir(struct inode *dir, struct dentry *dchild)
 {
+	ktime_t kstart = ktime_get();
 	struct ptlrpc_request *request = NULL;
 	struct md_op_data *op_data;
 	int rc;
@@ -1464,7 +1474,8 @@ static int ll_rmdir(struct inode *dir, struct dentry *dchild)
 	ll_finish_md_op_data(op_data);
 	if (rc == 0) {
 		ll_update_times(request, dir);
-		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_RMDIR, 1);
+		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_RMDIR,
+				   ktime_us_delta(ktime_get(), kstart));
 	}
 
 	ptlrpc_req_finished(request);
@@ -1474,6 +1485,7 @@ static int ll_rmdir(struct inode *dir, struct dentry *dchild)
 static int ll_symlink(struct inode *dir, struct dentry *dentry,
 		      const char *oldname)
 {
+	ktime_t kstart = ktime_get();
 	int err;
 
 	CDEBUG(D_VFSTRACE, "VFS Op:name=%pd, dir=" DFID "(%p),target=%.*s\n",
@@ -1483,7 +1495,8 @@ static int ll_symlink(struct inode *dir, struct dentry *dentry,
 			  0, LUSTRE_OPC_SYMLINK);
 
 	if (!err)
-		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_SYMLINK, 1);
+		ll_stats_ops_tally(ll_i2sbi(dir), LPROC_LL_SYMLINK,
+				   ktime_us_delta(ktime_get(), kstart));
 
 	return err;
 }
@@ -1495,6 +1508,7 @@ static int ll_link(struct dentry *old_dentry, struct inode *dir,
 	struct ll_sb_info *sbi = ll_i2sbi(dir);
 	struct ptlrpc_request *request = NULL;
 	struct md_op_data *op_data;
+	ktime_t kstart = ktime_get();
 	int err;
 
 	CDEBUG(D_VFSTRACE,
@@ -1514,7 +1528,8 @@ static int ll_link(struct dentry *old_dentry, struct inode *dir,
 		goto out;
 
 	ll_update_times(request, dir);
-	ll_stats_ops_tally(sbi, LPROC_LL_LINK, 1);
+	ll_stats_ops_tally(sbi, LPROC_LL_LINK,
+			   ktime_us_delta(ktime_get(), kstart));
 out:
 	ptlrpc_req_finished(request);
 	return err;
@@ -1527,6 +1542,7 @@ static int ll_rename(struct inode *src, struct dentry *src_dchild,
 	struct ptlrpc_request *request = NULL;
 	struct ll_sb_info *sbi = ll_i2sbi(src);
 	struct md_op_data *op_data;
+	ktime_t kstart = ktime_get();
 	int err;
 
 	if (flags)
@@ -1556,12 +1572,15 @@ static int ll_rename(struct inode *src, struct dentry *src_dchild,
 	if (!err) {
 		ll_update_times(request, src);
 		ll_update_times(request, tgt);
-		ll_stats_ops_tally(sbi, LPROC_LL_RENAME, 1);
 	}
 
 	ptlrpc_req_finished(request);
-	if (!err)
+	if (!err) {
 		d_move(src_dchild, tgt_dchild);
+		ll_stats_ops_tally(sbi, LPROC_LL_RENAME,
+				   ktime_us_delta(ktime_get(), kstart));
+	}
+
 	return err;
 }
 

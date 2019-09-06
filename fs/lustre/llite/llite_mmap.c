@@ -363,13 +363,11 @@ static vm_fault_t ll_fault(struct vm_fault *vmf)
 	bool cached;
 	vm_fault_t result;
 	sigset_t old, new;
-
-	ll_stats_ops_tally(ll_i2sbi(file_inode(vma->vm_file)),
-			   LPROC_LL_FAULT, 1);
+	ktime_t kstart = ktime_get();
 
 	result = pcc_fault(vma, vmf, &cached);
 	if (cached)
-		return result;
+		goto out;
 
 	/* Only SIGKILL and SIGTERM are allowed for fault/nopage/mkwrite
 	 * so that it can be killed by admin but not cause segfault by
@@ -406,11 +404,17 @@ restart:
 	}
 	sigprocmask(SIG_SETMASK, &old, NULL);
 
-	if (vmf->page && result == VM_FAULT_LOCKED)
+out:
+	if (vmf->page && result == VM_FAULT_LOCKED) {
 		ll_rw_stats_tally(ll_i2sbi(file_inode(vma->vm_file)),
 				  current->pid, LUSTRE_FPRIVATE(vma->vm_file),
 				  cl_offset(NULL, vmf->page->index), PAGE_SIZE,
 				  READ);
+		ll_stats_ops_tally(ll_i2sbi(file_inode(vma->vm_file)),
+				   LPROC_LL_FAULT,
+				   ktime_us_delta(ktime_get(), kstart));
+	}
+
 	return result;
 }
 
@@ -423,13 +427,11 @@ static vm_fault_t ll_page_mkwrite(struct vm_fault *vmf)
 	bool cached;
 	int err;
 	vm_fault_t ret;
+	ktime_t kstart = ktime_get();
 
-	ll_stats_ops_tally(ll_i2sbi(file_inode(vma->vm_file)),
-			   LPROC_LL_MKWRITE, 1);
-
-	err = pcc_page_mkwrite(vma, vmf, &cached);
+	ret = pcc_page_mkwrite(vma, vmf, &cached);
 	if (cached)
-		return err;
+		goto out;
 
 	file_update_time(vma->vm_file);
 	do {
@@ -464,11 +466,17 @@ static vm_fault_t ll_page_mkwrite(struct vm_fault *vmf)
 		break;
 	}
 
-	if (ret == VM_FAULT_LOCKED)
+out:
+	if (ret == VM_FAULT_LOCKED) {
 		ll_rw_stats_tally(ll_i2sbi(file_inode(vma->vm_file)),
 				  current->pid, LUSTRE_FPRIVATE(vma->vm_file),
 				  cl_offset(NULL, vmf->page->index), PAGE_SIZE,
 				  WRITE);
+		ll_stats_ops_tally(ll_i2sbi(file_inode(vma->vm_file)),
+				   LPROC_LL_MKWRITE,
+				   ktime_us_delta(ktime_get(), kstart));
+	}
+
 	return ret;
 }
 
@@ -526,6 +534,7 @@ static const struct vm_operations_struct ll_file_vm_ops = {
 int ll_file_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct inode *inode = file_inode(file);
+	ktime_t kstart = ktime_get();
 	bool cached;
 	int rc;
 
@@ -536,7 +545,6 @@ int ll_file_mmap(struct file *file, struct vm_area_struct *vma)
 	if (cached && rc != 0)
 		return rc;
 
-	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_MAP, 1);
 	rc = generic_file_mmap(file, vma);
 	if (rc == 0) {
 		vma->vm_ops = &ll_file_vm_ops;
@@ -545,6 +553,10 @@ int ll_file_mmap(struct file *file, struct vm_area_struct *vma)
 		if (!cached)
 			rc = ll_glimpse_size(inode);
 	}
+
+	if (!rc)
+		ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_MMAP,
+				   ktime_us_delta(ktime_get(), kstart));
 
 	return rc;
 }
