@@ -298,6 +298,7 @@ static int ll_readdir(struct file *filp, struct dir_context *ctx)
 	bool api32 = ll_need_32bit_api(sbi);
 	struct md_op_data *op_data;
 	struct lu_fid pfid = { 0 };
+	ktime_t kstart = ktime_get();
 	int rc;
 
 	CDEBUG(D_VFSTRACE,
@@ -374,7 +375,8 @@ static int ll_readdir(struct file *filp, struct dir_context *ctx)
 	ll_finish_md_op_data(op_data);
 out:
 	if (!rc)
-		ll_stats_ops_tally(sbi, LPROC_LL_READDIR, 1);
+		ll_stats_ops_tally(sbi, LPROC_LL_READDIR,
+				   ktime_us_delta(ktime_get(), kstart));
 
 	return rc;
 }

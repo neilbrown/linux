@@ -1773,8 +1773,8 @@ void pcc_vm_close(struct vm_area_struct *vma)
 	pcc_inode_unlock(inode);
 }
 
-int pcc_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf,
-		     bool *cached)
+vm_fault_t pcc_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf,
+			    bool *cached)
 {
 	struct page *page = vmf->page;
 	struct mm_struct *mm = vma->vm_mm;

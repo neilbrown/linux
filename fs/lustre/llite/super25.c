@@ -50,7 +50,6 @@ static struct inode *ll_alloc_inode(struct super_block *sb)
 {
 	struct ll_inode_info *lli;
 
-	ll_stats_ops_tally(ll_s2sbi(sb), LPROC_LL_ALLOC_INODE, 1);
 	lli = kmem_cache_zalloc(ll_inode_cachep, GFP_NOFS);
 	if (!lli)
 		return NULL;
