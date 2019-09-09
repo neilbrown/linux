@@ -122,7 +122,9 @@ struct obd_export {
 					exp_disconnected:1,
 					exp_connecting:1,
 					exp_flvr_changed:1,
-					exp_flvr_adapt:1;
+					exp_flvr_adapt:1,
+					/* local client with recovery disabled */
+					exp_no_recovery:1;
 	/* also protected by exp_lock */
 	enum lustre_sec_part		exp_sp_peer;
 	struct sptlrpc_flavor		exp_flvr;	    /* current */

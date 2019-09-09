@@ -1149,6 +1149,9 @@ int lmd_parse(char *options, struct lustre_mount_data *lmd)
 			strlcat(lmd->lmd_params, " ", LMD_PARAMS_MAXLEN);
 			s3 = s1 + 6 + length;
 			clear++;
+		} else if (strncmp(s1, "localrecov", 10) == 0) {
+			lmd->lmd_flags |= LMD_FLG_LOCAL_RECOV;
+			clear++;
 		} else if (strncmp(s1, "osd=", 4) == 0) {
 			rc = lmd_parse_string(&lmd->lmd_osd_type, s1 + 4);
 			if (rc)
