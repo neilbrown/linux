@@ -452,10 +452,9 @@ static unsigned int ldlm_res_hop_hash(struct cfs_hash *hs,
 	return val & mask;
 }
 
-static unsigned int ldlm_res_hop_fid_hash(struct cfs_hash *hs,
-					  const void *key, unsigned int mask)
+static unsigned int ldlm_res_hop_fid_hash(const struct ldlm_res_id *id,
+					  unsigned int bits)
 {
-	const struct ldlm_res_id *id = key;
 	struct lu_fid fid;
 	u32 hash;
 	u32 val;
@@ -468,18 +467,11 @@ static unsigned int ldlm_res_hop_fid_hash(struct cfs_hash *hs,
 	hash += (hash >> 4) + (hash << 12); /* mixing oid and seq */
 	if (id->name[LUSTRE_RES_ID_HSH_OFF] != 0) {
 		val = id->name[LUSTRE_RES_ID_HSH_OFF];
-		hash += (val >> 5) + (val << 11);
 	} else {
 		val = fid_oid(&fid);
 	}
-	hash = hash_long(hash, hs->hs_bkt_bits);
-	/* give me another random factor */
-	hash -= hash_long((unsigned long)hs, val % 11 + 3);
-
-	hash <<= hs->hs_cur_bits - hs->hs_bkt_bits;
-	hash |= ldlm_res_hop_hash(hs, key, CFS_HASH_NBKT(hs) - 1);
-
-	return hash & mask;
+	hash += (val >> 5) + (val << 11);
+	return hash_32(hash, bits);
 }
 
 static void *ldlm_res_hop_key(struct hlist_node *hnode)
@@ -531,16 +523,6 @@ static struct cfs_hash_ops ldlm_ns_hash_ops = {
 	.hs_put		= ldlm_res_hop_put
 };
 
-static struct cfs_hash_ops ldlm_ns_fid_hash_ops = {
-	.hs_hash	= ldlm_res_hop_fid_hash,
-	.hs_key		= ldlm_res_hop_key,
-	.hs_keycmp      = ldlm_res_hop_keycmp,
-	.hs_keycpy      = NULL,
-	.hs_object      = ldlm_res_hop_object,
-	.hs_get		= ldlm_res_hop_get_locked,
-	.hs_put		= ldlm_res_hop_put
-};
-
 struct ldlm_ns_hash_def {
 	enum ldlm_ns_type	nsd_type;
 	/** hash bucket bits */
@@ -556,13 +538,13 @@ static struct ldlm_ns_hash_def ldlm_ns_hash_defs[] = {
 		.nsd_type       = LDLM_NS_TYPE_MDC,
 		.nsd_bkt_bits   = 11,
 		.nsd_all_bits   = 16,
-		.nsd_hops       = &ldlm_ns_fid_hash_ops,
+		.nsd_hops       = &ldlm_ns_hash_ops,
 	},
 	{
 		.nsd_type       = LDLM_NS_TYPE_MDT,
 		.nsd_bkt_bits   = 14,
 		.nsd_all_bits   = 21,
-		.nsd_hops       = &ldlm_ns_fid_hash_ops,
+		.nsd_hops       = &ldlm_ns_hash_ops,
 	},
 	{
 		.nsd_type       = LDLM_NS_TYPE_OSC,
@@ -578,13 +560,13 @@ static struct ldlm_ns_hash_def ldlm_ns_hash_defs[] = {
 	},
 	{
 		.nsd_type       = LDLM_NS_TYPE_MGC,
-		.nsd_bkt_bits   = 4,
+		.nsd_bkt_bits   = 3,
 		.nsd_all_bits   = 4,
 		.nsd_hops       = &ldlm_ns_hash_ops,
 	},
 	{
 		.nsd_type       = LDLM_NS_TYPE_MGT,
-		.nsd_bkt_bits   = 4,
+		.nsd_bkt_bits   = 3,
 		.nsd_all_bits   = 4,
 		.nsd_hops       = &ldlm_ns_hash_ops,
 	},
@@ -613,9 +595,7 @@ struct ldlm_namespace *ldlm_namespace_new(struct obd_device *obd, char *name,
 					  enum ldlm_ns_type ns_type)
 {
 	struct ldlm_namespace *ns = NULL;
-	struct ldlm_ns_bucket *nsb;
 	struct ldlm_ns_hash_def *nsd;
-	struct cfs_hash_bd bd;
 	int idx;
 	int rc;
 
@@ -644,7 +624,7 @@ struct ldlm_namespace *ldlm_namespace_new(struct obd_device *obd, char *name,
 
 	ns->ns_rs_hash = cfs_hash_create(name,
 					 nsd->nsd_all_bits, nsd->nsd_all_bits,
-					 nsd->nsd_bkt_bits, sizeof(*nsb),
+					 nsd->nsd_bkt_bits, 0,
 					 CFS_HASH_MIN_THETA,
 					 CFS_HASH_MAX_THETA,
 					 nsd->nsd_hops,
@@ -655,8 +635,16 @@ struct ldlm_namespace *ldlm_namespace_new(struct obd_device *obd, char *name,
 	if (!ns->ns_rs_hash)
 		goto out_ns;
 
-	cfs_hash_for_each_bucket(ns->ns_rs_hash, &bd, idx) {
-		nsb = cfs_hash_bd_extra_get(ns->ns_rs_hash, &bd);
+	ns->ns_bucket_bits = nsd->nsd_all_bits - nsd->nsd_bkt_bits;
+	ns->ns_rs_buckets = kvmalloc(BIT(ns->ns_bucket_bits) *
+				     sizeof(ns->ns_rs_buckets[0]),
+				     GFP_KERNEL);
+	if (!ns->ns_rs_buckets)
+		goto out_hash;
+
+	for (idx = 0; idx < (1 << ns->ns_bucket_bits); idx++) {
+		struct ldlm_ns_bucket *nsb = &ns->ns_rs_buckets[idx];
+
 		at_init(&nsb->nsb_at_estimate, ldlm_enqueue_min, 0);
 		nsb->nsb_namespace = ns;
 	}
@@ -711,6 +699,7 @@ out_sysfs:
 	ldlm_namespace_sysfs_unregister(ns);
 	ldlm_namespace_cleanup(ns, 0);
 out_hash:
+	kvfree(ns->ns_rs_buckets);
 	kfree(ns->ns_name);
 	cfs_hash_putref(ns->ns_rs_hash);
 out_ns:
@@ -973,6 +962,7 @@ void ldlm_namespace_free_post(struct ldlm_namespace *ns)
 	ldlm_namespace_debugfs_unregister(ns);
 	ldlm_namespace_sysfs_unregister(ns);
 	cfs_hash_putref(ns->ns_rs_hash);
+	kvfree(ns->ns_rs_buckets);
 	kfree(ns->ns_name);
 	/* Namespace @ns should be not on list at this time, otherwise
 	 * this will cause issues related to using freed @ns in poold
@@ -1089,6 +1079,7 @@ ldlm_resource_get(struct ldlm_namespace *ns, struct ldlm_resource *parent,
 	struct cfs_hash_bd bd;
 	u64 version;
 	int ns_refcount = 0;
+	int hash;
 	int rc;
 
 	LASSERT(!parent);
@@ -1114,7 +1105,8 @@ ldlm_resource_get(struct ldlm_namespace *ns, struct ldlm_resource *parent,
 	if (!res)
 		return ERR_PTR(-ENOMEM);
 
-	res->lr_ns_bucket = cfs_hash_bd_extra_get(ns->ns_rs_hash, &bd);
+	hash = ldlm_res_hop_fid_hash(name, ns->ns_bucket_bits);
+	res->lr_ns_bucket = &ns->ns_rs_buckets[hash];
 	res->lr_name = *name;
 	res->lr_type = type;
 
