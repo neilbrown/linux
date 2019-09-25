@@ -43,7 +43,7 @@
 #include <lustre_sec.h>
 #include "ptlrpc_internal.h"
 
-struct lnet_eq *ptlrpc_eq;
+lnet_eq_handler_t ptlrpc_eq;
 struct percpu_ref ptlrpc_pending;
 
 /*
@@ -518,7 +518,6 @@ static void ptlrpc_ni_fini(void)
 	percpu_ref_kill(&ptlrpc_pending);
 	wait_for_completion(&ptlrpc_done);
 
-	LNetEQFree(ptlrpc_eq);
 	LNetNIFini();
 }
 
@@ -558,15 +557,8 @@ static int ptlrpc_ni_init(void)
 	 * so we just set EQ size to 0 to avoid overhead of serializing
 	 * enqueue/dequeue operations in LNet.
 	 */
-	ptlrpc_eq = LNetEQAlloc(ptlrpc_master_callback);
-	if (!IS_ERR(ptlrpc_eq))
-		return 0;
-
-	rc = PTR_ERR(ptlrpc_eq);
-	CERROR("Failed to allocate event queue: %d\n", rc);
-	LNetNIFini();
-
-	return rc;
+	ptlrpc_eq = ptlrpc_master_callback;
+	return 0;
 }
 
 int ptlrpc_init_portals(void)

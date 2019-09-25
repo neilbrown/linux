@@ -223,7 +223,7 @@ lnet_md_build(const struct lnet_md *umd, int unlink)
 
 /* must be called with resource lock held */
 static int
-lnet_md_link(struct lnet_libmd *md, struct lnet_eq *eq, int cpt)
+lnet_md_link(struct lnet_libmd *md, lnet_eq_handler_t eq, int cpt)
 {
 	struct lnet_res_container *container = the_lnet.ln_md_containers[cpt];
 
@@ -237,14 +237,7 @@ lnet_md_link(struct lnet_libmd *md, struct lnet_eq *eq, int cpt)
 	 * disable END events.  Best to LASSERT our caller is compliant so
 	 * we find out quickly...
 	 */
-	/*
-	 * TODO - reevaluate what should be here in light of
-	 * the removal of the start and end events
-	 * maybe there we shouldn't even allow LNET_EQ_NONE!)
-	 * LASSERT(!eq);
-	 */
-	if (eq)
-		md->md_eq = eq->eq_callback;
+	md->md_eq = eq;
 
 	lnet_res_lh_initialize(container, &md->md_lh);
 

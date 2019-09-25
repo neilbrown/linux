@@ -54,7 +54,7 @@ enum srpc_state {
 static struct smoketest_rpc {
 	spinlock_t	 rpc_glock;	/* global lock */
 	struct srpc_service	*rpc_services[SRPC_SERVICE_MAX_ID + 1];
-	struct lnet_eq		*rpc_lnet_eq;	/* _the_ LNet event queue */
+	lnet_eq_handler_t	rpc_lnet_eq;	/* _the_ LNet event handle */
 	enum srpc_state	 rpc_state;
 	struct srpc_counters	 rpc_counters;
 	u64		 rpc_matchbits;	/* matchbits counter */
@@ -1616,12 +1616,7 @@ srpc_startup(void)
 
 	srpc_data.rpc_state = SRPC_STATE_NI_INIT;
 
-	srpc_data.rpc_lnet_eq = LNetEQAlloc(srpc_lnet_ev_handler);
-	if (IS_ERR(srpc_data.rpc_lnet_eq)) {
-		rc = PTR_ERR(srpc_data.rpc_lnet_eq);
-		CERROR("LNetEQAlloc() has failed: %d\n", rc);
-		goto bail;
-	}
+	srpc_data.rpc_lnet_eq = srpc_lnet_ev_handler;
 
 	rc = LNetSetLazyPortal(SRPC_FRAMEWORK_REQUEST_PORTAL);
 	LASSERT(!rc);
@@ -1632,7 +1627,6 @@ srpc_startup(void)
 
 	rc = stt_startup();
 
-bail:
 	if (rc)
 		srpc_shutdown();
 	else
@@ -1672,8 +1666,6 @@ srpc_shutdown(void)
 		rc = LNetClearLazyPortal(SRPC_FRAMEWORK_REQUEST_PORTAL);
 		rc = LNetClearLazyPortal(SRPC_REQUEST_PORTAL);
 		LASSERT(!rc);
-		rc = LNetEQFree(srpc_data.rpc_lnet_eq);
-		LASSERT(!rc); /* the EQ should have no user by now */
 		/* fall through */
 	case SRPC_STATE_NI_INIT:
 		LNetNIFini();

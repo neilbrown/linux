@@ -1097,7 +1097,6 @@ lnet_router_checker_start(void)
 {
 	struct task_struct *task;
 	int rc;
-	int eqsz = 0;
 
 	LASSERT(the_lnet.ln_rc_state == LNET_RC_STATE_SHUTDOWN);
 
@@ -1109,13 +1108,7 @@ lnet_router_checker_start(void)
 
 	init_completion(&the_lnet.ln_rc_signal);
 
-	the_lnet.ln_rc_eq = LNetEQAlloc(lnet_router_checker_event);
-	if (IS_ERR(the_lnet.ln_rc_eq)) {
-		rc = PTR_ERR(the_lnet.ln_rc_eq);
-		CERROR("Can't allocate EQ(%d): %d\n", eqsz, rc);
-		return -ENOMEM;
-	}
-
+	the_lnet.ln_rc_eq = lnet_router_checker_event;
 	the_lnet.ln_rc_state = LNET_RC_STATE_RUNNING;
 	task = kthread_run(lnet_router_checker, NULL, "router_checker");
 	if (IS_ERR(task)) {
@@ -1123,8 +1116,6 @@ lnet_router_checker_start(void)
 		CERROR("Can't start router checker thread: %d\n", rc);
 		/* block until event callback signals exit */
 		wait_for_completion(&the_lnet.ln_rc_signal);
-		rc = LNetEQFree(the_lnet.ln_rc_eq);
-		LASSERT(!rc);
 		the_lnet.ln_rc_state = LNET_RC_STATE_SHUTDOWN;
 		return -ENOMEM;
 	}
@@ -1144,8 +1135,6 @@ lnet_router_checker_start(void)
 void
 lnet_router_checker_stop(void)
 {
-	int rc;
-
 	if (the_lnet.ln_rc_state == LNET_RC_STATE_SHUTDOWN)
 		return;
 
@@ -1157,9 +1146,6 @@ lnet_router_checker_stop(void)
 	/* block until event callback signals exit */
 	wait_for_completion(&the_lnet.ln_rc_signal);
 	LASSERT(the_lnet.ln_rc_state == LNET_RC_STATE_SHUTDOWN);
-
-	rc = LNetEQFree(the_lnet.ln_rc_eq);
-	LASSERT(!rc);
 }
 
 static void
