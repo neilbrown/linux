@@ -114,9 +114,9 @@ static void ldlm_expired_completion_wait(struct ldlm_lock *lock, u32 conn_cnt)
 
 		LDLM_ERROR(lock,
 			   "lock timed out (enqueued at %lld, %llds ago); not entering recovery in server code, just going back to sleep",
-			   (s64)lock->l_last_activity,
+			   (s64)lock->l_activity,
 			   (s64)(ktime_get_real_seconds() -
-				 lock->l_last_activity));
+				 lock->l_activity));
 		if (ktime_get_seconds() > next_dump) {
 			last_dump = next_dump;
 			next_dump = ktime_get_seconds() + 300;
@@ -133,8 +133,8 @@ static void ldlm_expired_completion_wait(struct ldlm_lock *lock, u32 conn_cnt)
 	ptlrpc_fail_import(imp, conn_cnt);
 	LDLM_ERROR(lock,
 		   "lock timed out (enqueued at %lld, %llds ago), entering recovery for %s@%s",
-		   (s64)lock->l_last_activity,
-		   (s64)(ktime_get_real_seconds() - lock->l_last_activity),
+		   (s64)lock->l_activity,
+		   (s64)(ktime_get_real_seconds() - lock->l_activity),
 		   obd2cli_tgt(obd), imp->imp_connection->c_remote_uuid.uuid);
 }
 
@@ -182,7 +182,7 @@ static int ldlm_completion_tail(struct ldlm_lock *lock, void *data)
 		LDLM_DEBUG(lock, "client-side enqueue: granted");
 	} else {
 		/* Take into AT only CP RPC, not immediately granted locks */
-		delay = ktime_get_real_seconds() - lock->l_last_activity;
+		delay = ktime_get_real_seconds() - lock->l_activity;
 		LDLM_DEBUG(lock, "client-side enqueue: granted after %lds",
 			   delay);
 
@@ -245,7 +245,7 @@ noreproc:
 
 	timeout = ldlm_cp_timeout(lock);
 
-	lock->l_last_activity = ktime_get_real_seconds();
+	lock->l_activity = ktime_get_real_seconds();
 
 	if (imp) {
 		spin_lock(&imp->imp_lock);
@@ -725,7 +725,7 @@ int ldlm_cli_enqueue(struct obd_export *exp, struct ptlrpc_request **reqp,
 	lock->l_export = NULL;
 	lock->l_blocking_ast = einfo->ei_cb_bl;
 	lock->l_flags |= (*flags & (LDLM_FL_NO_LRU | LDLM_FL_EXCL));
-	lock->l_last_activity = ktime_get_real_seconds();
+	lock->l_activity = ktime_get_real_seconds();
 
 	/* lock not sent to server yet */
 	if (!reqp || !*reqp) {
