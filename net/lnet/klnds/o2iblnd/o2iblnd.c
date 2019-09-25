@@ -550,38 +550,15 @@ static struct kib_conn *kiblnd_get_conn_by_idx(struct lnet_ni *ni, int index)
 	return NULL;
 }
 
-int kiblnd_translate_mtu(int value)
-{
-	switch (value) {
-	default:
-		return -1;
-	case 0:
-		return 0;
-	case 256:
-		return IB_MTU_256;
-	case 512:
-		return IB_MTU_512;
-	case 1024:
-		return IB_MTU_1024;
-	case 2048:
-		return IB_MTU_2048;
-	case 4096:
-		return IB_MTU_4096;
-	}
-}
-
 static void kiblnd_setup_mtu_locked(struct rdma_cm_id *cmid)
 {
-	int mtu;
-
 	/* XXX There is no path record for iWARP, set by netdev->change_mtu? */
 	if (!cmid->route.path_rec)
 		return;
 
-	mtu = kiblnd_translate_mtu(*kiblnd_tunables.kib_ib_mtu);
-	LASSERT(mtu >= 0);
-	if (mtu)
-		cmid->route.path_rec->mtu = mtu;
+	if (*kiblnd_tunables.kib_ib_mtu)
+		cmid->route.path_rec->mtu =
+			ib_mtu_int_to_enum(*kiblnd_tunables.kib_ib_mtu);
 }
 
 static int kiblnd_get_completion_vector(struct kib_conn *conn, int cpt)
