@@ -133,10 +133,8 @@ int llog_cat_close(const struct lu_env *env, struct llog_handle *cathandle)
 		list_del_init(&loghandle->u.phd.phd_entry);
 		llog_close(env, loghandle);
 	}
-	/* if handle was stored in ctxt, remove it too */
-	if (cathandle->lgh_ctxt->loc_handle == cathandle)
-		cathandle->lgh_ctxt->loc_handle = NULL;
-	return llog_close(env, cathandle);
+
+	return 0;
 }
 EXPORT_SYMBOL(llog_cat_close);
 
