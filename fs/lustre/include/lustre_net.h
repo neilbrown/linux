@@ -277,8 +277,11 @@
  */
 #define OST_MAXREQSIZE		(16 * 1024)
 
-/* Macro to hide a typecast. */
-#define ptlrpc_req_async_args(req) ((void *)&req->rq_async_args)
+/* Macro to hide a typecast and BUILD_BUG. */
+#define ptlrpc_req_async_args(_var, req) ({				\
+		BUILD_BUG_ON(sizeof(*_var) > sizeof(req->rq_async_args)); \
+		(typeof(_var))&req->rq_async_args;			\
+	})
 
 struct ptlrpc_replay_async_args {
 	int		praa_old_state;

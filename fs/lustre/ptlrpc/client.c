@@ -2890,8 +2890,7 @@ int ptlrpc_replay_req(struct ptlrpc_request *req)
 
 	LASSERT(req->rq_import->imp_state == LUSTRE_IMP_REPLAY);
 
-	LASSERT(sizeof(*aa) <= sizeof(req->rq_async_args));
-	aa = ptlrpc_req_async_args(req);
+	aa = ptlrpc_req_async_args(aa, req);
 	memset(aa, 0, sizeof(*aa));
 
 	/* Prepare request to be resent with ptlrpcd */
@@ -3222,8 +3221,7 @@ void *ptlrpcd_alloc_work(struct obd_import *imp,
 	req->rq_no_resend = 1;
 	req->rq_pill.rc_fmt = (void *)&worker_format;
 
-	BUILD_BUG_ON(sizeof(*args) > sizeof(req->rq_async_args));
-	args = ptlrpc_req_async_args(req);
+	args = ptlrpc_req_async_args(args, req);
 	args->cb = cb;
 	args->cbdata = cbdata;
 

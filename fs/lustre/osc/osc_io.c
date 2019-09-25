@@ -696,8 +696,7 @@ static int osc_io_data_version_start(const struct lu_env *env,
 
 	ptlrpc_request_set_replen(req);
 	req->rq_interpret_reply = osc_data_version_interpret;
-	BUILD_BUG_ON(sizeof(*dva) > sizeof(req->rq_async_args));
-	dva = ptlrpc_req_async_args(req);
+	dva = ptlrpc_req_async_args(dva, req);
 	dva->dva_oio = oio;
 
 	ptlrpcd_add_req(req);
