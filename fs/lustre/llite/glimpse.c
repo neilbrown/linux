@@ -47,6 +47,7 @@
 
 #include <cl_object.h>
 #include "llite_internal.h"
+#include "vvp_internal.h"
 
 static const struct cl_lock_descr whole_file = {
 	.cld_start = 0,

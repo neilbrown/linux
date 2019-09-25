@@ -93,6 +93,7 @@ static void *ll_thread_key_init(const struct lu_context *ctx,
 	info = kmem_cache_zalloc(ll_thread_kmem, GFP_NOFS);
 	if (!info)
 		info = ERR_PTR(-ENOMEM);
+
 	return info;
 }
 
