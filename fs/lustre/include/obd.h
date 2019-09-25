@@ -663,6 +663,8 @@ enum op_xvalid {
 	OP_XVALID_OWNEROVERRIDE	= BIT(2),	/* 0x0004 */
 	OP_XVALID_FLAGS		= BIT(3),	/* 0x0008 */
 	OP_XVALID_PROJID	= BIT(4),	/* 0x0010 */
+	OP_XVALID_LAZYSIZE	= BIT(5),	/* 0x0020 */
+	OP_XVALID_LAZYBLOCKS	= BIT(6),	/* 0x0040 */
 };
 
 struct lu_context;
