@@ -500,14 +500,14 @@ static void lnet_assert_wire_constants(void)
 }
 
 struct {
-	struct lnet_lnd		*lnd;
+	const struct lnet_lnd	*lnd;
 	int			lnd_refcount;
 } lnet_lnds[NUM_LNDS];
 
-static struct lnet_lnd *
+static const struct lnet_lnd *
 __lnet_find_lnd_by_type(u32 type)
 {
-	struct lnet_lnd *lnd;
+	const struct lnet_lnd *lnd;
 
 	/* holding lnd mutex */
 	if (type >= NUM_LNDS)
@@ -518,10 +518,10 @@ __lnet_find_lnd_by_type(u32 type)
 	return lnd;
 }
 
-static struct lnet_lnd *
+static const struct lnet_lnd *
 lnet_find_lnd_by_type(u32 type)
 {
-	struct lnet_lnd *lnd;
+	const struct lnet_lnd *lnd;
 
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 	lnd = __lnet_find_lnd_by_type(type);
@@ -533,7 +533,7 @@ lnet_find_lnd_by_type(u32 type)
 }
 
 static void
-lnet_put_lnd(struct lnet_lnd *lnd)
+lnet_put_lnd(const struct lnet_lnd *lnd)
 {
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 	lnet_lnds[lnd->lnd_type].lnd_refcount --;
@@ -541,7 +541,7 @@ lnet_put_lnd(struct lnet_lnd *lnd)
 }
 
 void
-lnet_register_lnd(struct lnet_lnd *lnd)
+lnet_register_lnd(const struct lnet_lnd *lnd)
 {
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 
@@ -558,7 +558,7 @@ lnet_register_lnd(struct lnet_lnd *lnd)
 EXPORT_SYMBOL(lnet_register_lnd);
 
 void
-lnet_unregister_lnd(struct lnet_lnd *lnd)
+lnet_unregister_lnd(const struct lnet_lnd *lnd)
 {
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 
@@ -1862,7 +1862,7 @@ lnet_startup_lndnet(struct lnet_net *net, struct lnet_lnd_tunables *tun)
 	struct list_head local_ni_list;
 	int ni_count = 0;
 	u32 lnd_type;
-	struct lnet_lnd *lnd;
+	const struct lnet_lnd *lnd;
 	int rc;
 	int peer_timeout =
 		net->net_tunables.lct_peer_timeout;
