@@ -2706,7 +2706,7 @@ kiblnd_rejected(struct kib_conn *conn, int reason, void *priv, int priv_nob)
 		if (priv_nob >= offsetof(struct kib_rej, ibr_padding)) {
 			struct kib_rej *rej = priv;
 			struct kib_connparams *cp = NULL;
-			int flip = 0;
+			bool flip = false;
 			u64 incarnation = -1;
 
 			/* NB. default incarnation is -1 because:
@@ -2725,7 +2725,7 @@ kiblnd_rejected(struct kib_conn *conn, int reason, void *priv, int priv_nob)
 			    rej->ibr_magic == __swab32(LNET_PROTO_MAGIC)) {
 				__swab32s(&rej->ibr_magic);
 				__swab16s(&rej->ibr_version);
-				flip = 1;
+				flip = true;
 			}
 
 			if (priv_nob >= sizeof(struct kib_rej) &&
@@ -3331,7 +3331,7 @@ kiblnd_connd(void *arg)
 	struct kib_conn *conn;
 	int timeout;
 	int i;
-	int dropped_lock;
+	bool dropped_lock;
 	int peer_index = 0;
 	unsigned long deadline = jiffies;
 
@@ -3343,7 +3343,7 @@ kiblnd_connd(void *arg)
 	while (!kiblnd_data.kib_shutdown) {
 		int reconn = 0;
 
-		dropped_lock = 0;
+		dropped_lock = false;
 
 		conn = list_first_entry_or_null(
 			&kiblnd_data.kib_connd_zombies,
@@ -3358,7 +3358,7 @@ kiblnd_connd(void *arg)
 			}
 
 			spin_unlock_irqrestore(lock, flags);
-			dropped_lock = 1;
+			dropped_lock = true;
 
 			kiblnd_destroy_conn(conn);
 
@@ -3383,7 +3383,7 @@ kiblnd_connd(void *arg)
 			list_del(&conn->ibc_list);
 
 			spin_unlock_irqrestore(lock, flags);
-			dropped_lock = 1;
+			dropped_lock = true;
 
 			kiblnd_disconnect_conn(conn);
 			kiblnd_conn_decref(conn);
@@ -3407,7 +3407,7 @@ kiblnd_connd(void *arg)
 			list_del(&conn->ibc_list);
 
 			spin_unlock_irqrestore(lock, flags);
-			dropped_lock = 1;
+			dropped_lock = true;
 
 			reconn += kiblnd_reconnect_peer(conn->ibc_peer);
 			kiblnd_peer_decref(conn->ibc_peer);
@@ -3425,7 +3425,7 @@ kiblnd_connd(void *arg)
 			unsigned int lnd_timeout;
 
 			spin_unlock_irqrestore(lock, flags);
-			dropped_lock = 1;
+			dropped_lock = true;
 
 			/*
 			 * Time to check for RDMA timeouts on a few more
@@ -3599,7 +3599,7 @@ kiblnd_scheduler(void *arg)
 	wait_queue_entry_t wait;
 	unsigned long flags;
 	struct ib_wc wc;
-	int did_something;
+	bool did_something;
 	int rc;
 
 	init_waitqueue_entry(&wait, current);
@@ -3623,7 +3623,7 @@ kiblnd_scheduler(void *arg)
 			spin_lock_irqsave(&sched->ibs_lock, flags);
 		}
 
-		did_something = 0;
+		did_something = false;
 
 		conn = list_first_entry_or_null(&sched->ibs_conns,
 						struct kib_conn,
@@ -3700,7 +3700,7 @@ kiblnd_scheduler(void *arg)
 			}
 
 			kiblnd_conn_decref(conn); /* ...drop my ref from above */
-			did_something = 1;
+			did_something = true;
 		}
 
 		if (did_something)
@@ -3738,14 +3738,14 @@ kiblnd_failover_thread(void *arg)
 	write_lock_irqsave(glock, flags);
 
 	while (!kiblnd_data.kib_shutdown) {
-		int do_failover = 0;
+		bool do_failover = false;
 		int long_sleep;
 
 		list_for_each_entry(dev, &kiblnd_data.kib_failed_devs,
 				    ibd_fail_list) {
 			if (ktime_get_seconds() < dev->ibd_next_failover)
 				continue;
-			do_failover = 1;
+			do_failover = true;
 			break;
 		}
 
