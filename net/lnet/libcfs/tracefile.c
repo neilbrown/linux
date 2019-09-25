@@ -807,7 +807,6 @@ int cfs_tracefile_dump_all_pages(char *filename)
 	struct cfs_trace_page *tage;
 	struct cfs_trace_page *tmp;
 	char *buf;
-	mm_segment_t __oldfs;
 	int rc;
 
 	down_write(&cfs_tracefile_sem);
@@ -828,8 +827,6 @@ int cfs_tracefile_dump_all_pages(char *filename)
 		rc = 0;
 		goto close;
 	}
-	__oldfs = get_fs();
-	set_fs(KERNEL_DS);
 
 	/* ok, for now, just write the pages.  in the future we'll be building
 	 * iobufs with the pages and calling generic_direct_IO
@@ -851,7 +848,7 @@ int cfs_tracefile_dump_all_pages(char *filename)
 		list_del(&tage->linkage);
 		cfs_tage_free(tage);
 	}
-	set_fs(__oldfs);
+
 	rc = vfs_fsync(filp, 1);
 	if (rc)
 		pr_err("sync returns %d\n", rc);
