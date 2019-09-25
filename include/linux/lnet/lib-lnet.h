@@ -410,6 +410,7 @@ extern unsigned int lnet_transaction_timeout;
 extern unsigned int lnet_retry_count;
 extern unsigned int lnet_numa_range;
 extern unsigned int lnet_health_sensitivity;
+extern unsigned int lnet_recovery_interval;
 extern unsigned int lnet_peer_discovery_disabled;
 extern int portal_rotor;
 
