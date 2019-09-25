@@ -831,7 +831,7 @@ static struct obd_export *__class_new_export(struct obd_device *obd,
 	spin_lock_init(&export->exp_uncommitted_replies_lock);
 	INIT_LIST_HEAD(&export->exp_uncommitted_replies);
 	INIT_LIST_HEAD(&export->exp_req_replay_queue);
-	INIT_LIST_HEAD(&export->exp_handle.h_link);
+	INIT_HLIST_NODE(&export->exp_handle.h_link);
 	INIT_LIST_HEAD(&export->exp_hp_rpcs);
 	class_handle_hash(&export->exp_handle, export_handle_owner);
 	spin_lock_init(&export->exp_lock);
@@ -1020,7 +1020,7 @@ struct obd_import *class_new_import(struct obd_device *obd)
 	atomic_set(&imp->imp_replay_inflight, 0);
 	atomic_set(&imp->imp_inval_count, 0);
 	INIT_LIST_HEAD(&imp->imp_conn_list);
-	INIT_LIST_HEAD(&imp->imp_handle.h_link);
+	INIT_HLIST_NODE(&imp->imp_handle.h_link);
 	class_handle_hash(&imp->imp_handle, import_handle_owner);
 	init_imp_at(&imp->imp_at);
 
