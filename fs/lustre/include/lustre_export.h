@@ -268,9 +268,15 @@ static inline int exp_connect_flr(struct obd_export *exp)
 	return !!(exp_connect_flags2(exp) & OBD_CONNECT2_FLR);
 }
 
+static inline int exp_connect_lock_convert(struct obd_export *exp)
+{
+	return !!(exp_connect_flags2(exp) & OBD_CONNECT2_LOCK_CONVERT);
+}
+
 struct obd_export *class_conn2export(struct lustre_handle *conn);
 
 #define KKUC_CT_DATA_MAGIC	0x092013cea
+
 struct kkuc_ct_data {
 	u32			kcd_magic;
 	u32			kcd_archive;
