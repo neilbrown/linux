@@ -346,6 +346,25 @@ lnet_ni_decref(struct lnet_ni *ni)
 	lnet_net_unlock(0);
 }
 
+static inline struct lnet_rsp_tracker *
+lnet_rspt_alloc(int cpt)
+{
+	struct lnet_rsp_tracker *rspt;
+
+	rspt = kzalloc(sizeof(*rspt), GFP_NOFS);
+	lnet_net_lock(cpt);
+	lnet_net_unlock(cpt);
+	return rspt;
+}
+
+static inline void
+lnet_rspt_free(struct lnet_rsp_tracker *rspt, int cpt)
+{
+	kfree(rspt);
+	lnet_net_lock(cpt);
+	lnet_net_unlock(cpt);
+}
+
 void lnet_ni_free(struct lnet_ni *ni);
 void lnet_net_free(struct lnet_net *net);
 
@@ -521,6 +540,7 @@ struct lnet_msg *lnet_create_reply_msg(struct lnet_ni *ni,
 				       struct lnet_msg *get_msg);
 void lnet_set_reply_msg_len(struct lnet_ni *ni, struct lnet_msg *msg,
 			    unsigned int len);
+void lnet_detach_rsp_tracker(struct lnet_libmd *md, int cpt);
 
 void lnet_finalize(struct lnet_msg *msg, int rc);
 
