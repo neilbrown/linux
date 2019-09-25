@@ -66,7 +66,7 @@ void ptlrpc_initiate_recovery(struct obd_import *imp)
 int ptlrpc_replay_next(struct obd_import *imp, int *inflight)
 {
 	int rc = 0;
-	struct ptlrpc_request *req = NULL, *pos;
+	struct ptlrpc_request *req = NULL;
 	u64 last_transno;
 
 	*inflight = 0;
@@ -120,8 +120,8 @@ int ptlrpc_replay_next(struct obd_import *imp, int *inflight)
 	if (!req) {
 		struct ptlrpc_request *tmp;
 
-		list_for_each_entry_safe(tmp, pos, &imp->imp_replay_list,
-					 rq_replay_list) {
+		list_for_each_entry(tmp, &imp->imp_replay_list,
+				    rq_replay_list) {
 			if (tmp->rq_transno > last_transno) {
 				req = tmp;
 				break;
@@ -172,7 +172,7 @@ int ptlrpc_replay_next(struct obd_import *imp, int *inflight)
  */
 int ptlrpc_resend(struct obd_import *imp)
 {
-	struct ptlrpc_request *req, *next;
+	struct ptlrpc_request *req;
 
 	/* As long as we're in recovery, nothing should be added to the sending
 	 * list, so we don't need to hold the lock during this iteration and
@@ -186,7 +186,7 @@ int ptlrpc_resend(struct obd_import *imp)
 		return -1;
 	}
 
-	list_for_each_entry_safe(req, next, &imp->imp_sending_list, rq_list) {
+	list_for_each_entry(req, &imp->imp_sending_list, rq_list) {
 		LASSERTF((long)req > PAGE_SIZE && req != LP_POISON,
 			 "req %p bad\n", req);
 		LASSERTF(req->rq_type != LI_POISON, "req %p freed\n", req);
@@ -211,10 +211,10 @@ int ptlrpc_resend(struct obd_import *imp)
  */
 void ptlrpc_wake_delayed(struct obd_import *imp)
 {
-	struct ptlrpc_request *req, *pos;
+	struct ptlrpc_request *req;
 
 	spin_lock(&imp->imp_lock);
-	list_for_each_entry_safe(req, pos, &imp->imp_delayed_list, rq_list) {
+	list_for_each_entry(req, &imp->imp_delayed_list, rq_list) {
 		DEBUG_REQ(D_HA, req, "waking (set %p):", req->rq_set);
 		ptlrpc_client_wake_req(req);
 	}
