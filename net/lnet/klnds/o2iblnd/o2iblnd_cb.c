@@ -1522,7 +1522,6 @@ kiblnd_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 	int target_is_router = lntmsg->msg_target_is_router;
 	int routing = lntmsg->msg_routing;
 	unsigned int payload_niov = lntmsg->msg_niov;
-	struct kvec *payload_iov = lntmsg->msg_iov;
 	struct bio_vec *payload_kiov = lntmsg->msg_kiov;
 	unsigned int payload_offset = lntmsg->msg_offset;
 	unsigned int payload_nob = lntmsg->msg_len;
@@ -1543,17 +1542,10 @@ kiblnd_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 
 	/* Thread context */
 	LASSERT(!in_interrupt());
-	/* payload is either all vaddrs or all pages */
-	LASSERT(!(payload_kiov && payload_iov));
 
-	if (payload_kiov)
-		iov_iter_bvec(&from, WRITE,
-			      payload_kiov, payload_niov,
-			      payload_nob + payload_offset);
-	else
-		iov_iter_kvec(&from, WRITE,
-			      payload_iov, payload_niov,
-			      payload_nob + payload_offset);
+	iov_iter_bvec(&from, WRITE,
+		      payload_kiov, payload_niov,
+		      payload_nob + payload_offset);
 
 	iov_iter_advance(&from, payload_offset);
 
@@ -1629,14 +1621,9 @@ kiblnd_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 			return -ENOMEM;
 		}
 
-		if (!payload_kiov)
-			rc = kiblnd_setup_rd_iov(ni, tx, tx->tx_rd,
-						 payload_niov, payload_iov,
-						 payload_offset, payload_nob);
-		else
-			rc = kiblnd_setup_rd_kiov(ni, tx, tx->tx_rd,
-						  payload_niov, payload_kiov,
-						  payload_offset, payload_nob);
+		rc = kiblnd_setup_rd_kiov(ni, tx, tx->tx_rd,
+					  payload_niov, payload_kiov,
+					  payload_offset, payload_nob);
 		if (rc) {
 			CERROR("Can't setup PUT src for %s: %d\n",
 			       libcfs_nid2str(target.nid), rc);
@@ -1690,7 +1677,6 @@ kiblnd_reply(struct lnet_ni *ni, struct kib_rx *rx, struct lnet_msg *lntmsg)
 {
 	struct lnet_process_id target = lntmsg->msg_target;
 	unsigned int niov = lntmsg->msg_niov;
-	struct kvec *iov = lntmsg->msg_iov;
 	struct bio_vec *kiov = lntmsg->msg_kiov;
 	unsigned int offset = lntmsg->msg_offset;
 	unsigned int nob = lntmsg->msg_len;
@@ -1706,9 +1692,6 @@ kiblnd_reply(struct lnet_ni *ni, struct kib_rx *rx, struct lnet_msg *lntmsg)
 
 	if (!nob)
 		rc = 0;
-	else if (!kiov)
-		rc = kiblnd_setup_rd_iov(ni, tx, tx->tx_rd,
-					 niov, iov, offset, nob);
 	else
 		rc = kiblnd_setup_rd_kiov(ni, tx, tx->tx_rd,
 					  niov, kiov, offset, nob);
