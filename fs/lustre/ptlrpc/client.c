@@ -145,31 +145,20 @@ struct ptlrpc_bulk_desc *ptlrpc_new_bulk(unsigned int nfrags,
 	struct ptlrpc_bulk_desc *desc;
 	int i;
 
-	/* ensure that only one of KIOV or IOVEC is set but not both */
-	LASSERT((ptlrpc_is_bulk_desc_kiov(type) && ops->add_kiov_frag) ||
-		(ptlrpc_is_bulk_desc_kvec(type) && ops->add_iov_frag));
-
 	desc = kzalloc(sizeof(*desc), GFP_NOFS);
 	if (!desc)
 		return NULL;
 
-	if (type & PTLRPC_BULK_BUF_KIOV) {
-		GET_KIOV(desc) = kcalloc(nfrags, sizeof(*GET_KIOV(desc)),
-					 GFP_NOFS);
-		if (!GET_KIOV(desc))
-			goto free_desc;
-	} else {
-		GET_KVEC(desc) = kcalloc(nfrags, sizeof(*GET_KVEC(desc)),
-					 GFP_NOFS);
-		if (!GET_KVEC(desc))
-			goto free_desc;
-	}
+	GET_KIOV(desc) = kcalloc(nfrags, sizeof(*GET_KIOV(desc)),
+				 GFP_NOFS);
+	if (!GET_KIOV(desc))
+		goto free_desc;
 
 	spin_lock_init(&desc->bd_lock);
 	desc->bd_max_iov = nfrags;
 	desc->bd_iov_count = 0;
 	desc->bd_portal = portal;
-	desc->bd_type = type;
+	desc->bd_type = type | PTLRPC_BULK_BUF_KIOV;
 	desc->bd_md_count = 0;
 	desc->bd_frag_ops = ops;
 	LASSERT(max_brw > 0);
