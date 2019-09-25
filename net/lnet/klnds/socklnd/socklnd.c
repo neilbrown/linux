@@ -2657,6 +2657,7 @@ int
 ksocknal_startup(struct lnet_ni *ni)
 {
 	struct ksock_net *net;
+	struct lnet_ioctl_config_lnd_cmn_tunables *net_tunables;
 	struct ksock_interface *ksi = NULL;
 	struct lnet_inetdev *ifaces = NULL;
 	int i = 0;
@@ -2678,18 +2679,28 @@ ksocknal_startup(struct lnet_ni *ni)
 
 	net->ksnn_incarnation = ktime_get_real_ns();
 	ni->ni_data = net;
-	if (!ni->ni_net->net_tunables_set) {
-		ni->ni_net->net_tunables.lct_peer_timeout =
-			*ksocknal_tunables.ksnd_peertimeout;
-		ni->ni_net->net_tunables.lct_max_tx_credits =
-			*ksocknal_tunables.ksnd_credits;
-		ni->ni_net->net_tunables.lct_peer_tx_credits =
-			*ksocknal_tunables.ksnd_peertxcredits;
-		ni->ni_net->net_tunables.lct_peer_rtr_credits =
-			*ksocknal_tunables.ksnd_peerrtrcredits;
-		ni->ni_net->net_tunables_set = true;
-	}
+	net_tunables = &ni->ni_net->net_tunables;
 
+	if (net_tunables->lct_peer_timeout == -1)
+		net_tunables->lct_peer_timeout =
+			*ksocknal_tunables.ksnd_peertimeout;
+
+	if (net_tunables->lct_max_tx_credits == -1)
+		net_tunables->lct_max_tx_credits =
+			*ksocknal_tunables.ksnd_credits;
+
+	if (net_tunables->lct_peer_tx_credits == -1)
+		net_tunables->lct_peer_tx_credits =
+			*ksocknal_tunables.ksnd_peertxcredits;
+
+	if (net_tunables->lct_peer_tx_credits >
+	    net_tunables->lct_max_tx_credits)
+		net_tunables->lct_peer_tx_credits =
+			net_tunables->lct_max_tx_credits;
+
+	if (net_tunables->lct_peer_rtr_credits == -1)
+		net_tunables->lct_peer_rtr_credits =
+			*ksocknal_tunables.ksnd_peerrtrcredits;
 	rc = lnet_inet_enumerate(&ifaces);
 	if (rc < 0)
 		goto fail_1;
