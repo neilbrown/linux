@@ -215,7 +215,7 @@ int plain_ctx_verify(struct ptlrpc_cli_ctx *ctx, struct ptlrpc_request *req)
 	struct lustre_msg *msg = req->rq_repdata;
 	struct plain_header *phdr;
 	u32 cksum;
-	int swabbed;
+	bool swabbed;
 
 	if (msg->lm_bufcount != PLAIN_PACK_SEGMENTS) {
 		CERROR("unexpected reply buf count %u\n", msg->lm_bufcount);
@@ -713,12 +713,11 @@ static struct ptlrpc_svc_ctx plain_svc_ctx = {
 	.sc_policy	= &plain_policy,
 };
 
-static
-int plain_accept(struct ptlrpc_request *req)
+static int plain_accept(struct ptlrpc_request *req)
 {
 	struct lustre_msg *msg = req->rq_reqbuf;
 	struct plain_header *phdr;
-	int swabbed;
+	bool swabbed;
 
 	LASSERT(SPTLRPC_FLVR_POLICY(req->rq_flvr.sf_rpc) ==
 		SPTLRPC_POLICY_PLAIN);
