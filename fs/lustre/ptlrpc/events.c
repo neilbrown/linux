@@ -44,6 +44,7 @@
 #include "ptlrpc_internal.h"
 
 struct lnet_eq *ptlrpc_eq;
+struct percpu_ref ptlrpc_pending;
 
 /*
  *  Client's outgoing request callback
@@ -448,6 +449,8 @@ static void ptlrpc_master_callback(struct lnet_event *ev)
 		callback == reply_out_callback);
 
 	callback(ev);
+	if (ev->unlinked)
+		percpu_ref_put(&ptlrpc_pending);
 }
 
 int ptlrpc_uuid_to_peer(struct obd_uuid *uuid,
@@ -496,36 +499,27 @@ int ptlrpc_uuid_to_peer(struct obd_uuid *uuid,
 	return rc;
 }
 
+static struct completion ptlrpc_done;
+
+void ptlrpc_release(struct percpu_ref *ref)
+{
+	complete(&ptlrpc_done);
+}
+
 static void ptlrpc_ni_fini(void)
 {
-	int rc;
-	int retries;
-
 	/* Wait for the event queue to become idle since there may still be
 	 * messages in flight with pending events (i.e. the fire-and-forget
 	 * messages == client requests and "non-difficult" server
 	 * replies
 	 */
 
-	for (retries = 0;; retries++) {
-		rc = LNetEQFree(ptlrpc_eq);
-		switch (rc) {
-		default:
-			LBUG();
+	init_completion(&ptlrpc_done);
+	percpu_ref_kill(&ptlrpc_pending);
+	wait_for_completion(&ptlrpc_done);
 
-		case 0:
-			LNetNIFini();
-			return;
-
-		case -EBUSY:
-			if (retries != 0)
-				CWARN("Event queue still busy\n");
-
-			schedule_timeout_uninterruptible(2 * HZ);
-			break;
-		}
-	}
-	/* notreached */
+	LNetEQFree(ptlrpc_eq);
+	LNetNIFini();
 }
 
 static lnet_pid_t ptl_get_pid(void)
@@ -551,6 +545,11 @@ static int ptlrpc_ni_init(void)
 		return rc;
 	}
 
+	rc = percpu_ref_init(&ptlrpc_pending, ptlrpc_release, 0, GFP_KERNEL);
+	if (rc) {
+		CERROR("Can't init percpu refcount: %d\n", rc);
+		return rc;
+	}
 	/* CAVEAT EMPTOR: how we process portals events is _radically_
 	 * different depending on...
 	 */
