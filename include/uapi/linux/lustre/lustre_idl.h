@@ -793,6 +793,7 @@ struct ptlrpc_body_v2 {
 							 */
 #define OBD_CONNECT2_DIR_MIGRATE	0x4ULL		/* migrate striped dir
 							 */
+#define OBD_CONNECT2_SUM_STATFS		0x8ULL /* MDT return aggregated stats */
 #define OBD_CONNECT2_FLR		0x20ULL		/* FLR support */
 #define OBD_CONNECT2_WBC_INTENTS	0x40ULL /* create/unlink/... intents
 						 * for wbc, also operations
@@ -1166,7 +1167,7 @@ lov_mds_md_max_stripe_count(size_t buf_size, __u32 lmm_magic)
 #define OBD_MD_FLXATTRLS	(0x0000002000000000ULL) /* xattr list */
 #define OBD_MD_FLXATTRRM	(0x0000004000000000ULL) /* xattr remove */
 #define OBD_MD_FLACL		(0x0000008000000000ULL) /* ACL */
-/*	OBD_MD_FLRMTPERM	(0x0000010000000000ULL) remote perm, obsolete */
+#define OBD_MD_FLAGSTATFS	(0x0000010000000000ULL) /* aggregated statfs */
 #define OBD_MD_FLMDSCAPA	(0x0000020000000000ULL) /* MDS capability */
 #define OBD_MD_FLOSSCAPA	(0x0000040000000000ULL) /* OSS capability */
 #define OBD_MD_FLCKSPLIT	(0x0000080000000000ULL) /* Check split on server */
