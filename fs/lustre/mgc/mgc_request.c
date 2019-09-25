@@ -845,6 +845,7 @@ static int mgc_blocking_ast(struct ldlm_lock *lock, struct ldlm_lock_desc *desc,
 #define  MGC_ENQUEUE_LIMIT (INITIAL_CONNECT_TIMEOUT + (AT_OFF ? 0 : at_min) \
 				+ PING_INTERVAL)
 #define  MGC_TARGET_REG_LIMIT 10
+#define  MGC_TARGET_REG_LIMIT_MAX RECONNECT_DELAY_MAX
 #define  MGC_SEND_PARAM_LIMIT 10
 
 /* Send parameter to MGS*/
@@ -939,6 +940,40 @@ static void mgc_notify_active(struct obd_device *unused)
 	/* TODO: Help the MGS rebuild nidtbl. -jay */
 }
 
+#ifndef LDD_F_UPDATE
+
+#define LDD_F_SV_TYPE_MDT	0x0001
+#define LDD_F_SV_TYPE_OST	0x0002
+#define LDD_F_SV_TYPE_MGS	0x0004
+#define LDD_F_SV_TYPE_MASK	(LDD_F_SV_TYPE_MDT  | \
+				 LDD_F_SV_TYPE_OST  | \
+				 LDD_F_SV_TYPE_MGS)
+#define LDD_F_SV_ALL		0x0008
+/** need an index assignment */
+#define LDD_F_NEED_INDEX	0x0010
+/** never registered */
+#define LDD_F_VIRGIN		0x0020
+/** update the config logs for this server */
+#define LDD_F_UPDATE		0x0040
+/** rewrite the LDD */
+#define LDD_F_REWRITE_LDD	0x0080
+/** regenerate config logs for this fs or server */
+#define LDD_F_WRITECONF		0x0100
+/** COMPAT_14 */
+/*#define LDD_F_UPGRADE14		0x0200 deprecated since 1.8 */
+/** process as lctl conf_param */
+#define LDD_F_PARAM		0x0400
+/** all nodes are specified as service nodes */
+#define LDD_F_NO_PRIMNODE	0x1000
+/** IR enable flag */
+#define LDD_F_IR_CAPABLE	0x2000
+/** the MGS refused to register the target. */
+#define LDD_F_ERROR		0x4000
+/** process at lctl conf_param */
+#define LDD_F_PARAM2		0x8000
+
+#endif
+
 /* Send target_reg message to MGS */
 static int mgc_target_register(struct obd_export *exp,
 			       struct mgs_target_info *mti)
@@ -964,6 +999,15 @@ static int mgc_target_register(struct obd_export *exp,
 	CDEBUG(D_MGC, "register %s\n", mti->mti_svname);
 	/* Limit how long we will wait for the enqueue to complete */
 	req->rq_delay_limit = MGC_TARGET_REG_LIMIT;
+
+	/*
+	 * If the target needs to regenerate the config log in MGS, it's better
+	 * to use some longer limit to let MGC have time to change connection to
+	 * another MGS (or try again with the same MGS) for the target (server)
+	 * will fail and exit if the request expired due to delay limit.
+	 */
+	if (mti->mti_flags & (LDD_F_UPDATE | LDD_F_NEED_INDEX))
+		req->rq_delay_limit = MGC_TARGET_REG_LIMIT_MAX;
 
 	rc = ptlrpc_queue_wait(req);
 	if (!rc) {
@@ -997,12 +1041,17 @@ static int mgc_set_info_async(const struct lu_env *env, struct obd_export *exp,
 		       imp->imp_deactive, imp->imp_invalid,
 		       imp->imp_replayable,
 		       ptlrpc_import_state_name(imp->imp_state));
-		/* Resurrect if we previously died */
-		if ((imp->imp_state != LUSTRE_IMP_FULL &&
-		     imp->imp_state != LUSTRE_IMP_NEW) || value > 1)
+		/*
+		 * Resurrect the import immediately if
+		 * 1. we previously got disconnected,
+		 * 2. value > 1 (at the same node with MGS)
+		 */
+		if (imp->imp_state == LUSTRE_IMP_DISCON || value > 1)
 			ptlrpc_reconnect_import(imp);
+
 		return 0;
 	}
+
 	if (KEY_IS(KEY_SET_INFO)) {
 		struct mgs_send_param *msp;
 

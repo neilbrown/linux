@@ -405,12 +405,27 @@ int class_register_device(struct obd_device *new_obd)
 	bool minor_assign = false;
 	int ret = 0;
 	int i;
+	bool retried = false;
 
+again:
 	write_lock(&obd_dev_lock);
 	for (i = 0; i < class_devno_max(); i++) {
 		struct obd_device *obd = class_num2obd(i);
 
 		if (obd && (strcmp(new_obd->obd_name, obd->obd_name) == 0)) {
+
+			if (!retried) {
+				write_unlock(&obd_dev_lock);
+
+				/*
+				 * The obd_device could be waiting to be
+				 * destroyed by the "obd_zombie_impexp_thread".
+				 */
+				obd_zombie_barrier();
+				retried = true;
+				goto again;
+			}
+
 			CERROR("%s: already exists, won't add\n",
 			       obd->obd_name);
 			/* in case we found a free slot before duplicate */
