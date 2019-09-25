@@ -640,10 +640,7 @@ lnet_res_container_cleanup(struct lnet_res_container *rec)
 		struct list_head *e = rec->rec_active.next;
 
 		list_del_init(e);
-		if (rec->rec_type == LNET_COOKIE_TYPE_EQ) {
-			kfree(list_entry(e, struct lnet_eq, eq_list));
-
-		} else if (rec->rec_type == LNET_COOKIE_TYPE_MD) {
+		if (rec->rec_type == LNET_COOKIE_TYPE_MD) {
 			kfree(list_entry(e, struct lnet_libmd, md_list));
 
 		} else { /* NB: Active MEs should be attached on portals */
@@ -1254,9 +1251,10 @@ lnet_ping_target_setup(struct lnet_ping_buffer **ppbuf,
 	int rc, rc2;
 
 	if (set_eq) {
-		rc = LNetEQAlloc(0, lnet_ping_target_event_handler,
-				 &the_lnet.ln_ping_target_eq);
-		if (rc) {
+		the_lnet.ln_ping_target_eq =
+			LNetEQAlloc(0, lnet_ping_target_event_handler);
+		if (IS_ERR(the_lnet.ln_ping_target_eq)) {
+			rc = PTR_ERR(the_lnet.ln_ping_target_eq);
 			CERROR("Can't allocate ping buffer EQ: %d\n", rc);
 			return rc;
 		}
@@ -1519,9 +1517,10 @@ static int lnet_push_target_init(void)
 	if (the_lnet.ln_push_target)
 		return -EALREADY;
 
-	rc = LNetEQAlloc(0, lnet_push_target_event_handler,
-			 &the_lnet.ln_push_target_eq);
-	if (rc) {
+	the_lnet.ln_push_target_eq =
+		LNetEQAlloc(0, lnet_push_target_event_handler);
+	if (IS_ERR(the_lnet.ln_push_target_eq)) {
+		rc = PTR_ERR(the_lnet.ln_push_target_eq);
 		CERROR("Can't allocated push target EQ: %d\n", rc);
 		return rc;
 	}
@@ -1532,7 +1531,7 @@ static int lnet_push_target_init(void)
 	rc = lnet_push_target_resize();
 	if (rc) {
 		LNetEQFree(the_lnet.ln_push_target_eq);
-		LNetInvalidateEQHandle(&the_lnet.ln_push_target_eq);
+		the_lnet.ln_push_target_eq = NULL;
 	}
 
 	return rc;
@@ -1558,7 +1557,7 @@ static void lnet_push_target_fini(void)
 	the_lnet.ln_push_target_nnis = 0;
 
 	LNetEQFree(the_lnet.ln_push_target_eq);
-	LNetInvalidateEQHandle(&the_lnet.ln_push_target_eq);
+	the_lnet.ln_push_target_eq = NULL;
 }
 
 static int
@@ -2074,7 +2073,7 @@ int lnet_lib_init(void)
 	}
 
 	the_lnet.ln_refcount = 0;
-	LNetInvalidateEQHandle(&the_lnet.ln_rc_eqh);
+	the_lnet.ln_rc_eq = NULL;
 	INIT_LIST_HEAD(&the_lnet.ln_lnds);
 	INIT_LIST_HEAD(&the_lnet.ln_net_zombie);
 	INIT_LIST_HEAD(&the_lnet.ln_rcd_zombie);
@@ -3458,7 +3457,7 @@ EXPORT_SYMBOL(LNetGetId);
 static int lnet_ping(struct lnet_process_id id, signed long timeout,
 		     struct lnet_process_id __user *ids, int n_ids)
 {
-	struct lnet_handle_eq eqh;
+	struct lnet_eq *eq;
 	struct lnet_handle_md mdh;
 	struct lnet_event event;
 	struct lnet_md md = { NULL };
@@ -3491,8 +3490,9 @@ static int lnet_ping(struct lnet_process_id id, signed long timeout,
 		return -ENOMEM;
 
 	/* NB 2 events max (including any unlink event) */
-	rc = LNetEQAlloc(2, LNET_EQ_HANDLER_NONE, &eqh);
-	if (rc) {
+	eq = LNetEQAlloc(2, LNET_EQ_HANDLER_NONE);
+	if (IS_ERR(eq)) {
+		rc = PTR_ERR(eq);
 		CERROR("Can't allocate EQ: %d\n", rc);
 		goto fail_ping_buffer_decref;
 	}
@@ -3504,7 +3504,7 @@ static int lnet_ping(struct lnet_process_id id, signed long timeout,
 	md.max_size = 0;
 	md.options = LNET_MD_TRUNCATE;
 	md.user_ptr = NULL;
-	md.eq_handle = eqh;
+	md.eq_handle = eq;
 
 	rc = LNetMDBind(&md, LNET_UNLINK, &mdh);
 	if (rc) {
@@ -3527,7 +3527,7 @@ static int lnet_ping(struct lnet_process_id id, signed long timeout,
 
 	do {
 		/* MUST block for unlink to complete */
-		rc2 = LNetEQPoll(&eqh, 1, timeout, !unlinked,
+		rc2 = LNetEQPoll(&eq, 1, timeout, !unlinked,
 				 &event, &which);
 
 		CDEBUG(D_NET, "poll %d(%d %d)%s\n", rc2,
@@ -3623,7 +3623,7 @@ static int lnet_ping(struct lnet_process_id id, signed long timeout,
 	rc = pbuf->pb_info.pi_nnis;
 
 fail_free_eq:
-	rc2 = LNetEQFree(eqh);
+	rc2 = LNetEQFree(eq);
 	if (rc2)
 		CERROR("rc2 %d\n", rc2);
 	LASSERT(!rc2);
