@@ -1018,7 +1018,6 @@ int kiblnd_alloc_pages(struct kib_pages **pp, int cpt, int npages);
 
 int kiblnd_cm_callback(struct rdma_cm_id *cmid,
 		       struct rdma_cm_event *event);
-int kiblnd_translate_mtu(int value);
 
 int kiblnd_dev_failover(struct kib_dev *dev, struct net *ns);
 int kiblnd_create_peer(struct lnet_ni *ni, struct kib_peer_ni **peerp,
