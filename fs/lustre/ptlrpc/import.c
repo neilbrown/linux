@@ -288,7 +288,7 @@ void ptlrpc_invalidate_import(struct obd_import *imp)
 		 */
 		if (!OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK)) {
 			timeout = ptlrpc_inflight_timeout(imp);
-			timeout += timeout / 3;
+			timeout += div_u64(timeout, 3);
 
 			if (timeout == 0)
 				timeout = obd_timeout;
