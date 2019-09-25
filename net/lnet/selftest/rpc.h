@@ -160,11 +160,11 @@ struct srpc_stat_reqst {
 } __packed;
 
 struct srpc_stat_reply {
-	u32		   str_status;
-	struct lst_sid	   str_sid;
-	struct sfw_counters	str_fw;
-	struct srpc_counters	str_rpc;
-	struct lnet_counters    str_lnet;
+	u32			    str_status;
+	struct lst_sid		    str_sid;
+	struct sfw_counters	    str_fw;
+	struct srpc_counters	    str_rpc;
+	struct lnet_counters_common str_lnet;
 } __packed;
 
 struct test_bulk_req {
