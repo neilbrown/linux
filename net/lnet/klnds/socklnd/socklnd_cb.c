@@ -2255,8 +2255,7 @@ ksocknal_flush_stale_txs(struct ksock_peer *peer_ni)
 		if (ktime_get_seconds() < tx->tx_deadline)
 			break;
 
-		list_del(&tx->tx_list);
-		list_add_tail(&tx->tx_list, &stale_txs);
+		list_move_tail(&tx->tx_list, &stale_txs);
 	}
 
 	write_unlock_bh(&ksocknal_data.ksnd_global_lock);
