@@ -3804,6 +3804,17 @@ int ll_migrate(struct inode *parent, struct file *file, struct lmv_user_md *lum,
 	if (!child_inode)
 		return -ENOENT;
 
+	if (!(exp_connect_flags2(ll_i2sbi(parent)->ll_md_exp) &
+	      OBD_CONNECT2_DIR_MIGRATE)) {
+		if (le32_to_cpu(lum->lum_stripe_count) > 1 ||
+		    ll_i2info(child_inode)->lli_lsm_md) {
+			CERROR("%s: MDT doesn't support stripe directory migration!\n",
+			       ll_get_fsname(parent->i_sb, NULL, 0));
+			rc = -EOPNOTSUPP;
+			goto out_iput;
+		}
+	}
+
 	/*
 	 * lfs migrate command needs to be blocked on the client
 	 * by checking the migrate FID against the FID of the
