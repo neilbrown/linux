@@ -501,7 +501,7 @@ static int ll_intent_file_open(struct dentry *de, void *lmm, int lmmsize,
 	struct inode *inode = d_inode(de);
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
 	struct dentry *parent = de->d_parent;
-	const char *name = NULL;
+	char *name = NULL;
 	struct md_op_data *op_data;
 	struct ptlrpc_request *req = NULL;
 	int len = 0, rc;
@@ -513,21 +513,41 @@ static int ll_intent_file_open(struct dentry *de, void *lmm, int lmmsize,
 	 * if server supports open-by-fid, or file name is invalid, don't pack
 	 * name in open request
 	 */
-	if (!(exp_connect_flags(sbi->ll_md_exp) & OBD_CONNECT_OPEN_BY_FID) &&
-	    lu_name_is_valid_2(de->d_name.name, de->d_name.len)) {
-		name = de->d_name.name;
+	if (!(exp_connect_flags(sbi->ll_md_exp) & OBD_CONNECT_OPEN_BY_FID)) {
+retry:
 		len = de->d_name.len;
+		name = kmalloc(len, GFP_NOFS);
+		if (!name)
+			return -ENOMEM;
+		/* race here */
+		spin_lock(&de->d_lock);
+		if (len != de->d_name.len) {
+			spin_unlock(&de->d_lock);
+			kfree(name);
+			goto retry;
+		}
+		memcpy(name, de->d_name.name, len);
+		spin_unlock(&de->d_lock);
+
+		if (!lu_name_is_valid_2(name, len)) {
+			kfree(name);
+			name = NULL;
+			len = 0;
+		}
 	}
 
 	op_data  = ll_prep_md_op_data(NULL, d_inode(parent), inode, name, len,
 				      O_RDWR, LUSTRE_OPC_ANY, NULL);
-	if (IS_ERR(op_data))
+	if (IS_ERR(op_data)) {
+		kfree(name);
 		return PTR_ERR(op_data);
+	}
 	op_data->op_data = lmm;
 	op_data->op_data_size = lmmsize;
 
 	rc = md_intent_lock(sbi->ll_md_exp, op_data, itp, &req,
 			    &ll_md_blocking_ast, 0);
+	kfree(name);
 	ll_finish_md_op_data(op_data);
 	if (rc == -ESTALE) {
 		/* reason for keep own exit path - don`t flood log
