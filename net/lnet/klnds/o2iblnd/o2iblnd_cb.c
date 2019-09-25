@@ -40,6 +40,12 @@
 
 #define MAX_CONN_RACES_BEFORE_ABORT 20
 
+/*
+ * Interfaces for which failover is supported should be
+ * checked this often
+ */
+#define FAILOVER_RECHECK_TIME	(10 * HZ)
+
 static void kiblnd_peer_alive(struct kib_peer_ni *peer_ni);
 static void kiblnd_peer_connect_failed(struct kib_peer_ni *peer_ni, int active,
 				       int error);
@@ -3594,6 +3600,7 @@ kiblnd_failover_thread(void *arg)
 	wait_queue_entry_t wait;
 	unsigned long flags;
 	int rc;
+	unsigned long full_check = jiffies + FAILOVER_RECHECK_TIME;
 
 	LASSERT(*kiblnd_tunables.kib_dev_failover);
 
@@ -3602,12 +3609,24 @@ kiblnd_failover_thread(void *arg)
 
 	while (!kiblnd_data.kib_shutdown) {
 		bool do_failover = false;
-		int long_sleep;
+		long timeout = full_check - jiffies;
+		time64_t now = ktime_get_seconds();
+
+		if (timeout <= 0)
+			/*
+			 * We are delaying the full_check while
+			 * there are genuine failures.
+			 */
+			timeout = FAILOVER_RECHECK_TIME;
 
 		list_for_each_entry(dev, &kiblnd_data.kib_failed_devs,
 				    ibd_fail_list) {
-			if (ktime_get_seconds() < dev->ibd_next_failover)
+			time64_t wait = dev->ibd_next_failover - now;
+			if (wait > 0) {
+				if (wait * HZ < timeout)
+					timeout = wait * HZ;
 				continue;
+			}
 			do_failover = true;
 			break;
 		}
@@ -3636,35 +3655,42 @@ kiblnd_failover_thread(void *arg)
 					      &kiblnd_data.kib_failed_devs);
 			}
 
+			/*
+			 * Don't schedule a full check until nothing
+			 * has failed for a while.
+			 */
+			full_check = jiffies + FAILOVER_RECHECK_TIME;
 			continue;
 		}
 
 		/* long sleep if no more pending failover */
-		long_sleep = list_empty(&kiblnd_data.kib_failed_devs);
+		if (list_empty(&kiblnd_data.kib_failed_devs) &&
+		    time_before(full_check, jiffies)) {
+			/*
+			 * Time for a routine check of all active
+			 * devices.  We need checking like this because
+			 * if there is not active connection on the
+			 * dev and no SEND from local, we may listen
+			 * on wrong HCA for ever while there is a
+			 * bonding failover.
+			 */
+			list_for_each_entry(dev, &kiblnd_data.kib_devs, ibd_list) {
+				if (kiblnd_dev_can_failover(dev)) {
+					list_add_tail(&dev->ibd_fail_list,
+						      &kiblnd_data.kib_failed_devs);
+				}
+			}
+			full_check = jiffies + FAILOVER_RECHECK_TIME;
+			continue;
+		}
 
 		set_current_state(TASK_IDLE);
 		add_wait_queue(&kiblnd_data.kib_failover_waitq, &wait);
 		write_unlock_irqrestore(glock, flags);
 
-		rc = schedule_timeout(long_sleep ? 10 * HZ : HZ);
+		schedule_timeout(timeout);
 		remove_wait_queue(&kiblnd_data.kib_failover_waitq, &wait);
 		write_lock_irqsave(glock, flags);
-
-		if (!long_sleep || rc)
-			continue;
-
-		/*
-		 * have a long sleep, routine check all active devices,
-		 * we need checking like this because if there is not active
-		 * connection on the dev and no SEND from local, we may listen
-		 * on wrong HCA for ever while there is a bonding failover
-		 */
-		list_for_each_entry(dev, &kiblnd_data.kib_devs, ibd_list) {
-			if (kiblnd_dev_can_failover(dev)) {
-				list_add_tail(&dev->ibd_fail_list,
-					      &kiblnd_data.kib_failed_devs);
-			}
-		}
 	}
 
 	write_unlock_irqrestore(glock, flags);
