@@ -302,6 +302,7 @@ struct obd_import {
 
 	u32				imp_connect_op;
 	u32				imp_idle_timeout;
+	u32				imp_idle_debug;
 	struct obd_connect_data		imp_connect_data;
 	u64				imp_connect_flags_orig;
 	u64				imp_connect_flags2_orig;
