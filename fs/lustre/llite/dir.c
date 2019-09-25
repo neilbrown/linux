@@ -1373,7 +1373,7 @@ static long ll_dir_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		return 0;
 	}
 	case IOC_MDC_LOOKUP: {
-		int namelen, len = 0;
+				     int namelen, len = 0;
 		char *filename;
 
 		rc = obd_ioctl_getdata(&data, &len, (void __user *)arg);
