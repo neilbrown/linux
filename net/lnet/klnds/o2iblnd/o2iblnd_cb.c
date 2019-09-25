@@ -3241,23 +3241,24 @@ int
 kiblnd_connd(void *arg)
 {
 	spinlock_t *lock = &kiblnd_data.kib_connd_lock;
-	wait_queue_entry_t wait;
 	unsigned long flags;
 	struct kib_conn *conn;
-	int timeout;
+	int timeout = 0;
 	int i;
-	bool dropped_lock;
 	int peer_index = 0;
 	unsigned long deadline = jiffies;
-
-	init_waitqueue_entry(&wait, current);
-
-	spin_lock_irqsave(lock, flags);
 
 	while (!kiblnd_data.kib_shutdown) {
 		int reconn = 0;
 
-		dropped_lock = false;
+		wait_event_interruptible_timeout(
+			kiblnd_data.kib_connd_waitq,
+			kiblnd_data.kib_shutdown ||
+			!list_empty(&kiblnd_data.kib_connd_zombies) ||
+			!list_empty(&kiblnd_data.kib_connd_conns),
+			timeout);
+
+		spin_lock_irqsave(lock, flags);
 
 		conn = list_first_entry_or_null(
 			&kiblnd_data.kib_connd_zombies,
@@ -3272,7 +3273,6 @@ kiblnd_connd(void *arg)
 			}
 
 			spin_unlock_irqrestore(lock, flags);
-			dropped_lock = true;
 
 			kiblnd_destroy_conn(conn);
 
@@ -3297,7 +3297,6 @@ kiblnd_connd(void *arg)
 			list_del(&conn->ibc_list);
 
 			spin_unlock_irqrestore(lock, flags);
-			dropped_lock = true;
 
 			LASSERT(conn->ibc_state == IBLND_CONN_CLOSING);
 
@@ -3312,6 +3311,12 @@ kiblnd_connd(void *arg)
 		}
 
 		while (reconn < KIB_RECONN_BREAK) {
+			/*
+			 * Note that this loop runs a least once
+			 * per second (see "p = 1" below), so we don't
+			 * need to schedule a wakeup if kib_reconn_wait
+			 * is not empty and doesn't get cleared here.
+			 */
 			if (kiblnd_data.kib_reconn_sec !=
 			    ktime_get_real_seconds()) {
 				kiblnd_data.kib_reconn_sec = ktime_get_real_seconds();
@@ -3325,9 +3330,7 @@ kiblnd_connd(void *arg)
 				break;
 
 			list_del(&conn->ibc_list);
-
 			spin_unlock_irqrestore(lock, flags);
-			dropped_lock = true;
 
 			reconn += kiblnd_reconnect_peer(conn->ibc_peer);
 			kiblnd_peer_decref(conn->ibc_peer);
@@ -3335,16 +3338,15 @@ kiblnd_connd(void *arg)
 
 			spin_lock_irqsave(lock, flags);
 		}
+		spin_unlock_irqrestore(lock, flags);
 
 		/* careful with the jiffy wrap... */
 		timeout = (int)(deadline - jiffies);
-		if (timeout <= 0) {
+		while (timeout <= 0) {
 			const int n = 4;
 			const int p = 1;
 			int chunk = HASH_SIZE(kiblnd_data.kib_peers);
 
-			spin_unlock_irqrestore(lock, flags);
-			dropped_lock = true;
 
 			/*
 			 * Time to check for RDMA timeouts on a few more
@@ -3368,24 +3370,9 @@ kiblnd_connd(void *arg)
 			}
 
 			deadline += msecs_to_jiffies(p * MSEC_PER_SEC);
-			spin_lock_irqsave(lock, flags);
+			timeout = (int)(deadline - jiffies);
 		}
-
-		if (dropped_lock)
-			continue;
-
-		/* Nothing to do for 'timeout'  */
-		set_current_state(TASK_INTERRUPTIBLE);
-		add_wait_queue(&kiblnd_data.kib_connd_waitq, &wait);
-		spin_unlock_irqrestore(lock, flags);
-
-		schedule_timeout(timeout);
-
-		remove_wait_queue(&kiblnd_data.kib_connd_waitq, &wait);
-		spin_lock_irqsave(lock, flags);
 	}
-
-	spin_unlock_irqrestore(lock, flags);
 
 	kiblnd_thread_fini();
 	return 0;
