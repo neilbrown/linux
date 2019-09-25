@@ -487,7 +487,6 @@ static int class_cleanup(struct obd_device *obd, struct lustre_cfg *lcfg)
 				LCONSOLE_WARN("Failing over %s\n",
 					      obd->obd_name);
 				obd->obd_fail = 1;
-				obd->obd_no_transno = 1;
 				obd->obd_no_recov = 1;
 				if (OBP(obd, iocontrol)) {
 					obd_iocontrol(OBD_IOC_SYNC,
