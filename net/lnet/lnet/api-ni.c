@@ -499,18 +499,23 @@ static void lnet_assert_wire_constants(void)
 	BUILD_BUG_ON((int)sizeof(((struct lnet_ping_info *)0)->pi_ni) != 0);
 }
 
+struct {
+	struct lnet_lnd		*lnd;
+	int			lnd_refcount;
+} lnet_lnds[NUM_LNDS];
+
 static struct lnet_lnd *
 __lnet_find_lnd_by_type(u32 type)
 {
 	struct lnet_lnd *lnd;
 
 	/* holding lnd mutex */
-	list_for_each_entry(lnd, &the_lnet.ln_lnds, lnd_list) {
-		if (lnd->lnd_type == type)
-			return lnd;
-	}
+	if (type >= NUM_LNDS)
+		return NULL;
+	lnd = lnet_lnds[type].lnd;
+	LASSERT(!lnd || lnd->lnd_type == type);
 
-	return NULL;
+	return lnd;
 }
 
 static struct lnet_lnd *
@@ -521,7 +526,7 @@ lnet_find_lnd_by_type(u32 type)
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 	lnd = __lnet_find_lnd_by_type(type);
 	if (lnd)
-		lnd->lnd_refcount ++;
+		lnet_lnds[type].lnd_refcount ++;
 	mutex_unlock(&the_lnet.ln_lnd_mutex);
 
 	return lnd;
@@ -531,7 +536,7 @@ static void
 lnet_put_lnd(struct lnet_lnd *lnd)
 {
 	mutex_lock(&the_lnet.ln_lnd_mutex);
-	lnd->lnd_refcount --;
+	lnet_lnds[lnd->lnd_type].lnd_refcount --;
 	mutex_unlock(&the_lnet.ln_lnd_mutex);
 }
 
@@ -543,8 +548,8 @@ lnet_register_lnd(struct lnet_lnd *lnd)
 	LASSERT(libcfs_isknown_lnd(lnd->lnd_type));
 	LASSERT(!__lnet_find_lnd_by_type(lnd->lnd_type));
 
-	list_add_tail(&lnd->lnd_list, &the_lnet.ln_lnds);
-	lnd->lnd_refcount = 0;
+	lnet_lnds[lnd->lnd_type].lnd = lnd;
+	lnet_lnds[lnd->lnd_type].lnd_refcount = 0;
 
 	CDEBUG(D_NET, "%s LND registered\n", libcfs_lnd2str(lnd->lnd_type));
 
@@ -558,9 +563,9 @@ lnet_unregister_lnd(struct lnet_lnd *lnd)
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 
 	LASSERT(__lnet_find_lnd_by_type(lnd->lnd_type) == lnd);
-	LASSERT(!lnd->lnd_refcount);
+	LASSERT(!lnet_lnds[lnd->lnd_type].lnd_refcount);
 
-	list_del(&lnd->lnd_list);
+	lnet_lnds[lnd->lnd_type].lnd = NULL;
 	CDEBUG(D_NET, "%s LND unregistered\n", libcfs_lnd2str(lnd->lnd_type));
 
 	mutex_unlock(&the_lnet.ln_lnd_mutex);
@@ -2121,13 +2126,12 @@ int lnet_lib_init(void)
  */
 void lnet_lib_exit(void)
 {
-	struct lnet_lnd *lnd;
+	int i;
 	LASSERT(!the_lnet.ln_refcount);
 
-	while ((lnd = list_first_entry_or_null(&the_lnet.ln_lnds,
-					       struct lnet_lnd,
-					       lnd_list)) != NULL)
-		lnet_unregister_lnd(lnd);
+	for (i = 0; i > NUM_LNDS; i++)
+		if (lnet_lnds[i].lnd)
+			lnet_unregister_lnd(lnet_lnds[i].lnd);
 	lnet_destroy_locks();
 }
 
