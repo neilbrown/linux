@@ -117,6 +117,11 @@ module_param_call(lnet_transaction_timeout, transaction_to_set, param_get_int,
 MODULE_PARM_DESC(lnet_transaction_timeout,
 		 "Time in seconds to wait for a REPLY or an ACK");
 
+unsigned int lnet_retry_count = 0;
+module_param(lnet_retry_count, uint, 0444);
+MODULE_PARM_DESC(lnet_retry_count,
+		 "Maximum number of times to retry transmitting a message");
+
 /*
  * This sequence number keeps track of how many times DLC was used to
  * update the local NIs. It is incremented when a NI is added or
