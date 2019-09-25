@@ -35,6 +35,7 @@
 
 #include <linux/sched.h>
 #include <linux/wait.h>
+#include <linux/libcfs/libcfs_debug.h>
 
 extern unsigned long cfs_fail_loc;
 extern unsigned int cfs_fail_val;

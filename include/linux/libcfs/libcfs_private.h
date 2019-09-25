@@ -39,6 +39,9 @@
 #ifndef __LIBCFS_PRIVATE_H__
 #define __LIBCFS_PRIVATE_H__
 
+#include <linux/sched.h>
+#include <linux/libcfs/libcfs_debug.h>
+
 #ifndef DEBUG_SUBSYSTEM
 # define DEBUG_SUBSYSTEM S_UNDEFINED
 #endif

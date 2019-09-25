@@ -38,6 +38,8 @@
 #define __LNET_ST_H__
 
 #include <linux/types.h>
+#include <linux/time.h>
+#include <linux/lnet/lnet-types.h>
 
 #define LST_FEAT_NONE		(0)
 #define LST_FEAT_BULK_LEN	(1 << 0)	/* enable variable page size */
