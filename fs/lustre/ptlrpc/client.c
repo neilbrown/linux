@@ -847,6 +847,13 @@ ptlrpc_request_alloc_internal(struct obd_import *imp,
 	struct ptlrpc_request *request;
 	int connect = 0;
 
+	request = __ptlrpc_request_alloc(imp, pool);
+	if (!request)
+		return NULL;
+
+	/* initiate connection if needed when the import has been
+	 * referenced by the new request to avoid races with disconnect
+	 */
 	if (unlikely(imp->imp_state == LUSTRE_IMP_IDLE)) {
 		int rc;
 
@@ -864,15 +871,13 @@ ptlrpc_request_alloc_internal(struct obd_import *imp,
 		spin_unlock(&imp->imp_lock);
 		if (connect) {
 			rc = ptlrpc_connect_import(imp);
-			if (rc < 0)
+			if (rc < 0) {
+				ptlrpc_request_free(request);
 				return NULL;
+			}
 			ptlrpc_pinger_add_import(imp);
 		}
 	}
-
-	request = __ptlrpc_request_alloc(imp, pool);
-	if (!request)
-		return NULL;
 
 	req_capsule_init(&request->rq_pill, request, RCL_CLIENT);
 	req_capsule_set(&request->rq_pill, format);
