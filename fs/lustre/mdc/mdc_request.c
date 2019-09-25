@@ -1417,6 +1417,7 @@ static int mdc_statfs(const struct lu_env *env,
 		      time64_t max_age, u32 flags)
 {
 	struct obd_device *obd = class_exp2obd(exp);
+	struct req_format *fmt;
 	struct ptlrpc_request *req;
 	struct obd_statfs *msfs;
 	struct obd_import *imp = NULL;
@@ -1433,8 +1434,12 @@ static int mdc_statfs(const struct lu_env *env,
 	if (!imp)
 		return -ENODEV;
 
-	req = ptlrpc_request_alloc_pack(imp, &RQF_MDS_STATFS,
-					LUSTRE_MDS_VERSION, MDS_STATFS);
+	fmt = &RQF_MDS_STATFS;
+	if ((exp_connect_flags2(exp) & OBD_CONNECT2_SUM_STATFS) &&
+	    (flags & OBD_STATFS_SUM))
+		fmt = &RQF_MDS_STATFS_NEW;
+	req = ptlrpc_request_alloc_pack(imp, fmt, LUSTRE_MDS_VERSION,
+					MDS_STATFS);
 	if (!req) {
 		rc = -ENOMEM;
 		goto output;
