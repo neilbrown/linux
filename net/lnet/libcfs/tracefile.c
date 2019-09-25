@@ -1085,14 +1085,18 @@ static int tracefiled(void *arg)
 	/* this is so broken in uml?  what on earth is going on? */
 
 	complete(&tctl->tctl_start);
+	pc.pc_want_daemon_pages = 0;
 
-	while (1) {
-		wait_queue_entry_t __wait;
-
-		pc.pc_want_daemon_pages = 0;
-		collect_pages(&pc);
+	while (!last_loop) {
+		wait_event_timeout(tctl->tctl_waitq,
+				   ({ collect_pages(&pc);
+					   !list_empty(&pc.pc_pages);}) ||
+				   atomic_read(&tctl->tctl_shutdown),
+				   HZ);
+		if (atomic_read(&tctl->tctl_shutdown))
+			last_loop = 1;
 		if (list_empty(&pc.pc_pages))
-			goto end_loop;
+			continue;
 
 		filp = NULL;
 		down_read(&cfs_tracefile_sem);
@@ -1111,7 +1115,7 @@ static int tracefiled(void *arg)
 		if (!filp) {
 			put_pages_on_daemon_list(&pc);
 			__LASSERT(list_empty(&pc.pc_pages));
-			goto end_loop;
+			continue;
 		}
 
 		list_for_each_entry_safe(tage, tmp, &pc.pc_pages, linkage) {
@@ -1159,19 +1163,6 @@ static int tracefiled(void *arg)
 			pr_err("There are %d pages unwritten\n", i);
 		}
 		__LASSERT(list_empty(&pc.pc_pages));
-end_loop:
-		if (atomic_read(&tctl->tctl_shutdown)) {
-			if (!last_loop) {
-				last_loop = 1;
-				continue;
-			} else {
-				break;
-			}
-		}
-		init_wait(&__wait);
-		add_wait_queue(&tctl->tctl_waitq, &__wait);
-		schedule_timeout_interruptible(HZ);
-		remove_wait_queue(&tctl->tctl_waitq, &__wait);
 	}
 	complete(&tctl->tctl_stop);
 	return 0;
