@@ -747,11 +747,10 @@ static void class_export_destroy(struct obd_export *exp)
 	if (exp != obd->obd_self_export)
 		class_decref(obd, "export", exp);
 
-	OBD_FREE_RCU(exp, sizeof(*exp), &exp->exp_handle);
+	kfree_rcu(exp, exp_handle.h_rcu);
 }
 
 static struct portals_handle_ops export_handle_ops = {
-	.hop_free	= NULL,
 	.hop_type	= "export",
 };
 
@@ -939,11 +938,10 @@ static void class_import_destroy(struct obd_import *imp)
 
 	LASSERT(!imp->imp_sec);
 	class_decref(imp->imp_obd, "import", imp);
-	OBD_FREE_RCU(imp, sizeof(*imp), &imp->imp_handle);
+	kfree_rcu(imp, imp_handle.h_rcu);
 }
 
 static struct portals_handle_ops import_handle_ops = {
-	.hop_free	= NULL,
 	.hop_type	= "import",
 };
 
