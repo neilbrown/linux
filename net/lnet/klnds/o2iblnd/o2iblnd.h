@@ -66,7 +66,7 @@
 
 #include <linux/lnet/lib-lnet.h>
 
-#define IBLND_PEER_HASH_SIZE		101	/* # peer_ni lists */
+#define IBLND_PEER_HASH_BITS		7	/* log2 of # peer_ni lists */
 
 #define IBLND_N_SCHED			2
 #define IBLND_N_SCHED_HIGH		4
@@ -342,9 +342,7 @@ struct kib_data {
 	/* stabilize net/dev/peer_ni/conn ops */
 	rwlock_t		kib_global_lock;
 	/* hash table of all my known peers */
-	struct list_head       *kib_peers;
-	/* size of kib_peers */
-	int			kib_peer_hash_size;
+	DECLARE_HASHTABLE(kib_peers, IBLND_PEER_HASH_BITS);
 	/* the connd task (serialisation assertions) */
 	void		       *kib_connd;
 	/* connections to setup/teardown */
@@ -595,7 +593,7 @@ struct kib_conn {
 #define IBLND_CONN_DISCONNECTED		5	/* disconnected */
 
 struct kib_peer_ni {
-	struct list_head	ibp_list;	/* stash on global peer_ni list */
+	struct hlist_node	ibp_list;	/* on peer_ni hash chain */
 	lnet_nid_t		ibp_nid;	/* who's on the other end(s) */
 	struct lnet_ni		*ibp_ni;	/* LNet interface */
 	struct list_head	ibp_conns;	/* all active connections */
@@ -719,20 +717,11 @@ kiblnd_peer_idle(struct kib_peer_ni *peer_ni)
 		list_empty(&peer_ni->ibp_conns);
 }
 
-static inline struct list_head *
-kiblnd_nid2peerlist(lnet_nid_t nid)
-{
-	unsigned int hash =
-		((unsigned int)nid) % kiblnd_data.kib_peer_hash_size;
-
-	return &kiblnd_data.kib_peers[hash];
-}
-
 static inline int
 kiblnd_peer_active(struct kib_peer_ni *peer_ni)
 {
 	/* Am I in the peer_ni hash table? */
-	return !list_empty(&peer_ni->ibp_list);
+	return !hlist_unhashed(&peer_ni->ibp_list);
 }
 
 static inline struct kib_conn *
