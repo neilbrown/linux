@@ -3422,7 +3422,7 @@ lnet_handle_recovery_reply(struct lnet_mt_event_info *ev_info,
 void
 lnet_mt_event_handler(struct lnet_event *event)
 {
-	struct lnet_mt_event_info *ev_info = event->md.user_ptr;
+	struct lnet_mt_event_info *ev_info = event->md_user_ptr;
 	struct lnet_ping_buffer *pbuf;
 
 	/* TODO: remove assert */
@@ -3454,7 +3454,7 @@ lnet_mt_event_handler(struct lnet_event *event)
 	}
 	if (event->unlinked) {
 		kfree(ev_info);
-		pbuf = LNET_PING_INFO_TO_BUFFER(event->md.start);
+		pbuf = LNET_PING_INFO_TO_BUFFER(event->md_start);
 		lnet_ping_buffer_decref(pbuf);
 	}
 }
