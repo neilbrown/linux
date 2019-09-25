@@ -171,5 +171,5 @@ lnet_me_unlink(struct lnet_me *me)
 		lnet_md_unlink(md);
 	}
 
-	kfree(me);
+	kmem_cache_free(lnet_mes_cachep, me);
 }
