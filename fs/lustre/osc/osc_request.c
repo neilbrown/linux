@@ -1168,7 +1168,7 @@ static int osc_brw_prep_request(int cmd, struct client_obd *cli,
 		req, page_count,
 		cli->cl_import->imp_connect_data.ocd_brw_size >> LNET_MTU_BITS,
 		(opc == OST_WRITE ? PTLRPC_BULK_GET_SOURCE :
-		 PTLRPC_BULK_PUT_SINK) | PTLRPC_BULK_BUF_KIOV, OST_BULK_PORTAL,
+		 PTLRPC_BULK_PUT_SINK), OST_BULK_PORTAL,
 		&ptlrpc_bulk_kiov_pin_ops);
 
 	if (!desc) {
