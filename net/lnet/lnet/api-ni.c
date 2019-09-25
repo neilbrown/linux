@@ -127,12 +127,12 @@ module_param_call(lnet_peer_discovery_disabled, discovery_set, param_get_int,
 MODULE_PARM_DESC(lnet_peer_discovery_disabled,
 		 "Set to 1 to disable peer discovery on this node.");
 
-unsigned int lnet_transaction_timeout = 5;
+unsigned int lnet_transaction_timeout = 50;
 static int transaction_to_set(const char *val, const struct kernel_param *kp);
 module_param_call(lnet_transaction_timeout, transaction_to_set, param_get_int,
 		  &lnet_transaction_timeout, 0444);
 MODULE_PARM_DESC(lnet_transaction_timeout,
-		 "Time in seconds to wait for a REPLY or an ACK");
+		 "Maximum number of seconds to wait for a peer response.");
 
 unsigned int lnet_retry_count = 0;
 static int retry_count_set(const char *val, const struct kernel_param *kp);
