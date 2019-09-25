@@ -232,6 +232,35 @@ struct ll_inode_info {
 	struct list_head		lli_xattrs;/* ll_xattr_entry->xe_list */
 };
 
+#ifdef CONFIG_LUSTRE_FS_POSIX_ACL
+static inline void lli_clear_acl(struct ll_inode_info *lli)
+{
+	if (lli->lli_posix_acl) {
+		posix_acl_release(lli->lli_posix_acl);
+		lli->lli_posix_acl = NULL;
+	}
+}
+
+static inline void lli_replace_acl(struct ll_inode_info *lli,
+				   struct lustre_md *md)
+{
+	spin_lock(&lli->lli_lock);
+	if (lli->lli_posix_acl)
+		posix_acl_release(lli->lli_posix_acl);
+	lli->lli_posix_acl = md->posix_acl;
+	spin_unlock(&lli->lli_lock);
+}
+#else
+static inline void lli_clear_acl(struct ll_inode_info *lli)
+{
+}
+
+static inline void lli_replace_acl(struct ll_inode_info *lli,
+				   struct lustre_md *md)
+{
+}
+#endif
+
 static inline u32 ll_layout_version_get(struct ll_inode_info *lli)
 {
 	u32 gen;

@@ -575,11 +575,9 @@ static int mdc_get_lustre_md(struct obd_export *exp,
 	}
 
 out:
-	if (rc) {
-#ifdef CONFIG_LUSTRE_FS_POSIX_ACL
-		posix_acl_release(md->posix_acl);
-#endif
-	}
+	if (rc)
+		lmd_clear_acl(md);
+
 	return rc;
 }
 
