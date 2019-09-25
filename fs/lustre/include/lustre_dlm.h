@@ -590,11 +590,6 @@ struct ldlm_lock {
 	 */
 	struct portals_handle		l_handle;
 	/**
-	 * Internal spinlock protects l_resource.  We should hold this lock
-	 * first before taking res_lock.
-	 */
-	spinlock_t			l_lock;
-	/**
 	 * Pointer to actual resource this lock is in.
 	 * ldlm_lock_change_resource() can change this.
 	 */
