@@ -79,6 +79,7 @@ static int proc_lnet_stats(struct ctl_table *table, int write,
 {
 	int rc;
 	struct lnet_counters *ctrs;
+	struct lnet_counters_common common;
 	size_t nob = *lenp;
 	loff_t pos = *ppos;
 	int len;
@@ -102,15 +103,16 @@ static int proc_lnet_stats(struct ctl_table *table, int write,
 	}
 
 	lnet_counters_get(ctrs);
+	common = ctrs->lct_common;
 
 	len = snprintf(tmpstr, tmpsiz,
 		       "%u %u %u %u %u %u %u %llu %llu %llu %llu",
-		       ctrs->msgs_alloc, ctrs->msgs_max,
-		       ctrs->errors,
-		       ctrs->send_count, ctrs->recv_count,
-		       ctrs->route_count, ctrs->drop_count,
-		       ctrs->send_length, ctrs->recv_length,
-		       ctrs->route_length, ctrs->drop_length);
+		       common.lcc_msgs_alloc, common.lcc_msgs_max,
+		       common.lcc_errors,
+		       common.lcc_send_count, common.lcc_recv_count,
+		       common.lcc_route_count, common.lcc_drop_count,
+		       common.lcc_send_length, common.lcc_recv_length,
+		       common.lcc_route_length, common.lcc_drop_length);
 
 	if (pos >= min_t(int, len, strlen(tmpstr)))
 		rc = 0;
