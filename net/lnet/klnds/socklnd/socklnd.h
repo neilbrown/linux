@@ -274,7 +274,7 @@ struct ksock_tx {				/* transmit packet */
 	struct list_head	tx_list;	/* queue on conn for transmission etc
 						 */
 	struct list_head	tx_zc_list;	/* queue on peer_ni for ZC request */
-	atomic_t		tx_refcount;	/* tx reference count */
+	refcount_t		tx_refcount;	/* tx reference count */
 	int			tx_nob;		/* # packet bytes */
 	int			tx_resid;	/* residual bytes */
 	int			tx_niov;	/* # packet iovec frags */
@@ -317,8 +317,8 @@ struct ksock_conn {
 	void		       *ksnc_saved_write_space;	/* socket's original
 							 * write_space() callback
 							 */
-	atomic_t		ksnc_conn_refcount;	/* conn refcount */
-	atomic_t		ksnc_sock_refcount;	/* sock refcount */
+	refcount_t		ksnc_conn_refcount;	/* conn refcount */
+	refcount_t		ksnc_sock_refcount;	/* sock refcount */
 	struct ksock_sched     *ksnc_scheduler;		/* who schedules this connection
 							 */
 	u32			ksnc_myipaddr;		/* my IP */
@@ -381,7 +381,7 @@ struct ksock_route {
 	struct list_head	ksnr_list;		/* chain on peer_ni route list */
 	struct list_head	ksnr_connd_list;	/* chain on ksnr_connd_routes */
 	struct ksock_peer      *ksnr_peer;		/* owning peer_ni */
-	atomic_t		ksnr_refcount;		/* # users */
+	refcount_t		ksnr_refcount;		/* # users */
 	time64_t		ksnr_timeout;		/* when (in secs) reconnection
 							 * can happen next
 							 */
@@ -411,7 +411,7 @@ struct ksock_peer {
 							 * alive
 							 */
 	struct lnet_process_id	ksnp_id;		/* who's on the other end(s) */
-	atomic_t		ksnp_refcount;		/* # users */
+	refcount_t		ksnp_refcount;		/* # users */
 	int			ksnp_sharecount;	/* lconf usage counter */
 	int			ksnp_closing;		/* being closed */
 	int			ksnp_accepting;		/* # passive connections pending
@@ -526,8 +526,7 @@ ksocknal_nid2peerlist(lnet_nid_t nid)
 static inline void
 ksocknal_conn_addref(struct ksock_conn *conn)
 {
-	LASSERT(atomic_read(&conn->ksnc_conn_refcount) > 0);
-	atomic_inc(&conn->ksnc_conn_refcount);
+	refcount_inc(&conn->ksnc_conn_refcount);
 }
 
 void ksocknal_queue_zombie_conn(struct ksock_conn *conn);
@@ -536,8 +535,7 @@ void ksocknal_finalize_zcreq(struct ksock_conn *conn);
 static inline void
 ksocknal_conn_decref(struct ksock_conn *conn)
 {
-	LASSERT(atomic_read(&conn->ksnc_conn_refcount) > 0);
-	if (atomic_dec_and_test(&conn->ksnc_conn_refcount))
+	if (refcount_dec_and_test(&conn->ksnc_conn_refcount))
 		ksocknal_queue_zombie_conn(conn);
 }
 
@@ -548,8 +546,7 @@ ksocknal_connsock_addref(struct ksock_conn *conn)
 
 	read_lock(&ksocknal_data.ksnd_global_lock);
 	if (!conn->ksnc_closing) {
-		LASSERT(atomic_read(&conn->ksnc_sock_refcount) > 0);
-		atomic_inc(&conn->ksnc_sock_refcount);
+		refcount_inc(&conn->ksnc_sock_refcount);
 		rc = 0;
 	}
 	read_unlock(&ksocknal_data.ksnd_global_lock);
@@ -560,8 +557,7 @@ ksocknal_connsock_addref(struct ksock_conn *conn)
 static inline void
 ksocknal_connsock_decref(struct ksock_conn *conn)
 {
-	LASSERT(atomic_read(&conn->ksnc_sock_refcount) > 0);
-	if (atomic_dec_and_test(&conn->ksnc_sock_refcount)) {
+	if (refcount_dec_and_test(&conn->ksnc_sock_refcount)) {
 		LASSERT(conn->ksnc_closing);
 		sock_release(conn->ksnc_sock);
 		conn->ksnc_sock = NULL;
@@ -572,8 +568,7 @@ ksocknal_connsock_decref(struct ksock_conn *conn)
 static inline void
 ksocknal_tx_addref(struct ksock_tx *tx)
 {
-	LASSERT(atomic_read(&tx->tx_refcount) > 0);
-	atomic_inc(&tx->tx_refcount);
+	refcount_inc(&tx->tx_refcount);
 }
 
 void ksocknal_tx_prep(struct ksock_conn *, struct ksock_tx *tx);
@@ -582,16 +577,14 @@ void ksocknal_tx_done(struct lnet_ni *ni, struct ksock_tx *tx, int error);
 static inline void
 ksocknal_tx_decref(struct ksock_tx *tx)
 {
-	LASSERT(atomic_read(&tx->tx_refcount) > 0);
-	if (atomic_dec_and_test(&tx->tx_refcount))
+	if (refcount_dec_and_test(&tx->tx_refcount))
 		ksocknal_tx_done(NULL, tx, 0);
 }
 
 static inline void
 ksocknal_route_addref(struct ksock_route *route)
 {
-	LASSERT(atomic_read(&route->ksnr_refcount) > 0);
-	atomic_inc(&route->ksnr_refcount);
+	refcount_inc(&route->ksnr_refcount);
 }
 
 void ksocknal_destroy_route(struct ksock_route *route);
@@ -599,16 +592,14 @@ void ksocknal_destroy_route(struct ksock_route *route);
 static inline void
 ksocknal_route_decref(struct ksock_route *route)
 {
-	LASSERT(atomic_read(&route->ksnr_refcount) > 0);
-	if (atomic_dec_and_test(&route->ksnr_refcount))
+	if (refcount_dec_and_test(&route->ksnr_refcount))
 		ksocknal_destroy_route(route);
 }
 
 static inline void
 ksocknal_peer_addref(struct ksock_peer *peer_ni)
 {
-	LASSERT(atomic_read(&peer_ni->ksnp_refcount) > 0);
-	atomic_inc(&peer_ni->ksnp_refcount);
+	refcount_inc(&peer_ni->ksnp_refcount);
 }
 
 void ksocknal_destroy_peer(struct ksock_peer *peer_ni);
@@ -616,8 +607,7 @@ void ksocknal_destroy_peer(struct ksock_peer *peer_ni);
 static inline void
 ksocknal_peer_decref(struct ksock_peer *peer_ni)
 {
-	LASSERT(atomic_read(&peer_ni->ksnp_refcount) > 0);
-	if (atomic_dec_and_test(&peer_ni->ksnp_refcount))
+	if (refcount_dec_and_test(&peer_ni->ksnp_refcount))
 		ksocknal_destroy_peer(peer_ni);
 }
 
