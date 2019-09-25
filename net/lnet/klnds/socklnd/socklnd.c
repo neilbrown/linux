@@ -248,52 +248,52 @@ ksocknal_get_peer_info(struct lnet_ni *ni, int index,
 	read_lock(&ksocknal_data.ksnd_global_lock);
 
 	hash_for_each(ksocknal_data.ksnd_peers, i, peer_ni, ksnp_list) {
-			if (peer_ni->ksnp_ni != ni)
+		if (peer_ni->ksnp_ni != ni)
+			continue;
+
+		if (!peer_ni->ksnp_n_passive_ips &&
+		    list_empty(&peer_ni->ksnp_routes)) {
+			if (index-- > 0)
 				continue;
 
-			if (!peer_ni->ksnp_n_passive_ips &&
-			    list_empty(&peer_ni->ksnp_routes)) {
-				if (index-- > 0)
-					continue;
+			*id = peer_ni->ksnp_id;
+			*myip = 0;
+			*peer_ip = 0;
+			*port = 0;
+			*conn_count = 0;
+			*share_count = 0;
+			rc = 0;
+			goto out;
+		}
 
-				*id = peer_ni->ksnp_id;
-				*myip = 0;
-				*peer_ip = 0;
-				*port = 0;
-				*conn_count = 0;
-				*share_count = 0;
-				rc = 0;
-				goto out;
-			}
+		for (j = 0; j < peer_ni->ksnp_n_passive_ips; j++) {
+			if (index-- > 0)
+				continue;
 
-			for (j = 0; j < peer_ni->ksnp_n_passive_ips; j++) {
-				if (index-- > 0)
-					continue;
+			*id = peer_ni->ksnp_id;
+			*myip = peer_ni->ksnp_passive_ips[j];
+			*peer_ip = 0;
+			*port = 0;
+			*conn_count = 0;
+			*share_count = 0;
+			rc = 0;
+			goto out;
+		}
 
-				*id = peer_ni->ksnp_id;
-				*myip = peer_ni->ksnp_passive_ips[j];
-				*peer_ip = 0;
-				*port = 0;
-				*conn_count = 0;
-				*share_count = 0;
-				rc = 0;
-				goto out;
-			}
+		list_for_each_entry(route, &peer_ni->ksnp_routes,
+				    ksnr_list) {
+			if (index-- > 0)
+				continue;
 
-			list_for_each_entry(route, &peer_ni->ksnp_routes,
-					    ksnr_list) {
-				if (index-- > 0)
-					continue;
-
-				*id = peer_ni->ksnp_id;
-				*myip = route->ksnr_myipaddr;
-				*peer_ip = route->ksnr_ipaddr;
-				*port = route->ksnr_port;
-				*conn_count = route->ksnr_conn_count;
-				*share_count = route->ksnr_share_count;
-				rc = 0;
-				goto out;
-			}
+			*id = peer_ni->ksnp_id;
+			*myip = route->ksnr_myipaddr;
+			*peer_ip = route->ksnr_ipaddr;
+			*port = route->ksnr_port;
+			*conn_count = route->ksnr_conn_count;
+			*share_count = route->ksnr_share_count;
+			rc = 0;
+			goto out;
+		}
 	}
 out:
 	read_unlock(&ksocknal_data.ksnd_global_lock);
@@ -606,20 +606,20 @@ ksocknal_get_conn_by_idx(struct lnet_ni *ni, int index)
 	read_lock(&ksocknal_data.ksnd_global_lock);
 
 	hash_for_each(ksocknal_data.ksnd_peers, i, peer_ni, ksnp_list) {
-			LASSERT(!peer_ni->ksnp_closing);
+		LASSERT(!peer_ni->ksnp_closing);
 
-			if (peer_ni->ksnp_ni != ni)
+		if (peer_ni->ksnp_ni != ni)
+			continue;
+
+		list_for_each_entry(conn, &peer_ni->ksnp_conns,
+				    ksnc_list) {
+			if (index-- > 0)
 				continue;
 
-			list_for_each_entry(conn, &peer_ni->ksnp_conns,
-					    ksnc_list) {
-				if (index-- > 0)
-					continue;
-
-				ksocknal_conn_addref(conn);
-				read_unlock(&ksocknal_data.ksnd_global_lock);
-				return conn;
-			}
+			ksocknal_conn_addref(conn);
+			read_unlock(&ksocknal_data.ksnd_global_lock);
+			return conn;
+		}
 	}
 
 	read_unlock(&ksocknal_data.ksnd_global_lock);
@@ -1977,19 +1977,19 @@ ksocknal_add_interface(struct lnet_ni *ni, u32 ipaddress, u32 netmask)
 		iface->ksni_npeers = 0;
 
 		hash_for_each(ksocknal_data.ksnd_peers, i, peer_ni, ksnp_list) {
-				for (j = 0;
-				     j < peer_ni->ksnp_n_passive_ips;
-				     j++)
-					if (peer_ni->ksnp_passive_ips[j] ==
-					    ipaddress)
-						iface->ksni_npeers++;
+			for (j = 0;
+			     j < peer_ni->ksnp_n_passive_ips;
+			     j++)
+				if (peer_ni->ksnp_passive_ips[j] ==
+				    ipaddress)
+					iface->ksni_npeers++;
 
-				list_for_each_entry(route,
-						    &peer_ni->ksnp_routes,
-						    ksnr_list) {
-					if (route->ksnr_myipaddr == ipaddress)
-						iface->ksni_nroutes++;
-				}
+			list_for_each_entry(route,
+					    &peer_ni->ksnp_routes,
+					    ksnr_list) {
+				if (route->ksnr_myipaddr == ipaddress)
+					iface->ksni_nroutes++;
+			}
 		}
 
 		rc = 0;
@@ -2074,12 +2074,12 @@ ksocknal_del_interface(struct lnet_ni *ni, u32 ipaddress)
 
 		hash_for_each_safe(ksocknal_data.ksnd_peers, j,
 				   nxt, peer_ni, ksnp_list) {
-				if (peer_ni->ksnp_ni != ni)
-					continue;
+			if (peer_ni->ksnp_ni != ni)
+				continue;
 
-				ksocknal_peer_del_interface_locked(peer_ni,
-								   this_ip);
-			}
+			ksocknal_peer_del_interface_locked(peer_ni,
+							   this_ip);
+		}
 	}
 
 	write_unlock_bh(&ksocknal_data.ksnd_global_lock);
@@ -2474,39 +2474,39 @@ ksocknal_debug_peerhash(struct lnet_ni *ni)
 	read_lock(&ksocknal_data.ksnd_global_lock);
 
 	hash_for_each(ksocknal_data.ksnd_peers, i, peer_ni, ksnp_list) {
-			struct ksock_route *route;
-			struct ksock_conn *conn;
+		struct ksock_route *route;
+		struct ksock_conn *conn;
 
-			if (peer_ni->ksnp_ni != ni)
-				continue;
+		if (peer_ni->ksnp_ni != ni)
+			continue;
 
-			CWARN("Active peer_ni on shutdown: %s, ref %d, scnt %d, closing %d, accepting %d, err %d, zcookie %llu, txq %d, zc_req %d\n",
-			      libcfs_id2str(peer_ni->ksnp_id),
-			      refcount_read(&peer_ni->ksnp_refcount),
-			      peer_ni->ksnp_sharecount, peer_ni->ksnp_closing,
-			      peer_ni->ksnp_accepting, peer_ni->ksnp_error,
-			      peer_ni->ksnp_zc_next_cookie,
-			      !list_empty(&peer_ni->ksnp_tx_queue),
-			      !list_empty(&peer_ni->ksnp_zc_req_list));
+		CWARN("Active peer_ni on shutdown: %s, ref %d, scnt %d, closing %d, accepting %d, err %d, zcookie %llu, txq %d, zc_req %d\n",
+		      libcfs_id2str(peer_ni->ksnp_id),
+		      refcount_read(&peer_ni->ksnp_refcount),
+		      peer_ni->ksnp_sharecount, peer_ni->ksnp_closing,
+		      peer_ni->ksnp_accepting, peer_ni->ksnp_error,
+		      peer_ni->ksnp_zc_next_cookie,
+		      !list_empty(&peer_ni->ksnp_tx_queue),
+		      !list_empty(&peer_ni->ksnp_zc_req_list));
 
-			list_for_each_entry(route, &peer_ni->ksnp_routes,
-					    ksnr_list) {
-				CWARN("Route: ref %d, schd %d, conn %d, cnted %d, del %d\n",
-				      refcount_read(&route->ksnr_refcount),
-				      route->ksnr_scheduled,
-				      route->ksnr_connecting,
-				      route->ksnr_connected,
-				      route->ksnr_deleted);
-			}
+		list_for_each_entry(route, &peer_ni->ksnp_routes,
+				    ksnr_list) {
+			CWARN("Route: ref %d, schd %d, conn %d, cnted %d, del %d\n",
+			      refcount_read(&route->ksnr_refcount),
+			      route->ksnr_scheduled,
+			      route->ksnr_connecting,
+			      route->ksnr_connected,
+			      route->ksnr_deleted);
+		}
 
-			list_for_each_entry(conn, &peer_ni->ksnp_conns,
-					    ksnc_list) {
-				CWARN("Conn: ref %d, sref %d, t %d, c %d\n",
-				      refcount_read(&conn->ksnc_conn_refcount),
-				      refcount_read(&conn->ksnc_sock_refcount),
-				      conn->ksnc_type, conn->ksnc_closing);
-			}
-			goto done;
+		list_for_each_entry(conn, &peer_ni->ksnp_conns,
+				    ksnc_list) {
+			CWARN("Conn: ref %d, sref %d, t %d, c %d\n",
+			      refcount_read(&conn->ksnc_conn_refcount),
+			      refcount_read(&conn->ksnc_sock_refcount),
+			      conn->ksnc_type, conn->ksnc_closing);
+		}
+		goto done;
 	}
 done:
 	read_unlock(&ksocknal_data.ksnd_global_lock);
