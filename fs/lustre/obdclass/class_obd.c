@@ -483,7 +483,6 @@ int class_handle_ioctl(unsigned int cmd, unsigned long arg)
 		}
 		CDEBUG(D_HA, "%s: disabling committed-transno notification\n",
 		       obd->obd_name);
-		obd->obd_no_transno = 1;
 		err = 0;
 		break;
 
