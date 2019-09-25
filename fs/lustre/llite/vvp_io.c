@@ -682,7 +682,10 @@ static int vvp_io_setattr_start(const struct lu_env *env,
 	struct ll_inode_info *lli = ll_i2info(inode);
 
 	if (cl_io_is_trunc(io)) {
-		down_write(&lli->lli_trunc_sem);
+		atomic_inc(&lli->lli_trunc_waiters);
+		wait_var_event(&lli->lli_trunc_readers,
+			       atomic_cmpxchg(&lli->lli_trunc_readers, 0, -1) == 0);
+		atomic_dec(&lli->lli_trunc_waiters);
 		inode_lock(inode);
 		inode_dio_wait(inode);
 	} else {
@@ -708,7 +711,8 @@ static void vvp_io_setattr_end(const struct lu_env *env,
 		 */
 		vvp_do_vmtruncate(inode, io->u.ci_setattr.sa_attr.lvb_size);
 		inode_unlock(inode);
-		up_write(&lli->lli_trunc_sem);
+		atomic_set(&lli->lli_trunc_readers, 0);
+		wake_up_var(&lli->lli_trunc_readers);
 	} else {
 		inode_unlock(inode);
 	}
@@ -747,7 +751,9 @@ static int vvp_io_read_start(const struct lu_env *env,
 
 	CDEBUG(D_VFSTRACE, "read: -> [%lli, %lli)\n", pos, pos + cnt);
 
-	down_read(&lli->lli_trunc_sem);
+	wait_var_event(&lli->lli_trunc_readers,
+		       atomic_read(&lli->lli_trunc_waiters) == 0 &&
+		       atomic_inc_unless_negative(&lli->lli_trunc_readers));
 
 	if (!can_populate_pages(env, io, inode))
 		return 0;
@@ -984,7 +990,9 @@ static int vvp_io_write_start(const struct lu_env *env,
 	size_t cnt = io->u.ci_wr.wr.crw_count;
 	ssize_t result = 0;
 
-	down_read(&lli->lli_trunc_sem);
+	wait_var_event(&lli->lli_trunc_readers,
+		       atomic_read(&lli->lli_trunc_waiters) == 0 &&
+		       atomic_inc_unless_negative(&lli->lli_trunc_readers));
 
 	if (!can_populate_pages(env, io, inode))
 		return 0;
@@ -1078,7 +1086,9 @@ static void vvp_io_rw_end(const struct lu_env *env,
 	struct inode *inode = vvp_object_inode(ios->cis_obj);
 	struct ll_inode_info *lli = ll_i2info(inode);
 
-	up_read(&lli->lli_trunc_sem);
+	if (atomic_dec_return(&lli->lli_trunc_readers) == 0 &&
+	    atomic_read(&lli->lli_trunc_waiters))
+		wake_up_var(&lli->lli_trunc_readers);
 }
 
 static int vvp_io_kernel_fault(struct vvp_fault_io *cfio)
@@ -1143,7 +1153,8 @@ static int vvp_io_fault_start(const struct lu_env *env,
 	loff_t size;
 	pgoff_t last_index;
 
-	down_read(&lli->lli_trunc_sem);
+	wait_var_event(&lli->lli_trunc_readers,
+		       atomic_inc_unless_negative(&lli->lli_trunc_readers));
 
 	/* offset of the last byte on the page */
 	offset = cl_offset(obj, fio->ft_index + 1) - 1;
@@ -1300,7 +1311,10 @@ static void vvp_io_fault_end(const struct lu_env *env,
 
 	CLOBINVRNT(env, ios->cis_io->ci_obj,
 		   vvp_object_invariant(ios->cis_io->ci_obj));
-	up_read(&lli->lli_trunc_sem);
+
+	if (atomic_dec_return(&lli->lli_trunc_readers) == 0 &&
+	    atomic_read(&lli->lli_trunc_waiters))
+		wake_up_var(&lli->lli_trunc_readers);
 }
 
 static int vvp_io_fsync_start(const struct lu_env *env,
