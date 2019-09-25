@@ -51,7 +51,7 @@ int osc_quota_chkdq(struct client_obd *cli, const unsigned int qid[])
 {
 	int type;
 
-	for (type = 0; type < MAXQUOTAS; type++) {
+	for (type = 0; type < LL_MAXQUOTAS; type++) {
 		struct osc_quota_info *oqi;
 
 		oqi = rhashtable_lookup_fast(&cli->cl_quota_hash[type],
@@ -130,7 +130,7 @@ int osc_quota_setdq(struct client_obd *cli, u64 xid, const unsigned int qid[],
 	if (cli->cl_quota_last_xid < xid)
 		cli->cl_quota_last_xid = xid;
 
-	for (type = 0; type < MAXQUOTAS; type++) {
+	for (type = 0; type < LL_MAXQUOTAS; type++) {
 		struct osc_quota_info *oqi;
 
 		if ((valid & md_quota_flag(type)) == 0)
@@ -207,13 +207,13 @@ int osc_quota_setup(struct obd_device *obd)
 
 	mutex_init(&cli->cl_quota_mutex);
 
-	for (type = 0; type < MAXQUOTAS; type++) {
+	for (type = 0; type < LL_MAXQUOTAS; type++) {
 		if (rhashtable_init(&cli->cl_quota_hash[type],
 				    &quota_hash_params) != 0)
 			break;
 	}
 
-	if (type == MAXQUOTAS)
+	if (type == LL_MAXQUOTAS)
 		return 0;
 
 	for (i = 0; i < type; i++)
@@ -227,7 +227,7 @@ int osc_quota_cleanup(struct obd_device *obd)
 	struct client_obd *cli = &obd->u.cli;
 	int type;
 
-	for (type = 0; type < MAXQUOTAS; type++)
+	for (type = 0; type < LL_MAXQUOTAS; type++)
 		rhashtable_free_and_destroy(&cli->cl_quota_hash[type],
 					    oqi_exit, NULL);
 
