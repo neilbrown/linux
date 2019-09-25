@@ -109,9 +109,16 @@ ksocknal_create_peer(struct lnet_ni *ni, struct lnet_process_id id)
 	LASSERT(id.pid != LNET_PID_ANY);
 	LASSERT(!in_interrupt());
 
+	if (!atomic_inc_unless_negative(&net->ksnn_npeers)) {
+		CERROR("Can't create peer_ni: network shutdown\n");
+		return ERR_PTR(-ESHUTDOWN);
+	}
+
 	peer_ni = kzalloc_cpt(sizeof(*peer_ni), GFP_NOFS, cpt);
-	if (!peer_ni)
+	if (!peer_ni) {
+		atomic_dec(&net->ksnn_npeers);
 		return ERR_PTR(-ENOMEM);
+	}
 
 	peer_ni->ksnp_ni = ni;
 	peer_ni->ksnp_id = id;
@@ -127,20 +134,6 @@ ksocknal_create_peer(struct lnet_ni *ni, struct lnet_process_id id)
 	INIT_LIST_HEAD(&peer_ni->ksnp_tx_queue);
 	INIT_LIST_HEAD(&peer_ni->ksnp_zc_req_list);
 	spin_lock_init(&peer_ni->ksnp_lock);
-
-	spin_lock_bh(&net->ksnn_lock);
-
-	if (net->ksnn_shutdown) {
-		spin_unlock_bh(&net->ksnn_lock);
-
-		kfree(peer_ni);
-		CERROR("Can't create peer_ni: network shutdown\n");
-		return ERR_PTR(-ESHUTDOWN);
-	}
-
-	net->ksnn_npeers++;
-
-	spin_unlock_bh(&net->ksnn_lock);
 
 	return peer_ni;
 }
@@ -168,9 +161,7 @@ ksocknal_destroy_peer(struct ksock_peer *peer_ni)
 	 * do with this peer_ni has been cleaned up when its refcount drops to
 	 * zero.
 	 */
-	spin_lock_bh(&net->ksnn_lock);
-	net->ksnn_npeers--;
-	spin_unlock_bh(&net->ksnn_lock);
+	atomic_dec(&net->ksnn_npeers);
 }
 
 struct ksock_peer *
@@ -464,7 +455,7 @@ ksocknal_add_peer(struct lnet_ni *ni, struct lnet_process_id id, u32 ipaddr,
 	write_lock_bh(&ksocknal_data.ksnd_global_lock);
 
 	/* always called with a ref on ni, so shutdown can't have started */
-	LASSERT(!((struct ksock_net *)ni->ni_data)->ksnn_shutdown);
+	LASSERT(atomic_read(&((struct ksock_net *)ni->ni_data)->ksnn_npeers) >= 0);
 
 	peer2 = ksocknal_find_peer_locked(ni, id);
 	if (peer2) {
@@ -1133,7 +1124,7 @@ ksocknal_create_conn(struct lnet_ni *ni, struct ksock_route *route,
 		write_lock_bh(global_lock);
 
 		/* called with a ref on ni, so shutdown can't have started */
-		LASSERT(!((struct ksock_net *)ni->ni_data)->ksnn_shutdown);
+		LASSERT(atomic_read(&((struct ksock_net *)ni->ni_data)->ksnn_npeers) >= 0);
 
 		peer2 = ksocknal_find_peer_locked(ni, peerid);
 		if (!peer2) {
@@ -2561,30 +2552,24 @@ ksocknal_shutdown(struct lnet_ni *ni)
 	LASSERT(ksocknal_data.ksnd_init == SOCKNAL_INIT_ALL);
 	LASSERT(ksocknal_data.ksnd_nnets > 0);
 
-	spin_lock_bh(&net->ksnn_lock);
-	net->ksnn_shutdown = 1;		/* prevent new peers */
-	spin_unlock_bh(&net->ksnn_lock);
+	/* prevent new peers */
+	atomic_add(SOCKNAL_SHUTDOWN_BIAS, &net->ksnn_npeers);
 
 	/* Delete all peers */
 	ksocknal_del_peer(ni, anyid, 0);
 
 	/* Wait for all peer_ni state to clean up */
 	i = 2;
-	spin_lock_bh(&net->ksnn_lock);
-	while (net->ksnn_npeers) {
-		spin_unlock_bh(&net->ksnn_lock);
-
+	while (atomic_read(&net->ksnn_npeers) > SOCKNAL_SHUTDOWN_BIAS) {
 		i++;
 		CDEBUG(((i & (-i)) == i) ? D_WARNING : D_NET, /* power of 2? */
 		       "waiting for %d peers to disconnect\n",
-		       net->ksnn_npeers);
+		       atomic_read(&net->ksnn_npeers) - SOCKNAL_SHUTDOWN_BIAS);
 		schedule_timeout_uninterruptible(HZ);
 
 		ksocknal_debug_peerhash(ni);
 
-		spin_lock_bh(&net->ksnn_lock);
 	}
-	spin_unlock_bh(&net->ksnn_lock);
 
 	for (i = 0; i < net->ksnn_ninterfaces; i++) {
 		LASSERT(!net->ksnn_interfaces[i].ksni_npeers);
@@ -2737,7 +2722,6 @@ ksocknal_startup(struct lnet_ni *ni)
 	if (!net)
 		goto fail_0;
 
-	spin_lock_init(&net->ksnn_lock);
 	net->ksnn_incarnation = ktime_get_real_ns();
 	ni->ni_data = net;
 	if (!ni->ni_net->net_tunables_set) {
