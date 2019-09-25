@@ -151,8 +151,7 @@ int LNetMDUnlink(struct lnet_handle_md md_in);
  * @{
  */
 struct lnet_eq *
-LNetEQAlloc(unsigned int count_in,
-	    lnet_eq_handler_t  handler);
+LNetEQAlloc(lnet_eq_handler_t  handler);
 
 int LNetEQFree(struct lnet_eq *eventq_in);
 
