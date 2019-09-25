@@ -79,7 +79,6 @@ ksocknal_alloc_tx_noop(u64 cookie, int nonblk)
 	tx->tx_lnetmsg = NULL;
 	tx->tx_kiov = NULL;
 	tx->tx_nkiov = 0;
-	tx->tx_iov = &tx->tx_hdr;
 	tx->tx_niov = 1;
 	tx->tx_nonblk = nonblk;
 
@@ -109,16 +108,16 @@ ksocknal_free_tx(struct ksock_tx *tx)
 }
 
 static int
-ksocknal_send_iov(struct ksock_conn *conn, struct ksock_tx *tx)
+ksocknal_send_hdr(struct ksock_conn *conn, struct ksock_tx *tx)
 {
-	struct kvec *iov = tx->tx_iov;
+	struct kvec *iov = &tx->tx_hdr;
 	int nob;
 	int rc;
 
 	LASSERT(tx->tx_niov > 0);
 
-	/* Never touch tx->tx_iov inside ksocknal_lib_send_iov() */
-	rc = ksocknal_lib_send_iov(conn, tx);
+	/* Never change tx->tx_hdr inside ksocknal_lib_send_hdr() */
+	rc = ksocknal_lib_send_hdr(conn, tx);
 
 	if (rc <= 0)			/* sent nothing? */
 		return rc;
@@ -128,19 +127,17 @@ ksocknal_send_iov(struct ksock_conn *conn, struct ksock_tx *tx)
 	tx->tx_resid -= nob;
 
 	/* "consume" iov */
-	do {
-		LASSERT(tx->tx_niov > 0);
 
-		if (nob < (int)iov->iov_len) {
-			iov->iov_base = (void *)((char *)iov->iov_base + nob);
-			iov->iov_len -= nob;
-			return rc;
-		}
+	LASSERT(tx->tx_niov == 1);
 
-		nob -= iov->iov_len;
-		tx->tx_iov = ++iov;
-		tx->tx_niov--;
-	} while (nob);
+	if (nob < (int)iov->iov_len) {
+		iov->iov_base = (void *)((char *)iov->iov_base + nob);
+		iov->iov_len -= nob;
+		return rc;
+	}
+
+	LASSERT(nob == iov->iov_len);
+	tx->tx_niov--;
 
 	return rc;
 }
@@ -207,7 +204,7 @@ ksocknal_transmit(struct ksock_conn *conn, struct ksock_tx *tx)
 			ksocknal_data.ksnd_enomem_tx--;
 			rc = -EAGAIN;
 		} else if (tx->tx_niov) {
-			rc = ksocknal_send_iov(conn, tx);
+			rc = ksocknal_send_hdr(conn, tx);
 		} else {
 			rc = ksocknal_send_kiov(conn, tx);
 		}
@@ -694,7 +691,7 @@ ksocknal_queue_tx_locked(struct ksock_tx *tx, struct ksock_conn *conn)
 	 * We always expect at least 1 mapped fragment containing the
 	 * complete ksocknal message header.
 	 */
-	LASSERT(lnet_iov_nob(tx->tx_niov, tx->tx_iov) +
+	LASSERT(lnet_iov_nob(tx->tx_niov, &tx->tx_hdr) +
 		lnet_kiov_nob(tx->tx_nkiov, tx->tx_kiov) ==
 		(unsigned int)tx->tx_nob);
 	LASSERT(tx->tx_niov >= 1);
@@ -950,7 +947,6 @@ ksocknal_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 	tx->tx_lnetmsg = lntmsg;
 
 	tx->tx_niov = 1;
-	tx->tx_iov = &tx->tx_hdr;
 	tx->tx_kiov = tx->tx_payload;
 	tx->tx_nkiov = lnet_extract_kiov(payload_niov, tx->tx_kiov,
 					 payload_niov, payload_kiov,
