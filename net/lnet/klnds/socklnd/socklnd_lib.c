@@ -73,11 +73,11 @@ ksocknal_lib_zc_capable(struct ksock_conn *conn)
 }
 
 int
-ksocknal_lib_send_iov(struct ksock_conn *conn, struct ksock_tx *tx)
+ksocknal_lib_send_hdr(struct ksock_conn *conn, struct ksock_tx *tx)
 {
 	struct msghdr msg = { .msg_flags = MSG_DONTWAIT };
 	struct socket *sock = conn->ksnc_sock;
-	int nob, i;
+	int nob;
 
 	if (*ksocknal_tunables.ksnd_enable_csum	&&		/* checksum enabled */
 	    conn->ksnc_proto == &ksocknal_protocol_v2x &&	/* V2.x connection */
@@ -85,15 +85,15 @@ ksocknal_lib_send_iov(struct ksock_conn *conn, struct ksock_tx *tx)
 	    !tx->tx_msg.ksm_csum)				/* not checksummed */
 		ksocknal_lib_csum_tx(tx);
 
-	for (nob = i = 0; i < tx->tx_niov; i++)
-		nob += tx->tx_iov[i].iov_len;
+	if (tx->tx_niov)
+		nob += tx->tx_hdr.iov_len;
 
 	if (!list_empty(&conn->ksnc_tx_queue) ||
 	    nob < tx->tx_resid)
 		msg.msg_flags |= MSG_MORE;
 
 	iov_iter_kvec(&msg.msg_iter, WRITE,
-		      tx->tx_iov, tx->tx_niov, nob);
+		      &tx->tx_hdr, tx->tx_niov, nob);
 	return sock_sendmsg(sock, &msg);
 }
 
@@ -208,14 +208,14 @@ ksocknal_lib_csum_tx(struct ksock_tx *tx)
 	u32 csum;
 	void *base;
 
-	LASSERT(tx->tx_iov[0].iov_base == &tx->tx_msg);
+	LASSERT(tx->tx_hdr.iov_base == &tx->tx_msg);
 	LASSERT(tx->tx_conn);
 	LASSERT(tx->tx_conn->ksnc_proto == &ksocknal_protocol_v2x);
 
 	tx->tx_msg.ksm_csum = 0;
 
-	csum = crc32_le(~0, tx->tx_iov[0].iov_base,
-			tx->tx_iov[0].iov_len);
+	csum = crc32_le(~0, tx->tx_hdr.iov_base,
+			tx->tx_hdr.iov_len);
 
 	if (tx->tx_kiov) {
 		for (i = 0; i < tx->tx_nkiov; i++) {
@@ -226,10 +226,6 @@ ksocknal_lib_csum_tx(struct ksock_tx *tx)
 
 			kunmap(tx->tx_kiov[i].bv_page);
 		}
-	} else {
-		for (i = 1; i < tx->tx_niov; i++)
-			csum = crc32_le(csum, tx->tx_iov[i].iov_base,
-					tx->tx_iov[i].iov_len);
 	}
 
 	if (*ksocknal_tunables.ksnd_inject_csum_error) {
