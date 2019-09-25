@@ -977,17 +977,20 @@ static int lov_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 		struct obd_ioctl_data *data = karg;
 		struct obd_device *osc_obd;
 		struct obd_statfs stat_buf = { 0 };
+		struct obd_import *imp;
 		u32 index;
 		u32 flags;
 
-		memcpy(&index, data->ioc_inlbuf2, sizeof(u32));
+		memcpy(&index, data->ioc_inlbuf2, sizeof(index));
 		if (index >= count)
 			return -ENODEV;
 
 		if (!lov->lov_tgts[index])
 			/* Try again with the next index */
 			return -EAGAIN;
-		if (!lov->lov_tgts[index]->ltd_active)
+		imp = lov->lov_tgts[index]->ltd_exp->exp_obd->u.cli.cl_import;
+		if (!lov->lov_tgts[index]->ltd_active &&
+		    imp->imp_state != LUSTRE_IMP_IDLE)
 			return -ENODATA;
 
 		osc_obd = class_exp2obd(lov->lov_tgts[index]->ltd_exp);

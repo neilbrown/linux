@@ -924,6 +924,21 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 	}
 
 	if (rc) {
+		struct ptlrpc_request *free_req;
+		struct ptlrpc_request *tmp;
+
+		/* abort all delayed requests initiated connection */
+		list_for_each_entry_safe(free_req, tmp, &imp->imp_delayed_list,
+					 rq_list) {
+			spin_lock(&free_req->rq_lock);
+			if (free_req->rq_no_resend) {
+				free_req->rq_err = 1;
+				free_req->rq_status = -EIO;
+				ptlrpc_client_wake_req(free_req);
+			}
+			spin_unlock(&free_req->rq_lock);
+		}
+
 		/* if this reconnect to busy export - not need select new target
 		 * for connecting
 		 */
@@ -1451,13 +1466,10 @@ out:
 	return rc;
 }
 
-int ptlrpc_disconnect_import(struct obd_import *imp, int noclose)
+static struct ptlrpc_request *ptlrpc_disconnect_prep_req(struct obd_import *imp)
 {
 	struct ptlrpc_request *req;
 	int rq_opc, rc = 0;
-
-	if (imp->imp_obd->obd_force)
-		goto set_state;
 
 	switch (imp->imp_connect_op) {
 	case OST_CONNECT:
@@ -1474,8 +1486,46 @@ int ptlrpc_disconnect_import(struct obd_import *imp, int noclose)
 		CERROR("%s: don't know how to disconnect from %s (connect_op %d): rc = %d\n",
 		       imp->imp_obd->obd_name, obd2cli_tgt(imp->imp_obd),
 		       imp->imp_connect_op, rc);
-		return rc;
+		return ERR_PTR(rc);
 	}
+
+	req = ptlrpc_request_alloc_pack(imp, &RQF_MDS_DISCONNECT,
+					LUSTRE_OBD_VERSION, rq_opc);
+	if (!req)
+		return NULL;
+
+	/* We are disconnecting, do not retry a failed DISCONNECT rpc if
+	 * it fails.  We can get through the above with a down server
+	 * if the client doesn't know the server is gone yet.
+	 */
+	req->rq_no_resend = 1;
+
+	/* We want client umounts to happen quickly, no matter the
+	 * server state...
+	 */
+	req->rq_timeout = min_t(int, req->rq_timeout,
+				INITIAL_CONNECT_TIMEOUT);
+
+	IMPORT_SET_STATE(imp, LUSTRE_IMP_CONNECTING);
+	req->rq_send_state =  LUSTRE_IMP_CONNECTING;
+	ptlrpc_request_set_replen(req);
+
+	return req;
+}
+
+int ptlrpc_disconnect_import(struct obd_import *imp, int noclose)
+{
+	struct ptlrpc_request *req;
+	int rc = 0;
+
+	if (imp->imp_obd->obd_force)
+		goto set_state;
+
+	/* probably the import has been disconnected already being idle */
+	spin_lock(&imp->imp_lock);
+	if (imp->imp_state == LUSTRE_IMP_IDLE)
+		goto out;
+	spin_unlock(&imp->imp_lock);
 
 	if (ptlrpc_import_in_recovery(imp)) {
 		long timeout_jiffies;
@@ -1509,27 +1559,13 @@ int ptlrpc_disconnect_import(struct obd_import *imp, int noclose)
 		goto out;
 	spin_unlock(&imp->imp_lock);
 
-	req = ptlrpc_request_alloc_pack(imp, &RQF_MDS_DISCONNECT,
-					LUSTRE_OBD_VERSION, rq_opc);
-	if (req) {
-		/* We are disconnecting, do not retry a failed DISCONNECT rpc if
-		 * it fails.  We can get through the above with a down server
-		 * if the client doesn't know the server is gone yet.
-		 */
-		req->rq_no_resend = 1;
-
-		/* We want client umounts to happen quickly, no matter the
-		 * server state...
-		 */
-		req->rq_timeout = min_t(int, req->rq_timeout,
-					INITIAL_CONNECT_TIMEOUT);
-
-		IMPORT_SET_STATE(imp, LUSTRE_IMP_CONNECTING);
-		req->rq_send_state = LUSTRE_IMP_CONNECTING;
-		ptlrpc_request_set_replen(req);
-		rc = ptlrpc_queue_wait(req);
-		ptlrpc_req_finished(req);
+	req = ptlrpc_disconnect_prep_req(imp);
+	if (IS_ERR(req)) {
+		rc = PTR_ERR(req);
+		goto set_state;
 	}
+	rc = ptlrpc_queue_wait(req);
+	ptlrpc_req_finished(req);
 
 set_state:
 	spin_lock(&imp->imp_lock);
@@ -1547,6 +1583,50 @@ out:
 	return rc;
 }
 EXPORT_SYMBOL(ptlrpc_disconnect_import);
+
+static int ptlrpc_disconnect_idle_interpret(const struct lu_env *env,
+					    struct ptlrpc_request *req,
+					    void *data, int rc)
+{
+	struct obd_import *imp = req->rq_import;
+
+	LASSERT(imp->imp_state == LUSTRE_IMP_CONNECTING);
+	spin_lock(&imp->imp_lock);
+	IMPORT_SET_STATE_NOLOCK(imp, LUSTRE_IMP_IDLE);
+	memset(&imp->imp_remote_handle, 0, sizeof(imp->imp_remote_handle));
+	spin_unlock(&imp->imp_lock);
+
+	return 0;
+}
+
+int ptlrpc_disconnect_and_idle_import(struct obd_import *imp)
+{
+	struct ptlrpc_request *req;
+
+	if (imp->imp_obd->obd_force)
+		return 0;
+
+	if (ptlrpc_import_in_recovery(imp))
+		return 0;
+
+	spin_lock(&imp->imp_lock);
+	if (imp->imp_state != LUSTRE_IMP_FULL) {
+		spin_unlock(&imp->imp_lock);
+		return 0;
+	}
+	spin_unlock(&imp->imp_lock);
+
+	req = ptlrpc_disconnect_prep_req(imp);
+	if (IS_ERR(req))
+		return PTR_ERR(req);
+
+	CDEBUG(D_INFO, "%s: disconnect\n", imp->imp_obd->obd_name);
+	req->rq_interpret_reply = ptlrpc_disconnect_idle_interpret;
+	ptlrpcd_add_req(req);
+
+	return 0;
+}
+EXPORT_SYMBOL(ptlrpc_disconnect_and_idle_import);
 
 /* Adaptive Timeout utils */
 

@@ -99,6 +99,7 @@ static int lov_check_and_wait_active(struct lov_obd *lov, int ost_idx)
 {
 	int cnt = 0;
 	struct lov_tgt_desc *tgt;
+	struct obd_import *imp = NULL;
 	int rc = 0;
 
 	mutex_lock(&lov->lov_lock);
@@ -115,7 +116,13 @@ static int lov_check_and_wait_active(struct lov_obd *lov, int ost_idx)
 		goto out;
 	}
 
-	if (tgt->ltd_exp && class_exp2cliimp(tgt->ltd_exp)->imp_connect_tried) {
+	if (tgt->ltd_exp)
+		imp = class_exp2cliimp(tgt->ltd_exp);
+	if (imp && imp->imp_connect_tried) {
+		rc = 0;
+		goto out;
+	}
+	if (imp && imp->imp_state == LUSTRE_IMP_IDLE) {
 		rc = 0;
 		goto out;
 	}
@@ -302,11 +309,10 @@ int lov_prep_statfs_set(struct obd_device *obd, struct obd_info *oinfo,
 
 	/* We only get block data from the OBD */
 	for (i = 0; i < lov->desc.ld_tgt_count; i++) {
+		struct lov_tgt_desc *ltd = lov->lov_tgts[i];
 		struct lov_request *req;
 
-		if (!lov->lov_tgts[i] ||
-		    (oinfo->oi_flags & OBD_STATFS_NODELAY &&
-		     !lov->lov_tgts[i]->ltd_active)) {
+		if (!ltd) {
 			CDEBUG(D_HA, "lov idx %d inactive\n", i);
 			continue;
 		}
@@ -314,13 +320,20 @@ int lov_prep_statfs_set(struct obd_device *obd, struct obd_info *oinfo,
 		/* skip targets that have been explicitly disabled by the
 		 * administrator
 		 */
-		if (!lov->lov_tgts[i]->ltd_exp) {
+		if (!ltd->ltd_exp) {
 			CDEBUG(D_HA,
 			       "lov idx %d administratively disabled\n", i);
 			continue;
 		}
 
-		if (!lov->lov_tgts[i]->ltd_active)
+		if (oinfo->oi_flags & OBD_STATFS_NODELAY &&
+		    class_exp2cliimp(ltd->ltd_exp)->imp_state !=
+		    LUSTRE_IMP_IDLE && !ltd->ltd_active) {
+			CDEBUG(D_HA, "lov idx %d inactive\n", i);
+			continue;
+		}
+
+		if (!ltd->ltd_active)
 			lov_check_and_wait_active(lov, i);
 
 		req = kzalloc(sizeof(*req), GFP_NOFS);
