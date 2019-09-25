@@ -1641,7 +1641,7 @@ static int ldlm_prepare_lru_list(struct ldlm_namespace *ns,
 			/* No locks which got blocking requests. */
 			LASSERT(!ldlm_is_bl_ast(lock));
 
-			if (!ldlm_is_canceling(lock) ||
+			if (!ldlm_is_canceling(lock) &&
 			    !ldlm_is_converting(lock))
 				break;
 
@@ -1684,7 +1684,6 @@ static int ldlm_prepare_lru_list(struct ldlm_namespace *ns,
 
 		if (result == LDLM_POLICY_SKIP_LOCK) {
 			lu_ref_del(&lock->l_reference, __func__, current);
-			LDLM_LOCK_RELEASE(lock);
 			if (no_wait) {
 				spin_lock(&ns->ns_lock);
 				if (!list_empty(&lock->l_lru) &&
@@ -1692,6 +1691,8 @@ static int ldlm_prepare_lru_list(struct ldlm_namespace *ns,
 					ns->ns_last_pos = &lock->l_lru;
 				spin_unlock(&ns->ns_lock);
 			}
+
+			LDLM_LOCK_RELEASE(lock);
 			continue;
 		}
 
