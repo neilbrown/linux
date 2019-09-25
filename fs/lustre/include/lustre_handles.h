@@ -46,8 +46,9 @@
 #include <linux/types.h>
 
 struct portals_handle_ops {
-	void (*hop_addref)(void *object);
 	void (*hop_free)(void *object, int size);
+	/* hop_type is used for some debugging messages */
+	char *hop_type;
 };
 
 /* These handles are most easily used by having them appear at the very top of
@@ -66,6 +67,7 @@ struct portals_handle {
 	struct list_head		h_link;
 	u64				h_cookie;
 	const struct portals_handle_ops	*h_ops;
+	refcount_t			h_ref;
 
 	/* newly added fields to handle the RCU issue. -jxiong */
 	struct rcu_head			h_rcu;
