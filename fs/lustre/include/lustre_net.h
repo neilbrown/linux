@@ -1876,8 +1876,6 @@ struct ptlrpc_bulk_desc *ptlrpc_prep_bulk_imp(struct ptlrpc_request *req,
 					      unsigned int portal,
 					      const struct ptlrpc_bulk_frag_ops *ops);
 
-int ptlrpc_prep_bulk_frag(struct ptlrpc_bulk_desc *desc,
-			  void *frag, int len);
 void __ptlrpc_prep_bulk_page(struct ptlrpc_bulk_desc *desc,
 			     struct page *page, int pageoffset, int len,
 			     int pin);

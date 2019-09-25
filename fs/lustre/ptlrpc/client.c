@@ -252,29 +252,6 @@ void __ptlrpc_prep_bulk_page(struct ptlrpc_bulk_desc *desc,
 }
 EXPORT_SYMBOL(__ptlrpc_prep_bulk_page);
 
-int ptlrpc_prep_bulk_frag(struct ptlrpc_bulk_desc *desc,
-			  void *frag, int len)
-{
-	struct kvec *iovec;
-
-	LASSERT(desc->bd_iov_count < desc->bd_max_iov);
-	LASSERT(frag);
-	LASSERT(len > 0);
-	LASSERT(ptlrpc_is_bulk_desc_kvec(desc->bd_type));
-
-	iovec = &BD_GET_KVEC(desc, desc->bd_iov_count);
-
-	desc->bd_nob += len;
-
-	iovec->iov_base = frag;
-	iovec->iov_len = len;
-
-	desc->bd_iov_count++;
-
-	return desc->bd_nob;
-}
-EXPORT_SYMBOL(ptlrpc_prep_bulk_frag);
-
 void ptlrpc_free_bulk(struct ptlrpc_bulk_desc *desc)
 {
 	LASSERT(desc->bd_iov_count != LI_POISON);	/* not freed already */
