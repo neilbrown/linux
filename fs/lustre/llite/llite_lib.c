@@ -547,13 +547,15 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
 	}
 
 	checksum = sbi->ll_flags & LL_SBI_CHECKSUM;
-	err = obd_set_info_async(NULL, sbi->ll_dt_exp, sizeof(KEY_CHECKSUM),
-				 KEY_CHECKSUM, sizeof(checksum), &checksum,
-				 NULL);
-	if (err) {
-		CERROR("%s: Set checksum failed: rc = %d\n",
-		       sbi->ll_dt_exp->exp_obd->obd_name, err);
-		goto out_root;
+	if (sbi->ll_checksum_set) {
+		err = obd_set_info_async(NULL, sbi->ll_dt_exp,
+					 sizeof(KEY_CHECKSUM), KEY_CHECKSUM,
+					 sizeof(checksum), &checksum, NULL);
+		if (err) {
+			CERROR("%s: Set checksum failed: rc = %d\n",
+			       sbi->ll_dt_exp->exp_obd->obd_name, err);
+			goto out_root;
+		}
 	}
 	cl_sb_init(sb);
 
@@ -752,10 +754,11 @@ static inline int ll_set_opt(const char *opt, char *data, int fl)
 }
 
 /* non-client-specific mount options are parsed in lmd_parse */
-static int ll_options(char *options, int *flags)
+static int ll_options(char *options, struct ll_sb_info *sbi)
 {
 	int tmp;
 	char *s1 = options, *s2;
+	int *flags = &sbi->ll_flags;
 
 	if (!options)
 		return 0;
@@ -821,11 +824,13 @@ static int ll_options(char *options, int *flags)
 		tmp = ll_set_opt("checksum", s1, LL_SBI_CHECKSUM);
 		if (tmp) {
 			*flags |= tmp;
+			sbi->ll_checksum_set = 1;
 			goto next;
 		}
 		tmp = ll_set_opt("nochecksum", s1, LL_SBI_CHECKSUM);
 		if (tmp) {
 			*flags &= ~tmp;
+			sbi->ll_checksum_set = 1;
 			goto next;
 		}
 		tmp = ll_set_opt("lruresize", s1, LL_SBI_LRU_RESIZE);
@@ -961,7 +966,7 @@ int ll_fill_super(struct super_block *sb)
 		goto out_free;
 	}
 
-	err = ll_options(lsi->lsi_lmd->lmd_opts, &sbi->ll_flags);
+	err = ll_options(lsi->lsi_lmd->lmd_opts, sbi);
 	if (err)
 		goto out_free;
 
