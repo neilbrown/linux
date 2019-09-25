@@ -366,9 +366,7 @@ void ldlm_lock_destroy_nolock(struct ldlm_lock *lock)
 	}
 }
 
-static struct portals_handle_ops lock_handle_ops = {
-	.hop_type   = "ldlm",
-};
+static const char lock_handle_owner[] = "ldlm";
 
 /**
  *
@@ -408,7 +406,7 @@ static struct ldlm_lock *ldlm_lock_new(struct ldlm_resource *resource)
 	lprocfs_counter_incr(ldlm_res_to_ns(resource)->ns_stats,
 			     LDLM_NSS_LOCKS);
 	INIT_LIST_HEAD(&lock->l_handle.h_link);
-	class_handle_hash(&lock->l_handle, &lock_handle_ops);
+	class_handle_hash(&lock->l_handle, lock_handle_owner);
 
 	lu_ref_init(&lock->l_reference);
 	lu_ref_add(&lock->l_reference, "hash", lock);
@@ -512,7 +510,7 @@ struct ldlm_lock *__ldlm_handle2lock(const struct lustre_handle *handle,
 
 	LASSERT(handle);
 
-	lock = class_handle2object(handle->cookie, &lock_handle_ops);
+	lock = class_handle2object(handle->cookie, lock_handle_owner);
 	if (!lock)
 		return NULL;
 
