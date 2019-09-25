@@ -98,9 +98,8 @@ ksocknal_destroy_route(struct ksock_route *route)
 	kfree(route);
 }
 
-static int
-ksocknal_create_peer(struct ksock_peer **peerp, struct lnet_ni *ni,
-		     struct lnet_process_id id)
+static struct ksock_peer *
+ksocknal_create_peer(struct lnet_ni *ni, struct lnet_process_id id)
 {
 	int cpt = lnet_cpt_of_nid(id.nid, ni);
 	struct ksock_net *net = ni->ni_data;
@@ -112,7 +111,7 @@ ksocknal_create_peer(struct ksock_peer **peerp, struct lnet_ni *ni,
 
 	peer_ni = kzalloc_cpt(sizeof(*peer_ni), GFP_NOFS, cpt);
 	if (!peer_ni)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	peer_ni->ksnp_ni = ni;
 	peer_ni->ksnp_id = id;
@@ -136,15 +135,14 @@ ksocknal_create_peer(struct ksock_peer **peerp, struct lnet_ni *ni,
 
 		kfree(peer_ni);
 		CERROR("Can't create peer_ni: network shutdown\n");
-		return -ESHUTDOWN;
+		return ERR_PTR(-ESHUTDOWN);
 	}
 
 	net->ksnn_npeers++;
 
 	spin_unlock_bh(&net->ksnn_lock);
 
-	*peerp = peer_ni;
-	return 0;
+	return peer_ni;
 }
 
 void
@@ -447,16 +445,15 @@ ksocknal_add_peer(struct lnet_ni *ni, struct lnet_process_id id, u32 ipaddr,
 	struct ksock_peer *peer2;
 	struct ksock_route *route;
 	struct ksock_route *route2;
-	int rc;
 
 	if (id.nid == LNET_NID_ANY ||
 	    id.pid == LNET_PID_ANY)
 		return -EINVAL;
 
 	/* Have a brand new peer_ni ready... */
-	rc = ksocknal_create_peer(&peer_ni, ni, id);
-	if (rc)
-		return rc;
+	peer_ni = ksocknal_create_peer(ni, id);
+	if (IS_ERR(peer_ni))
+		return PTR_ERR(peer_ni);
 
 	route = ksocknal_create_route(ipaddr, port);
 	if (!route) {
@@ -1127,9 +1124,11 @@ ksocknal_create_conn(struct lnet_ni *ni, struct ksock_route *route,
 		ksocknal_peer_addref(peer_ni);
 		write_lock_bh(global_lock);
 	} else {
-		rc = ksocknal_create_peer(&peer_ni, ni, peerid);
-		if (rc)
+		peer_ni = ksocknal_create_peer(ni, peerid);
+		if (IS_ERR(peer_ni)) {
+			rc = PTR_ERR(peer_ni);
 			goto failed_1;
+		}
 
 		write_lock_bh(global_lock);
 
