@@ -1439,7 +1439,7 @@ kiblnd_launch_tx(struct lnet_ni *ni, struct kib_tx *tx, lnet_nid_t nid)
 		list_add_tail(&tx->tx_list, &peer_ni->ibp_tx_queue);
 
 	kiblnd_peer_addref(peer_ni);
-	list_add_tail(&peer_ni->ibp_list, kiblnd_nid2peerlist(nid));
+	hash_add(kiblnd_data.kib_peers, &peer_ni->ibp_list, nid);
 
 	write_unlock_irqrestore(g_lock, flags);
 
@@ -2415,7 +2415,7 @@ kiblnd_passive_connect(struct rdma_cm_id *cmid, void *priv, int priv_nob)
 		LASSERT(!net->ibn_shutdown);
 
 		kiblnd_peer_addref(peer_ni);
-		list_add_tail(&peer_ni->ibp_list, kiblnd_nid2peerlist(nid));
+		hash_add(kiblnd_data.kib_peers, &peer_ni->ibp_list, nid);
 
 		write_unlock_irqrestore(g_lock, flags);
 	}
@@ -3131,7 +3131,7 @@ kiblnd_check_conns(int idx)
 	LIST_HEAD(closes);
 	LIST_HEAD(checksends);
 	LIST_HEAD(timedout_txs);
-	struct list_head *peers = &kiblnd_data.kib_peers[idx];
+	struct hlist_head *peers = &kiblnd_data.kib_peers[idx];
 	struct kib_peer_ni *peer_ni;
 	struct kib_tx *tx_tmp, *tx;
 	struct kib_conn *conn;
@@ -3144,7 +3144,7 @@ kiblnd_check_conns(int idx)
 	 */
 	write_lock_irqsave(&kiblnd_data.kib_global_lock, flags);
 
-	list_for_each_entry(peer_ni, peers, ibp_list) {
+	hlist_for_each_entry(peer_ni, peers, ibp_list) {
 		/* Check tx_deadline */
 		list_for_each_entry_safe(tx, tx_tmp, &peer_ni->ibp_tx_queue, tx_list) {
 			if (ktime_compare(ktime_get(), tx->tx_deadline) >= 0) {
@@ -3348,7 +3348,7 @@ kiblnd_connd(void *arg)
 		if (timeout <= 0) {
 			const int n = 4;
 			const int p = 1;
-			int chunk = kiblnd_data.kib_peer_hash_size;
+			int chunk = HASH_SIZE(kiblnd_data.kib_peers);
 
 			spin_unlock_irqrestore(lock, flags);
 			dropped_lock = true;
@@ -3371,7 +3371,7 @@ kiblnd_connd(void *arg)
 			for (i = 0; i < chunk; i++) {
 				kiblnd_check_conns(peer_index);
 				peer_index = (peer_index + 1) %
-					     kiblnd_data.kib_peer_hash_size;
+					HASH_SIZE(kiblnd_data.kib_peers);
 			}
 
 			deadline += msecs_to_jiffies(p * MSEC_PER_SEC);
