@@ -1003,12 +1003,14 @@ static struct ldlm_resource *ldlm_resource_new(enum ldlm_type ldlm_type)
 {
 	struct ldlm_resource *res;
 
-	res = kmem_cache_zalloc(ldlm_resource_slab, GFP_NOFS);
+	res = kmem_cache_alloc(ldlm_resource_slab, GFP_NOFS);
 	if (!res)
 		return NULL;
 
 	INIT_LIST_HEAD(&res->lr_granted);
 	INIT_LIST_HEAD(&res->lr_waiting);
+	res->lr_lvb_inode = NULL;
+	res->lr_lvb_len = 0;
 
 	if (ldlm_type == LDLM_EXTENT) {
 		int idx;
@@ -1026,16 +1028,15 @@ static struct ldlm_resource *ldlm_resource_new(enum ldlm_type ldlm_type)
 			res->lr_itree[idx].lit_mode = 1 << idx;
 			res->lr_itree[idx].lit_root = RB_ROOT_CACHED;
 		}
-	}
+	} else
+		res->lr_itree = NULL;
 
 	atomic_set(&res->lr_refcount, 1);
-	spin_lock_init(&res->lr_lock);
 	lu_ref_init(&res->lr_reference);
 
 	/* The creator of the resource must unlock the mutex after LVB
 	 * initialization.
 	 */
-	mutex_init(&res->lr_lvb_mutex);
 	mutex_lock(&res->lr_lvb_mutex);
 
 	return res;

@@ -1102,6 +1102,23 @@ static int ldlm_cleanup(void)
 	return 0;
 }
 
+void ldlm_resource_init_once(void *p)
+{
+	/*
+	 * It is import to initialise the spinlock only once,
+	 * as ldlm_lock_change_resource() could try to lock
+	 * the resource *after* it has been freed and possibly
+	 * reused. SLAB_TYPESAFE_BY_RCU ensures the memory won't
+	 * be freed while the lock is being taken, but we need to
+	 * ensure that it doesn't get reinitialized either.
+	 */
+	struct ldlm_resource *res = p;
+
+	memset(res, 0, sizeof(*res));
+	mutex_init(&res->lr_lvb_mutex);
+	spin_lock_init(&res->lr_lock);
+}
+
 int ldlm_init(void)
 {
 	mutex_init(&ldlm_ref_mutex);
@@ -1109,7 +1126,8 @@ int ldlm_init(void)
 	mutex_init(ldlm_namespace_lock(LDLM_NAMESPACE_CLIENT));
 	ldlm_resource_slab = kmem_cache_create("ldlm_resources",
 					       sizeof(struct ldlm_resource), 0,
-					       SLAB_HWCACHE_ALIGN, NULL);
+					       SLAB_TYPESAFE_BY_RCU |
+					       SLAB_HWCACHE_ALIGN, ldlm_resource_init_once);
 	if (!ldlm_resource_slab)
 		return -ENOMEM;
 
