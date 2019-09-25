@@ -242,7 +242,7 @@ static ssize_t jobid_var_store(struct kobject *kobj, struct attribute *attr,
 static ssize_t jobid_name_show(struct kobject *kobj, struct attribute *attr,
 			       char *buf)
 {
-	return snprintf(buf, PAGE_SIZE, "%s\n", obd_jobid_node);
+	return snprintf(buf, PAGE_SIZE, "%s\n", obd_jobid_name);
 }
 
 static ssize_t jobid_name_store(struct kobject *kobj, struct attribute *attr,
@@ -252,13 +252,13 @@ static ssize_t jobid_name_store(struct kobject *kobj, struct attribute *attr,
 	if (!count || count > LUSTRE_JOBID_SIZE)
 		return -EINVAL;
 
-	memcpy(obd_jobid_node, buffer, count);
+	memcpy(obd_jobid_name, buffer, count);
 
-	obd_jobid_node[count] = 0;
+	obd_jobid_name[count] = 0;
 
 	/* Trim the trailing '\n' if any */
-	if (obd_jobid_node[count - 1] == '\n')
-		obd_jobid_node[count - 1] = 0;
+	if (obd_jobid_name[count - 1] == '\n')
+		obd_jobid_name[count - 1] = 0;
 
 	return count;
 }
