@@ -612,11 +612,6 @@ int ptl_send_rpc(struct ptlrpc_request *request, int noreply)
 				request->rq_status = rc;
 				goto cleanup_bulk;
 			}
-			/* Use real allocated value in lm_repsize,
-			 * so the server may use whole reply buffer
-			 * without resends where it is needed.
-			 */
-			request->rq_reqmsg->lm_repsize = request->rq_repbuf_len;
 		} else {
 			request->rq_repdata = NULL;
 			request->rq_repmsg = NULL;
