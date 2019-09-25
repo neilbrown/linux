@@ -346,16 +346,19 @@ static ssize_t max_read_ahead_mb_store(struct kobject *kobj,
 					      ll_kset.kobj);
 	int rc;
 	unsigned long pages_number;
+	int pages_shift;
 
+	pages_shift = 20 - PAGE_SHIFT;
 	rc = kstrtoul(buffer, 10, &pages_number);
 	if (rc)
 		return rc;
 
-	pages_number *= 1 << (20 - PAGE_SHIFT); /* MB -> pages */
+	pages_number <<= pages_shift; /* MB -> pages */
 
 	if (pages_number > totalram_pages() / 2) {
-		CERROR("can't set file readahead more than %lu MB\n",
-		       totalram_pages() >> (20 - PAGE_SHIFT + 1)); /*1/2 of RAM*/
+		CERROR("%s: can't set max_readahead_mb=%lu > %luMB\n",
+		       sbi->ll_fsname, pages_number >> pages_shift,
+		       totalram_pages() >> (pages_shift + 1)); /*1/2 of RAM*/
 		return -ERANGE;
 	}
 
@@ -393,14 +396,20 @@ static ssize_t max_read_ahead_per_file_mb_store(struct kobject *kobj,
 					      ll_kset.kobj);
 	int rc;
 	unsigned long pages_number;
+	int pages_shift;
 
+	pages_shift = 20 - PAGE_SHIFT;
 	rc = kstrtoul(buffer, 10, &pages_number);
 	if (rc)
 		return rc;
 
+	pages_number <<= pages_shift; /* MB -> pages */
+
 	if (pages_number > sbi->ll_ra_info.ra_max_pages) {
-		CERROR("can't set file readahead more than max_read_ahead_mb %lu MB\n",
-		       sbi->ll_ra_info.ra_max_pages);
+		CERROR("%s: can't set max_readahead_per_file_mb=%lu > max_read_ahead_mb=%lu\n",
+		       sbi->ll_fsname,
+		       pages_number >> pages_shift,
+		       sbi->ll_ra_info.ra_max_pages >> pages_shift);
 		return -ERANGE;
 	}
 
@@ -438,17 +447,22 @@ static ssize_t max_read_ahead_whole_mb_store(struct kobject *kobj,
 					      ll_kset.kobj);
 	int rc;
 	unsigned long pages_number;
+	int pages_shift;
 
+	pages_shift = 20 - PAGE_SHIFT;
 	rc = kstrtoul(buffer, 10, &pages_number);
 	if (rc)
 		return rc;
+	pages_number <<= pages_shift; /* MB -> pages */
 
 	/* Cap this at the current max readahead window size, the readahead
 	 * algorithm does this anyway so it's pointless to set it larger.
 	 */
 	if (pages_number > sbi->ll_ra_info.ra_max_pages_per_file) {
-		CERROR("can't set max_read_ahead_whole_mb more than max_read_ahead_per_file_mb: %lu\n",
-		       sbi->ll_ra_info.ra_max_pages_per_file >> (20 - PAGE_SHIFT));
+		CERROR("%s: can't set max_read_ahead_whole_mb=%lu > max_read_ahead_per_file_mb=%lu\n",
+		       sbi->ll_fsname,
+		       pages_number >> pages_shift,
+		       sbi->ll_ra_info.ra_max_pages_per_file >> pages_shift);
 		return -ERANGE;
 	}
 
