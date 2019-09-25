@@ -574,9 +574,9 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
 
 	sb->s_root = d_make_root(root);
 	if (!sb->s_root) {
-		CERROR("%s: can't make root dentry\n",
-		       ll_get_fsname(sb, NULL, 0));
 		err = -ENOMEM;
+		CERROR("%s: can't make root dentry, rc = %d\n",
+		       sbi->ll_fsname, err);
 		goto out_lock_cn_cb;
 	}
 
@@ -602,7 +602,7 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
 					sbi->ll_dt_obd->obd_type->typ_name);
 		if (err < 0) {
 			CERROR("%s: could not register %s in llite: rc = %d\n",
-			       dt, ll_get_fsname(sb, NULL, 0), err);
+			       dt, sbi->ll_fsname, err);
 			err = 0;
 		}
 	}
@@ -613,7 +613,7 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
 					sbi->ll_md_obd->obd_type->typ_name);
 		if (err < 0) {
 			CERROR("%s: could not register %s in llite: rc = %d\n",
-			       md, ll_get_fsname(sb, NULL, 0), err);
+			       md, sbi->ll_fsname, err);
 			err = 0;
 		}
 	}
@@ -989,6 +989,19 @@ int ll_fill_super(struct super_block *sb)
 	if (ptr && (strcmp(ptr, "-client") == 0))
 		len -= 7;
 
+	if (len > LUSTRE_MAXFSNAME) {
+		if (unlikely(len >= MAX_OBD_NAME))
+			len = MAX_OBD_NAME - 1;
+		strncpy(name, profilenm, len);
+		name[len] = '\0';
+		err = -ENAMETOOLONG;
+		CERROR("%s: fsname longer than %u characters: rc = %d\n",
+		       name, LUSTRE_MAXFSNAME, err);
+		goto out_free;
+	}
+	strncpy(sbi->ll_fsname, profilenm, len);
+	sbi->ll_fsname[len] = '\0';
+
 	/* Mount info */
 	snprintf(name, sizeof(name), "%.*s-%016lx", len,
 		 profilenm, cfg_instance);
@@ -999,7 +1012,7 @@ int ll_fill_super(struct super_block *sb)
 	err = ll_debugfs_register_super(sb, name);
 	if (err < 0) {
 		CERROR("%s: could not register mountpoint in llite: rc = %d\n",
-		       ll_get_fsname(sb, NULL, 0), err);
+		       sbi->ll_fsname, err);
 		err = 0;
 	}
 
@@ -1191,7 +1204,7 @@ static struct inode *ll_iget_anon_dir(struct super_block *sb,
 	inode = iget_locked(sb, ino);
 	if (!inode) {
 		CERROR("%s: failed get simple inode " DFID ": rc = -ENOENT\n",
-		       ll_get_fsname(sb, NULL, 0), PFID(fid));
+		       sbi->ll_fsname, PFID(fid));
 		return ERR_PTR(-ENOENT);
 	}
 
@@ -1235,8 +1248,7 @@ static int ll_init_lsm_md(struct inode *inode, struct lustre_md *md)
 	LASSERT(lsm);
 
 	CDEBUG(D_INODE, "%s: "DFID" set dir layout:\n",
-		ll_get_fsname(inode->i_sb, NULL, 0),
-		PFID(&lli->lli_fid));
+	       ll_i2sbi(inode)->ll_fsname, PFID(&lli->lli_fid));
 	lsm_md_dump(D_INODE, lsm);
 
 	/*
@@ -1305,7 +1317,7 @@ static int ll_update_lsm_md(struct inode *inode, struct lustre_md *md)
 		if (lsm->lsm_md_layout_version <=
 		    lli->lli_lsm_md->lsm_md_layout_version) {
 			CERROR("%s: "DFID" dir layout mismatch:\n",
-			       ll_get_fsname(inode->i_sb, NULL, 0),
+			       ll_i2sbi(inode)->ll_fsname,
 			       PFID(&lli->lli_fid));
 			lsm_md_dump(D_ERROR, lli->lli_lsm_md);
 			lsm_md_dump(D_ERROR, lsm);
@@ -1507,7 +1519,7 @@ int ll_setattr_raw(struct dentry *dentry, struct iattr *attr,
 	int rc = 0;
 
 	CDEBUG(D_VFSTRACE, "%s: setattr inode " DFID "(%p) from %llu to %llu, valid %x, hsm_import %d\n",
-	       ll_get_fsname(inode->i_sb, NULL, 0), PFID(&lli->lli_fid), inode,
+	       ll_i2sbi(inode)->ll_fsname, PFID(&lli->lli_fid), inode,
 	       i_size_read(inode), attr->ia_size, attr->ia_valid, hsm_import);
 
 	if (attr->ia_valid & ATTR_SIZE) {
@@ -2011,7 +2023,7 @@ void ll_delete_inode(struct inode *inode)
 
 	LASSERTF(nrpages == 0,
 		 "%s: inode="DFID"(%p) nrpages=%lu, see https://jira.whamcloud.com/browse/LU-118\n",
-		 ll_get_fsname(inode->i_sb, NULL, 0),
+		 ll_i2sbi(inode)->ll_fsname,
 		 PFID(ll_inode2fid(inode)), inode, nrpages);
 
 	ll_clear_inode(inode);
@@ -2256,7 +2268,7 @@ int ll_prep_inode(struct inode **inode, struct ptlrpc_request *req,
 		 */
 		if (!fid_is_sane(&md.body->mbo_fid1)) {
 			CERROR("%s: Fid is insane " DFID "\n",
-			       ll_get_fsname(sb, NULL, 0),
+			       sbi->ll_fsname,
 			       PFID(&md.body->mbo_fid1));
 			rc = -EINVAL;
 			goto out;
@@ -2521,40 +2533,6 @@ int ll_get_obd_name(struct inode *inode, unsigned int cmd, unsigned long arg)
 	return 0;
 }
 
-/**
- * Get lustre file system name by @sbi. If @buf is provided(non-NULL), the
- * fsname will be returned in this buffer; otherwise, a static buffer will be
- * used to store the fsname and returned to caller.
- */
-char *ll_get_fsname(struct super_block *sb, char *buf, int buflen)
-{
-	static char fsname_static[MTI_NAME_MAXLEN];
-	struct lustre_sb_info *lsi = s2lsi(sb);
-	char *ptr;
-	int len;
-
-	if (!buf) {
-		/* this means the caller wants to use static buffer
-		 * and it doesn't care about race. Usually this is
-		 * in error reporting path
-		 */
-		buf = fsname_static;
-		buflen = sizeof(fsname_static);
-	}
-
-	len = strlen(lsi->lsi_lmd->lmd_profile);
-	ptr = strrchr(lsi->lsi_lmd->lmd_profile, '-');
-	if (ptr && (strcmp(ptr, "-client") == 0))
-		len -= 7;
-
-	if (unlikely(len >= buflen))
-		len = buflen - 1;
-	strncpy(buf, lsi->lsi_lmd->lmd_profile, len);
-	buf[len] = '\0';
-
-	return buf;
-}
-
 void ll_dirty_page_discard_warn(struct page *page, int ioret)
 {
 	char *buf, *path = NULL;
@@ -2571,7 +2549,7 @@ void ll_dirty_page_discard_warn(struct page *page, int ioret)
 
 	CDEBUG(D_WARNING,
 	       "%s: dirty page discard: %s/fid: " DFID "/%s may get corrupted (rc %d)\n",
-	       ll_get_fsname(page->mapping->host->i_sb, NULL, 0),
+	       ll_i2sbi(inode)->ll_fsname,
 	       s2lsi(page->mapping->host->i_sb)->lsi_lmd->lmd_dev,
 	       PFID(ll_inode2fid(inode)),
 	       (path && !IS_ERR(path)) ? path : "", ioret);
