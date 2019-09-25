@@ -726,7 +726,7 @@ static void class_export_destroy(struct obd_export *exp)
 {
 	struct obd_device *obd = exp->exp_obd;
 
-	LASSERT(refcount_read(&exp->exp_refcount) == 0);
+	LASSERT(refcount_read(&exp->exp_handle.h_ref) == 0);
 	LASSERT(obd);
 
 	CDEBUG(D_IOCTL, "destroying export %p/%s for %s\n", exp,
@@ -750,33 +750,28 @@ static void class_export_destroy(struct obd_export *exp)
 	OBD_FREE_RCU(exp, sizeof(*exp), &exp->exp_handle);
 }
 
-static void export_handle_addref(void *export)
-{
-	class_export_get(export);
-}
-
 static struct portals_handle_ops export_handle_ops = {
-	.hop_addref	= export_handle_addref,
 	.hop_free	= NULL,
+	.hop_type	= "export",
 };
 
 struct obd_export *class_export_get(struct obd_export *exp)
 {
-	refcount_inc(&exp->exp_refcount);
-	CDEBUG(D_INFO, "GETting export %p : new refcount %d\n", exp,
-	       refcount_read(&exp->exp_refcount));
+	refcount_inc(&exp->exp_handle.h_ref);
+	CDEBUG(D_INFO, "GET export %p refcount=%d\n", exp,
+	       refcount_read(&exp->exp_handle.h_ref));
 	return exp;
 }
 EXPORT_SYMBOL(class_export_get);
 
 void class_export_put(struct obd_export *exp)
 {
-	LASSERT(refcount_read(&exp->exp_refcount) >  0);
-	LASSERT(refcount_read(&exp->exp_refcount) < LI_POISON);
+	LASSERT(refcount_read(&exp->exp_handle.h_ref) >  0);
+	LASSERT(refcount_read(&exp->exp_handle.h_ref) < LI_POISON);
 	CDEBUG(D_INFO, "PUTting export %p : new refcount %d\n", exp,
-	       refcount_read(&exp->exp_refcount) - 1);
+	       refcount_read(&exp->exp_handle.h_ref) - 1);
 
-	if (refcount_dec_and_test(&exp->exp_refcount)) {
+	if (refcount_dec_and_test(&exp->exp_handle.h_ref)) {
 		struct obd_device *obd = exp->exp_obd;
 
 		CDEBUG(D_IOCTL, "final put %p/%s\n",
@@ -827,7 +822,7 @@ static struct obd_export *__class_new_export(struct obd_device *obd,
 
 	export->exp_conn_cnt = 0;
 	/* 2 = class_handle_hash + last */
-	refcount_set(&export->exp_refcount, 2);
+	refcount_set(&export->exp_handle.h_ref, 2);
 	atomic_set(&export->exp_rpc_count, 0);
 	atomic_set(&export->exp_cb_count, 0);
 	atomic_set(&export->exp_locks_count, 0);
@@ -930,7 +925,7 @@ static void class_import_destroy(struct obd_import *imp)
 	CDEBUG(D_IOCTL, "destroying import %p for %s\n", imp,
 	       imp->imp_obd->obd_name);
 
-	LASSERT_ATOMIC_ZERO(&imp->imp_refcount);
+	LASSERT(refcount_read(&imp->imp_handle.h_ref) == 0);
 
 	ptlrpc_put_connection_superhack(imp->imp_connection);
 
@@ -947,21 +942,16 @@ static void class_import_destroy(struct obd_import *imp)
 	OBD_FREE_RCU(imp, sizeof(*imp), &imp->imp_handle);
 }
 
-static void import_handle_addref(void *import)
-{
-	class_import_get(import);
-}
-
 static struct portals_handle_ops import_handle_ops = {
-	.hop_addref	= import_handle_addref,
 	.hop_free	= NULL,
+	.hop_type	= "import",
 };
 
 struct obd_import *class_import_get(struct obd_import *import)
 {
-	atomic_inc(&import->imp_refcount);
-	CDEBUG(D_INFO, "import %p refcount=%d obd=%s\n", import,
-	       atomic_read(&import->imp_refcount),
+	refcount_inc(&import->imp_handle.h_ref);
+	CDEBUG(D_INFO, "GET import %p refcount=%d obd=%s\n", import,
+	       refcount_read(&import->imp_handle.h_ref),
 	       import->imp_obd->obd_name);
 	return import;
 }
@@ -969,19 +959,19 @@ EXPORT_SYMBOL(class_import_get);
 
 void class_import_put(struct obd_import *imp)
 {
-	LASSERT_ATOMIC_GT_LT(&imp->imp_refcount, 0, LI_POISON);
+	LASSERT(refcount_read(&imp->imp_handle.h_ref) > 0);
 
 	CDEBUG(D_INFO, "import %p refcount=%d obd=%s\n", imp,
-	       atomic_read(&imp->imp_refcount) - 1,
+	       refcount_read(&imp->imp_handle.h_ref) - 1,
 	       imp->imp_obd->obd_name);
 
-	if (atomic_dec_and_test(&imp->imp_refcount)) {
+	if (refcount_dec_and_test(&imp->imp_handle.h_ref)) {
 		CDEBUG(D_INFO, "final put import %p\n", imp);
 		obd_zombie_import_add(imp);
 	}
 
 	/* catch possible import put race */
-	LASSERT_ATOMIC_GE_LT(&imp->imp_refcount, 0, LI_POISON);
+	LASSERT(refcount_read(&imp->imp_handle.h_ref) >= 0);
 }
 EXPORT_SYMBOL(class_import_put);
 
@@ -1032,7 +1022,7 @@ struct obd_import *class_new_import(struct obd_device *obd)
 	init_waitqueue_head(&imp->imp_recovery_waitq);
 	INIT_WORK(&imp->imp_zombie_work, obd_zombie_imp_cull);
 
-	atomic_set(&imp->imp_refcount, 2);
+	refcount_set(&imp->imp_handle.h_ref, 2);
 	atomic_set(&imp->imp_unregistering, 0);
 	atomic_set(&imp->imp_inflight, 0);
 	atomic_set(&imp->imp_replay_inflight, 0);

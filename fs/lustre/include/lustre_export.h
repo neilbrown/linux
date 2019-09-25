@@ -67,7 +67,6 @@ struct obd_export {
 	 * what export they are talking to.
 	 */
 	struct portals_handle		exp_handle;
-	refcount_t			exp_refcount;
 	/**
 	 * Set of counters below is to track where export references are
 	 * kept. The exp_rpc_count is used for reconnect handling also,
