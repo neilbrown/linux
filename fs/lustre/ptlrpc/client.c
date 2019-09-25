@@ -1565,8 +1565,7 @@ static int ptlrpc_send_new_req(struct ptlrpc_request *req)
 	       current->comm,
 	       imp->imp_obd->obd_uuid.uuid,
 	       lustre_msg_get_status(req->rq_reqmsg), req->rq_xid,
-	       libcfs_nid2str(imp->imp_connection->c_peer.nid),
-	       lustre_msg_get_opc(req->rq_reqmsg));
+	       obd_import_nid2str(imp), lustre_msg_get_opc(req->rq_reqmsg));
 
 	rc = ptl_send_rpc(req, 0);
 	if (rc == -ENOMEM) {
@@ -1977,7 +1976,7 @@ interpret:
 			       current->comm, imp->imp_obd->obd_uuid.uuid,
 			       lustre_msg_get_status(req->rq_reqmsg),
 			       req->rq_xid,
-			       libcfs_nid2str(imp->imp_connection->c_peer.nid),
+			       obd_import_nid2str(imp),
 			       lustre_msg_get_opc(req->rq_reqmsg));
 
 		spin_lock(&imp->imp_lock);
