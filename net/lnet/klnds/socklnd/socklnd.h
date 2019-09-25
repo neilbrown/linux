@@ -242,14 +242,13 @@ struct ksock_nal_data {
 #define SOCKNAL_INIT_ALL	2
 
 /*
- * A packet just assembled for transmission is represented by 1 or more
- * struct iovec fragments (the first frag contains the portals header),
- * followed by 0 or more struct bio_vec fragments.
+ * A packet just assembled for transmission is represented by 1
+ * struct iovec fragment - the portals header -  followed by 0
+ * or more struct bio_vec fragments.
  *
  * On the receive side, initially 1 struct iovec fragment is posted for
  * receive (the header).  Once the header has been received, the payload is
- * received into either struct iovec or struct bio_vec fragments, depending on
- * what the header matched or whether the message needs forwarding.
+ * received into struct bio_vec fragments.
  */
 struct ksock_conn;  /* forward ref */
 struct ksock_peer;  /* forward ref */
@@ -282,8 +281,6 @@ struct ksock_tx {				/* transmit packet */
 };
 
 #define KSOCK_NOOP_TX_SIZE (offsetof(struct ksock_tx, tx_payload[0]))
-
-/* network zero copy callback descriptor embedded in struct ksock_tx */
 
 #define SOCKNAL_RX_KSM_HEADER	1 /* reading ksock message header */
 #define SOCKNAL_RX_LNET_HEADER	2 /* reading lnet message header */
