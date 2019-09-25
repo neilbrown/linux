@@ -118,6 +118,7 @@ LUSTRE_STATIC_UINT_ATTR(at_max, &at_max);
 LUSTRE_STATIC_UINT_ATTR(at_extra, &at_extra);
 LUSTRE_STATIC_UINT_ATTR(at_early_margin, &at_early_margin);
 LUSTRE_STATIC_UINT_ATTR(at_history, &at_history);
+LUSTRE_STATIC_UINT_ATTR(lbug_on_eviction, &obd_lbug_on_eviction);
 
 static ssize_t max_dirty_mb_show(struct kobject *kobj, struct attribute *attr,
 				 char *buf)
@@ -289,6 +290,7 @@ static struct attribute *lustre_attrs[] = {
 	&lustre_sattr_at_extra.u.attr,
 	&lustre_sattr_at_early_margin.u.attr,
 	&lustre_sattr_at_history.u.attr,
+	&lustre_sattr_lbug_on_eviction.u.attr,
 	NULL,
 };
 
