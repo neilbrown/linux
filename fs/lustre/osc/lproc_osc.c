@@ -620,6 +620,7 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 					      obd_kset.kobj);
 	struct client_obd *cli = &dev->u.cli;
 	struct ptlrpc_request *req;
+	unsigned int idle_debug = 0;
 	unsigned int val;
 	int rc;
 	char kernbuf[32];
@@ -631,23 +632,33 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 		return -EFAULT;
 	kernbuf[count] = 0;
 
-	rc = kstrtouint(buffer, 10, &val);
-	if (rc)
-		return rc;
+	if (strncmp(buffer, "debug", 5) == 0) {
+		idle_debug = D_CONSOLE;
+	} else if (strncmp(buffer, "nodebug", 6) == 0) {
+		idle_debug = D_HA;
+	} else {
+		rc = kstrtouint(buffer, 10, &val);
+		if (rc)
+			return rc;
 
-	if (val > CONNECTION_SWITCH_MAX)
-		return -ERANGE;
+		if (val > CONNECTION_SWITCH_MAX)
+			return -ERANGE;
+	}
 
 	rc = lprocfs_climp_check(dev);
 	if (rc)
 		return rc;
-	cli->cl_import->imp_idle_timeout = val;
-
-	/* to initiate the connection if it's in IDLE state */
-	if (!val) {
-		req = ptlrpc_request_alloc(cli->cl_import, &RQF_OST_STATFS);
-		if (req)
-			ptlrpc_req_finished(req);
+	if (idle_debug) {
+		cli->cl_import->imp_idle_debug = idle_debug;
+	} else {
+		if (!val) {
+			/* initiate the connection if it's in IDLE state */
+			req = ptlrpc_request_alloc(cli->cl_import,
+						   &RQF_OST_STATFS);
+			if (req)
+				ptlrpc_req_finished(req);
+		}
+		cli->cl_import->imp_idle_timeout = val;
 	}
 	up_read(&dev->u.cli.cl_sem);
 
