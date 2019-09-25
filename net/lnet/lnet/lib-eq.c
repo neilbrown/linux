@@ -69,20 +69,7 @@ LNetEQAlloc(lnet_eq_handler_t callback)
 
 	eq->eq_callback = callback;
 
-	eq->eq_refs = cfs_percpt_alloc(lnet_cpt_table(),
-				       sizeof(*eq->eq_refs[0]));
-	if (!eq->eq_refs)
-		goto failed;
-
 	return eq;
-
-failed:
-
-	if (eq->eq_refs)
-		cfs_percpt_free(eq->eq_refs);
-
-	kfree(eq);
-	return ERR_PTR(-ENOMEM);
 }
 EXPORT_SYMBOL(LNetEQAlloc);
 
@@ -92,48 +79,13 @@ EXPORT_SYMBOL(LNetEQAlloc);
  *
  * @eq		The event queue to be released.
  *
- * Return:	0 If the EQ is not in use and freed.
- *		-EBUSY If the EQ is still in use by some MDs.
+ * Return:	0
  */
 int
 LNetEQFree(struct lnet_eq *eq)
 {
-	int **refs = NULL;
-	int *ref;
-	int rc = 0;
-	int i;
-
-	LASSERT(the_lnet.ln_refcount > 0);
-
-	lnet_res_lock(LNET_LOCK_EX);
-	/*
-	 * NB: hold lnet_eq_wait_lock for EQ link/unlink, so we can do
-	 * both EQ lookup and poll event with only lnet_eq_wait_lock
-	 */
-	lnet_eq_wait_lock();
-
-	cfs_percpt_for_each(ref, i, eq->eq_refs) {
-		LASSERT(*ref >= 0);
-		if (!*ref)
-			continue;
-
-		CDEBUG(D_NET, "Event equeue (%d: %d) busy on destroy.\n",
-		       i, *ref);
-		rc = -EBUSY;
-		goto out;
-	}
-
-	/* stash for free after lock dropped */
-	refs = eq->eq_refs;
-
 	kfree(eq);
-out:
-	lnet_eq_wait_unlock();
-	lnet_res_unlock(LNET_LOCK_EX);
 
-	if (refs)
-		cfs_percpt_free(refs);
-
-	return rc;
+	return 0;
 }
 EXPORT_SYMBOL(LNetEQFree);
