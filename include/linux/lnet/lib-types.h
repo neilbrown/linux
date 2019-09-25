@@ -42,6 +42,7 @@
 #include <linux/uio.h>
 #include <linux/types.h>
 #include <linux/completion.h>
+#include <linux/kref.h>
 
 #include <uapi/linux/lnet/lnet-types.h>
 #include <uapi/linux/lnet/lnetctl.h>
@@ -468,7 +469,7 @@ struct lnet_peer_ni {
 	/* peer's NID */
 	lnet_nid_t		 lpni_nid;
 	/* # refs */
-	atomic_t		 lpni_refcount;
+	struct kref		 lpni_kref;
 	/* CPT this peer attached on */
 	int			 lpni_cpt;
 	/* state flags -- protected by lpni_lock */
