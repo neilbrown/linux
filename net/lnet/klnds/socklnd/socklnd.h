@@ -199,8 +199,7 @@ struct ksock_nal_data {
 							 * reaper_lock
 							 */
 	wait_queue_head_t	ksnd_reaper_waitq;	/* reaper sleeps here */
-	long			ksnd_reaper_waketime;	/* when reaper will wake
-							 */
+
 	spinlock_t		ksnd_reaper_lock;	/* serialise */
 
 	int			ksnd_enomem_tx;		/* test ENOMEM sender */
