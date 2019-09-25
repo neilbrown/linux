@@ -48,7 +48,7 @@ void obdo_set_parent_fid(struct obdo *dst, const struct lu_fid *parent)
 	dst->o_parent_oid = fid_oid(parent);
 	dst->o_parent_seq = fid_seq(parent);
 	dst->o_parent_ver = fid_ver(parent);
-	dst->o_valid |= OBD_MD_FLGENER | OBD_MD_FLFID;
+	dst->o_valid |= OBD_MD_FLPARENT | OBD_MD_FLFID;
 }
 EXPORT_SYMBOL(obdo_set_parent_fid);
 
