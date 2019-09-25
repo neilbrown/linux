@@ -519,10 +519,7 @@ lnet_setpayloadbuffer(struct lnet_msg *msg)
 	LASSERT(!msg->msg_kiov);
 
 	msg->msg_niov = md->md_niov;
-	if (md->md_options & LNET_MD_KIOV)
-		msg->msg_kiov = md->md_iov.kiov;
-	else
-		msg->msg_iov = md->md_iov.iov;
+	msg->msg_kiov = md->md_kiov;
 }
 
 void

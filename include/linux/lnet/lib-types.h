@@ -168,10 +168,7 @@ struct lnet_libmd {
 	void			*md_user_ptr;
 	struct lnet_eq		*md_eq;
 	struct lnet_handle_md	 md_bulk_handle;
-	union {
-		struct kvec	iov[LNET_MAX_IOV];
-		struct bio_vec	kiov[LNET_MAX_IOV];
-	} md_iov;
+	struct bio_vec		 md_kiov[LNET_MAX_IOV];
 };
 
 #define LNET_MD_FLAG_ZOMBIE		BIT(0)
