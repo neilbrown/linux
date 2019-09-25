@@ -55,18 +55,16 @@
  * @callback	A handler function that runs when an event is deposited
  *		into the EQ. The constant value LNET_EQ_HANDLER_NONE can
  *		be used to indicate that no event handler is desired.
- * @handle	On successful return, this location will hold a handle for
- *		the newly created EQ.
  *
- * Return:	0 On success.
+ * Return:	On successful return, the newly created EQ is returned.
+ *		On failure, an error code encoded with ERR_PTR() is returned.
  *		-EINVAL If an parameter is not valid.
  *		-ENOMEM If memory for the EQ can't be allocated.
  *
  * \see lnet_eq_handler_t for the discussion on EQ handler semantics.
  */
-int
-LNetEQAlloc(unsigned int count, lnet_eq_handler_t callback,
-	    struct lnet_handle_eq *handle)
+struct lnet_eq *
+LNetEQAlloc(unsigned int count, lnet_eq_handler_t callback)
 {
 	struct lnet_eq *eq;
 
@@ -88,11 +86,11 @@ LNetEQAlloc(unsigned int count, lnet_eq_handler_t callback,
 	 * overhead of enqueue event
 	 */
 	if (!count && callback == LNET_EQ_HANDLER_NONE)
-		return -EINVAL;
+		return ERR_PTR(-EINVAL);
 
 	eq = kzalloc(sizeof(*eq), GFP_NOFS);
 	if (!eq)
-		return -ENOMEM;
+		return ERR_PTR(-ENOMEM);
 
 	if (count) {
 		eq->eq_events = kvmalloc_array(count, sizeof(struct lnet_event),
@@ -115,22 +113,7 @@ LNetEQAlloc(unsigned int count, lnet_eq_handler_t callback,
 	if (!eq->eq_refs)
 		goto failed;
 
-	/* MUST hold both exclusive lnet_res_lock */
-	lnet_res_lock(LNET_LOCK_EX);
-	/*
-	 * NB: hold lnet_eq_wait_lock for EQ link/unlink, so we can do
-	 * both EQ lookup and poll event with only lnet_eq_wait_lock
-	 */
-	lnet_eq_wait_lock();
-
-	lnet_res_lh_initialize(&the_lnet.ln_eq_container, &eq->eq_lh);
-	list_add(&eq->eq_list, &the_lnet.ln_eq_container.rec_active);
-
-	lnet_eq_wait_unlock();
-	lnet_res_unlock(LNET_LOCK_EX);
-
-	lnet_eq2handle(handle, eq);
-	return 0;
+	return eq;
 
 failed:
 	kvfree(eq->eq_events);
@@ -139,7 +122,7 @@ failed:
 		cfs_percpt_free(eq->eq_refs);
 
 	kfree(eq);
-	return -ENOMEM;
+	return ERR_PTR(-ENOMEM);
 }
 EXPORT_SYMBOL(LNetEQAlloc);
 
@@ -147,16 +130,14 @@ EXPORT_SYMBOL(LNetEQAlloc);
  * Release the resources associated with an event queue if it's idle;
  * otherwise do nothing and it's up to the user to try again.
  *
- * @eqh		A handle for the event queue to be released.
+ * @eq		The event queue to be released.
  *
  * Return:	0 If the EQ is not in use and freed.
- *		-ENOENT If @eqh does not point to a valid EQ.
  *		-EBUSY If the EQ is still in use by some MDs.
  */
 int
-LNetEQFree(struct lnet_handle_eq eqh)
+LNetEQFree(struct lnet_eq *eq)
 {
-	struct lnet_eq *eq;
 	struct lnet_event *events = NULL;
 	int **refs = NULL;
 	int *ref;
@@ -172,12 +153,6 @@ LNetEQFree(struct lnet_handle_eq eqh)
 	 * both EQ lookup and poll event with only lnet_eq_wait_lock
 	 */
 	lnet_eq_wait_lock();
-
-	eq = lnet_handle2eq(&eqh);
-	if (!eq) {
-		rc = -ENOENT;
-		goto out;
-	}
 
 	cfs_percpt_for_each(ref, i, eq->eq_refs) {
 		LASSERT(*ref >= 0);
@@ -195,8 +170,6 @@ LNetEQFree(struct lnet_handle_eq eqh)
 	size = eq->eq_size;
 	refs = eq->eq_refs;
 
-	lnet_res_lh_invalidate(&eq->eq_lh);
-	list_del(&eq->eq_list);
 	kfree(eq);
 out:
 	lnet_eq_wait_unlock();
@@ -346,7 +319,7 @@ __must_hold(&the_lnet.ln_eq_wait_lock)
  * LNetEQPoll() provides a timeout to allow applications to poll, block for a
  * fixed period, or block indefinitely.
  *
- * @eventqs,neq		An array of EQ handles, and size of the array.
+ * @eventqs,neq		An array of lnet_eq, and size of the array.
  * @timeout		Time in jiffies to wait for an event to occur on
  *			one of the EQs. The constant MAX_SCHEDULE_TIMEOUT
  *			can be used to indicate an infinite timeout.
@@ -366,7 +339,7 @@ __must_hold(&the_lnet.ln_eq_wait_lock)
  *			-ENOENT If there's an invalid handle in @eventqs.
  */
 int
-LNetEQPoll(struct lnet_handle_eq *eventqs, int neq, signed long timeout,
+LNetEQPoll(struct lnet_eq **eventqs, int neq, signed long timeout,
 	   int interruptible,
 	   struct lnet_event *event, int *which)
 {
@@ -382,7 +355,7 @@ LNetEQPoll(struct lnet_handle_eq *eventqs, int neq, signed long timeout,
 
 	do {
 		for (i = 0; i < neq; i++) {
-			struct lnet_eq *eq = lnet_handle2eq(&eventqs[i]);
+			struct lnet_eq *eq = eventqs[i];
 
 			if (!eq) {
 				lnet_eq_wait_unlock();

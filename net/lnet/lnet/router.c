@@ -965,9 +965,9 @@ lnet_update_rc_data_locked(struct lnet_peer_ni *gateway)
 	md.length = LNET_PING_INFO_SIZE(nnis);
 	md.threshold = LNET_MD_THRESH_INF;
 	md.options = LNET_MD_TRUNCATE;
-	md.eq_handle = the_lnet.ln_rc_eqh;
+	md.eq_handle = the_lnet.ln_rc_eq;
 
-	LASSERT(!LNetEQHandleIsInvalid(the_lnet.ln_rc_eqh));
+	LASSERT(!the_lnet.ln_rc_eq);
 	rc = LNetMDBind(&md, LNET_UNLINK, &rcd->rcd_mdh);
 	if (rc < 0) {
 		CERROR("Can't bind MD: %d\n", rc);
@@ -1109,8 +1109,9 @@ lnet_router_checker_start(void)
 
 	init_completion(&the_lnet.ln_rc_signal);
 
-	rc = LNetEQAlloc(0, lnet_router_checker_event, &the_lnet.ln_rc_eqh);
-	if (rc) {
+	the_lnet.ln_rc_eq = LNetEQAlloc(0, lnet_router_checker_event);
+	if (IS_ERR(the_lnet.ln_rc_eq)) {
+		rc = PTR_ERR(the_lnet.ln_rc_eq);
 		CERROR("Can't allocate EQ(%d): %d\n", eqsz, rc);
 		return -ENOMEM;
 	}
@@ -1122,7 +1123,7 @@ lnet_router_checker_start(void)
 		CERROR("Can't start router checker thread: %d\n", rc);
 		/* block until event callback signals exit */
 		wait_for_completion(&the_lnet.ln_rc_signal);
-		rc = LNetEQFree(the_lnet.ln_rc_eqh);
+		rc = LNetEQFree(the_lnet.ln_rc_eq);
 		LASSERT(!rc);
 		the_lnet.ln_rc_state = LNET_RC_STATE_SHUTDOWN;
 		return -ENOMEM;
@@ -1157,7 +1158,7 @@ lnet_router_checker_stop(void)
 	wait_for_completion(&the_lnet.ln_rc_signal);
 	LASSERT(the_lnet.ln_rc_state == LNET_RC_STATE_SHUTDOWN);
 
-	rc = LNetEQFree(the_lnet.ln_rc_eqh);
+	rc = LNetEQFree(the_lnet.ln_rc_eq);
 	LASSERT(!rc);
 }
 

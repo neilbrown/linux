@@ -2693,7 +2693,7 @@ __must_hold(&lp->lp_lock)
 	md.max_size = 0;
 	md.options = LNET_MD_TRUNCATE;
 	md.user_ptr = lp;
-	md.eq_handle = the_lnet.ln_dc_eqh;
+	md.eq_handle = the_lnet.ln_dc_eq;
 
 	rc = LNetMDBind(&md, LNET_UNLINK, &lp->lp_ping_mdh);
 	if (rc != 0) {
@@ -2797,7 +2797,7 @@ __must_hold(&lp->lp_lock)
 	md.threshold = 2; /* Put/Ack */
 	md.max_size = 0;
 	md.options = 0;
-	md.eq_handle = the_lnet.ln_dc_eqh;
+	md.eq_handle = the_lnet.ln_dc_eq;
 	md.user_ptr = lp;
 
 	rc = LNetMDBind(&md, LNET_UNLINK, &lp->lp_push_mdh);
@@ -3108,8 +3108,8 @@ static int lnet_peer_discovery(void *arg)
 	 * size of the thundering herd if there are multiple threads
 	 * waiting on discovery of a single peer.
 	 */
-	LNetEQFree(the_lnet.ln_dc_eqh);
-	LNetInvalidateEQHandle(&the_lnet.ln_dc_eqh);
+	LNetEQFree(the_lnet.ln_dc_eq);
+	the_lnet.ln_dc_eq = NULL;
 
 	/* Queue cleanup 1: stop all pending pings and pushes. */
 	lnet_net_lock(LNET_LOCK_EX);
@@ -3149,13 +3149,14 @@ static int lnet_peer_discovery(void *arg)
 int lnet_peer_discovery_start(void)
 {
 	struct task_struct *task;
-	int rc;
+	int rc = 0;
 
 	if (the_lnet.ln_dc_state != LNET_DC_STATE_SHUTDOWN)
 		return -EALREADY;
 
-	rc = LNetEQAlloc(0, lnet_discovery_event_handler, &the_lnet.ln_dc_eqh);
-	if (rc != 0) {
+	the_lnet.ln_dc_eq = LNetEQAlloc(0, lnet_discovery_event_handler);
+	if (IS_ERR(the_lnet.ln_dc_eq)) {
+		rc = PTR_ERR(the_lnet.ln_dc_eq);
 		CERROR("Can't allocate discovery EQ: %d\n", rc);
 		return rc;
 	}
@@ -3166,8 +3167,8 @@ int lnet_peer_discovery_start(void)
 		rc = PTR_ERR(task);
 		CERROR("Can't start peer discovery thread: %d\n", rc);
 
-		LNetEQFree(the_lnet.ln_dc_eqh);
-		LNetInvalidateEQHandle(&the_lnet.ln_dc_eqh);
+		LNetEQFree(the_lnet.ln_dc_eq);
+		the_lnet.ln_dc_eq = NULL;
 
 		the_lnet.ln_dc_state = LNET_DC_STATE_SHUTDOWN;
 	}

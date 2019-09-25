@@ -309,28 +309,6 @@ struct lnet_counters {
  */
 #define LNET_WIRE_HANDLE_COOKIE_NONE   (-1)
 
-struct lnet_handle_eq {
-	u64	cookie;
-};
-
-/**
- * Invalidate eq handle @h.
- */
-static inline void LNetInvalidateEQHandle(struct lnet_handle_eq *h)
-{
-	h->cookie = LNET_WIRE_HANDLE_COOKIE_NONE;
-}
-
-/**
- * Check whether eq handle @h is invalid.
- *
- * @return 1 if handle is invalid, 0 if valid.
- */
-static inline int LNetEQHandleIsInvalid(struct lnet_handle_eq h)
-{
-	return (LNET_WIRE_HANDLE_COOKIE_NONE == h.cookie);
-}
-
 struct lnet_handle_md {
 	u64	cookie;
 };
@@ -486,11 +464,10 @@ struct lnet_md {
 	void		*user_ptr;
 	/**
 	 * A handle for the event queue used to log the operations performed on
-	 * the memory region. If this argument is a NULL handle (i.e. nullified
-	 * by LNetInvalidateHandle()), operations performed on this memory
-	 * descriptor are not logged.
+	 * the memory region. If this argument is a NULL handle, operations performed
+	 * on this memory descriptor are not logged.
 	 */
-	struct lnet_handle_eq eq_handle;
+	struct lnet_eq *eq_handle;
 	/**
 	 * The bulk MD handle which was registered to describe the buffers
 	 * either to be used to transfer data to the peer or receive data
