@@ -799,6 +799,7 @@ struct ptlrpc_body_v2 {
 						 * under client-held parent
 						 * locks
 						 */
+#define OBD_CONNECT2_LOCK_CONVERT	0x80ULL /* IBITS lock convert support */
 
 /* XXX README XXX:
  * Please DO NOT add flag values here before first ensuring that this same
