@@ -86,7 +86,6 @@ lolnd_startup(struct lnet_ni *ni)
 }
 
 struct lnet_lnd the_lolnd = {
-	.lnd_list	= LIST_HEAD_INIT(the_lolnd.lnd_list),
 	.lnd_type	= LOLND,
 	.lnd_startup	= lolnd_startup,
 	.lnd_shutdown	= lolnd_shutdown,

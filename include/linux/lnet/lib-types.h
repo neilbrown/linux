@@ -190,10 +190,6 @@ struct lnet_test_peer {
 struct lnet_ni;			/* forward ref */
 
 struct lnet_lnd {
-	/* fields managed by portals */
-	struct list_head	lnd_list;	/* stash in the LND table */
-	int			lnd_refcount;	/* # active instances */
-
 	/* fields initialised by the LND */
 	u32			lnd_type;
 
