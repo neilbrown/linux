@@ -592,11 +592,6 @@ struct lnet_event {
 	 */
 	unsigned int		mlength;
 	/**
-	 * The handle to the MD associated with the event. The handle may be
-	 * invalid if the MD has been unlinked.
-	 */
-	struct lnet_handle_md	md_handle;
-	/**
 	 * A snapshot of relevant state of the MD immediately after the event
 	 * has been processed.
 	 */
