@@ -292,13 +292,56 @@ lnet_drop_rule_reset(void)
 	lnet_net_unlock(cpt);
 }
 
+static void
+lnet_fault_match_health(enum lnet_msg_hstatus *hstatus, __u32 mask)
+{
+	int choice;
+	int delta;
+	int best_delta;
+	int i;
+
+	/* assign a random failure */
+	choice = prandom_u32_max(LNET_MSG_STATUS_END - LNET_MSG_STATUS_OK);
+	if (choice == 0)
+		choice++;
+
+	if (mask == HSTATUS_RANDOM) {
+		*hstatus = choice;
+		return;
+	}
+
+	if (mask & (1 << choice)) {
+		*hstatus = choice;
+		return;
+	}
+
+	/* round to the closest ON bit */
+	i = HSTATUS_END;
+	best_delta = HSTATUS_END;
+	while (i > 0) {
+		if (mask & (1 << i)) {
+			delta = choice - i;
+			if (delta < 0)
+				delta *= -1;
+			if (delta < best_delta) {
+				best_delta = delta;
+				choice = i;
+			}
+		}
+		i--;
+	}
+
+	*hstatus = choice;
+}
+
 /**
  * check source/destination NID, portal, message type and drop rate,
  * decide whether should drop this message or not
  */
 static bool
 drop_rule_match(struct lnet_drop_rule *rule, lnet_nid_t src,
-		lnet_nid_t dst, unsigned int type, unsigned int portal)
+		lnet_nid_t dst, unsigned int type, unsigned int portal,
+		enum lnet_msg_hstatus *hstatus)
 {
 	struct lnet_fault_attr *attr = &rule->dr_attr;
 	bool drop;
@@ -306,9 +349,24 @@ drop_rule_match(struct lnet_drop_rule *rule, lnet_nid_t src,
 	if (!lnet_fault_attr_match(attr, src, dst, type, portal))
 		return false;
 
+	/*
+	 * if we're trying to match a health status error but it hasn't
+	 * been set in the rule, then don't match
+	 */
+	if ((hstatus && !attr->u.drop.da_health_error_mask) ||
+	    (!hstatus && attr->u.drop.da_health_error_mask))
+		return false;
+
 	/* match this rule, check drop rate now */
 	spin_lock(&rule->dr_lock);
-	if (rule->dr_drop_time) { /* time based drop */
+	if (attr->u.drop.da_random) {
+		int value = prandom_u32_max(attr->u.drop.da_interval);
+
+		if (value >= (attr->u.drop.da_interval / 2))
+			drop = true;
+		else
+			drop = false;
+	} else if (rule->dr_drop_time) { /* time based drop */
 		time64_t now = ktime_get_seconds();
 
 		rule->dr_stat.fs_count++;
@@ -340,6 +398,10 @@ drop_rule_match(struct lnet_drop_rule *rule, lnet_nid_t src,
 	}
 
 	if (drop) { /* drop this message, update counters */
+		if (hstatus)
+			lnet_fault_match_health(
+				hstatus,
+				attr->u.drop.da_health_error_mask);
 		lnet_fault_stat_inc(&rule->dr_stat, type);
 		rule->dr_stat.u.drop.ds_dropped++;
 	}
@@ -352,12 +414,12 @@ drop_rule_match(struct lnet_drop_rule *rule, lnet_nid_t src,
  * Check if message from @src to @dst can match any existed drop rule
  */
 bool
-lnet_drop_rule_match(struct lnet_hdr *hdr)
+lnet_drop_rule_match(struct lnet_hdr *hdr, enum lnet_msg_hstatus *hstatus)
 {
-	struct lnet_drop_rule *rule;
 	lnet_nid_t src = le64_to_cpu(hdr->src_nid);
 	lnet_nid_t dst = le64_to_cpu(hdr->dest_nid);
 	unsigned int typ = le32_to_cpu(hdr->type);
+	struct lnet_drop_rule *rule;
 	unsigned int ptl = -1;
 	bool drop = false;
 	int cpt;
@@ -373,12 +435,13 @@ lnet_drop_rule_match(struct lnet_hdr *hdr)
 
 	cpt = lnet_net_lock_current();
 	list_for_each_entry(rule, &the_lnet.ln_drop_rules, dr_link) {
-		drop = drop_rule_match(rule, src, dst, typ, ptl);
+		drop = drop_rule_match(rule, src, dst, typ, ptl,
+				       hstatus);
 		if (drop)
 			break;
 	}
-
 	lnet_net_unlock(cpt);
+
 	return drop;
 }
 
