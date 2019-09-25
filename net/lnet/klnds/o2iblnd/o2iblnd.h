@@ -67,8 +67,6 @@
 #include <linux/lnet/lib-lnet.h>
 
 #define IBLND_PEER_HASH_SIZE		101	/* # peer_ni lists */
-/* # scheduler loops before reschedule */
-#define IBLND_RESCHED			100
 
 #define IBLND_N_SCHED			2
 #define IBLND_N_SCHED_HIGH		4
