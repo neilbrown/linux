@@ -748,7 +748,7 @@ out:
 static void
 lnet_router_checker_event(struct lnet_event *event)
 {
-	struct lnet_rc_data *rcd = event->md.user_ptr;
+	struct lnet_rc_data *rcd = event->md_user_ptr;
 	struct lnet_peer_ni *lp;
 
 	LASSERT(rcd);
