@@ -298,6 +298,7 @@ static int ll_readdir(struct file *filp, struct dir_context *ctx)
 	int hash64 = sbi->ll_flags & LL_SBI_64BIT_HASH;
 	bool api32 = ll_need_32bit_api(sbi);
 	struct md_op_data *op_data;
+	struct lu_fid pfid = { 0 };
 	int rc;
 
 	CDEBUG(D_VFSTRACE,
@@ -313,14 +314,7 @@ static int ll_readdir(struct file *filp, struct dir_context *ctx)
 		goto out;
 	}
 
-	op_data = ll_prep_md_op_data(NULL, inode, inode, NULL, 0, 0,
-				     LUSTRE_OPC_ANY, inode);
-	if (IS_ERR(op_data)) {
-		rc = PTR_ERR(op_data);
-		goto out;
-	}
-
-	if (unlikely(op_data->op_mea1)) {
+	if (unlikely(ll_i2info(inode)->lli_lsm_md)) {
 		/*
 		 * This is only needed for striped dir to fill ..,
 		 * see lmv_read_page
@@ -332,21 +326,28 @@ static int ll_readdir(struct file *filp, struct dir_context *ctx)
 
 			parent = file_dentry(filp)->d_parent->d_inode;
 			if (ll_have_md_lock(parent, &ibits, LCK_MINMODE))
-				op_data->op_fid3 = *ll_inode2fid(parent);
+				pfid = *ll_inode2fid(parent);
 		}
 
 		/*
 		 * If it can not find in cache, do lookup .. on the master
 		 * object
 		 */
-		if (fid_is_zero(&op_data->op_fid3)) {
-			rc = ll_dir_get_parent_fid(inode, &op_data->op_fid3);
-			if (rc) {
-				ll_finish_md_op_data(op_data);
+		if (fid_is_zero(&pfid)) {
+			rc = ll_dir_get_parent_fid(inode, &pfid);
+			if (rc)
 				return rc;
-			}
 		}
 	}
+
+	op_data = ll_prep_md_op_data(NULL, inode, inode, NULL, 0, 0,
+				     LUSTRE_OPC_ANY, inode);
+	if (IS_ERR(op_data)) {
+		rc = PTR_ERR(op_data);
+		goto out;
+	}
+	op_data->op_fid3 = pfid;
+
 	ctx->pos = pos;
 	rc = ll_dir_read(inode, &pos, op_data, ctx);
 	pos = ctx->pos;

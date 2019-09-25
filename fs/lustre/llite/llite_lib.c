@@ -922,6 +922,7 @@ void ll_lli_init(struct ll_inode_info *lli)
 		lli->lli_opendir_pid = 0;
 		lli->lli_sa_enabled = 0;
 		lli->lli_def_stripe_offset = -1;
+		init_rwsem(&lli->lli_lsm_sem);
 	} else {
 		mutex_init(&lli->lli_size_mutex);
 		lli->lli_symlink_name = NULL;
@@ -1227,10 +1228,17 @@ static struct inode *ll_iget_anon_dir(struct super_block *sb,
 static int ll_init_lsm_md(struct inode *inode, struct lustre_md *md)
 {
 	struct lmv_stripe_md *lsm = md->lmv;
+	struct ll_inode_info *lli = ll_i2info(inode);
 	struct lu_fid *fid;
 	int i;
 
 	LASSERT(lsm);
+
+	CDEBUG(D_INODE, "%s: "DFID" set dir layout:\n",
+		ll_get_fsname(inode->i_sb, NULL, 0),
+		PFID(&lli->lli_fid));
+	lsm_md_dump(D_INODE, lsm);
+
 	/*
 	 * XXX sigh, this lsm_root initialization should be in
 	 * LMV layer, but it needs ll_iget right now, so we
@@ -1250,9 +1258,15 @@ static int ll_init_lsm_md(struct inode *inode, struct lustre_md *md)
 			int rc = PTR_ERR(lsm->lsm_md_oinfo[i].lmo_root);
 
 			lsm->lsm_md_oinfo[i].lmo_root = NULL;
+			while (i-- > 0) {
+				iput(lsm->lsm_md_oinfo[i].lmo_root);
+				lsm->lsm_md_oinfo[i].lmo_root = NULL;
+			}
 			return rc;
 		}
 	}
+
+	lli->lli_lsm_md = lsm;
 
 	return 0;
 }
@@ -1261,7 +1275,7 @@ static int ll_update_lsm_md(struct inode *inode, struct lustre_md *md)
 {
 	struct ll_inode_info *lli = ll_i2info(inode);
 	struct lmv_stripe_md *lsm = md->lmv;
-	int rc;
+	int rc = 0;
 
 	LASSERT(S_ISDIR(inode->i_mode));
 	CDEBUG(D_INODE, "update lsm %p of " DFID "\n", lli->lli_lsm_md,
@@ -1274,57 +1288,43 @@ static int ll_update_lsm_md(struct inode *inode, struct lustre_md *md)
 	if (!lsm)
 		return 0;
 
-	/* Compare the old and new stripe information */
+	/*
+	 * normally dir layout doesn't change, only take read lock to check
+	 * that to avoid blocking other MD operations.
+	 */
+	if (lli->lli_lsm_md)
+		down_read(&lli->lli_lsm_sem);
+	else
+		down_write(&lli->lli_lsm_sem);
+
+	/*
+	 * if dir layout mismatch, check whether version is increased, which
+	 * means layout is changed, this happens in dir migration and lfsck.
+	 */
 	if (lli->lli_lsm_md && !lsm_md_eq(lli->lli_lsm_md, lsm)) {
-		struct lmv_stripe_md *old_lsm = lli->lli_lsm_md;
-		int idx;
-		bool layout_changed = lsm->lsm_md_layout_version >
-				      old_lsm->lsm_md_layout_version;
+		if (lsm->lsm_md_layout_version <=
+		    lli->lli_lsm_md->lsm_md_layout_version) {
+			CERROR("%s: "DFID" dir layout mismatch:\n",
+			       ll_get_fsname(inode->i_sb, NULL, 0),
+			       PFID(&lli->lli_fid));
+			lsm_md_dump(D_ERROR, lli->lli_lsm_md);
+			lsm_md_dump(D_ERROR, lsm);
+			rc = -EINVAL;
+			goto unlock;
+		}
 
-		int mask = layout_changed ? D_INODE : D_ERROR;
-
-		CDEBUG(mask,
-		       "%s: inode@%p "DFID" lmv layout %s magic %#x/%#x "
-		       "stripe count %d/%d master_mdt %d/%d "
-		       "hash_type %#x/%#x version %d/%d migrate offset %d/%d  "
-		       "migrate hash %#x/%#x pool %s/%s\n",
-		       ll_get_fsname(inode->i_sb, NULL, 0), inode,
-		       PFID(&lli->lli_fid),
-		       layout_changed ? "changed" : "mismatch",
-		       lsm->lsm_md_magic, old_lsm->lsm_md_magic,
-		       lsm->lsm_md_stripe_count,
-		       old_lsm->lsm_md_stripe_count,
-		       lsm->lsm_md_master_mdt_index,
-		       old_lsm->lsm_md_master_mdt_index,
-		       lsm->lsm_md_hash_type, old_lsm->lsm_md_hash_type,
-		       lsm->lsm_md_layout_version,
-		       old_lsm->lsm_md_layout_version,
-		       lsm->lsm_md_migrate_offset,
-		       old_lsm->lsm_md_migrate_offset,
-		       lsm->lsm_md_migrate_hash,
-		       old_lsm->lsm_md_migrate_hash,
-		       lsm->lsm_md_pool_name,
-		       old_lsm->lsm_md_pool_name);
-
-		for (idx = 0; idx < old_lsm->lsm_md_stripe_count; idx++)
-			CDEBUG(mask, "old stripe[%d] "DFID"\n",
-			       idx, PFID(&old_lsm->lsm_md_oinfo[idx].lmo_fid));
-
-		for (idx = 0; idx < lsm->lsm_md_stripe_count; idx++)
-			CDEBUG(mask, "new stripe[%d] "DFID"\n",
-			       idx, PFID(&lsm->lsm_md_oinfo[idx].lmo_fid));
-
-		if (!layout_changed)
-			return -EINVAL;
-
+		/* layout changed, switch to write lock */
+		up_read(&lli->lli_lsm_sem);
+		down_write(&lli->lli_lsm_sem);
 		ll_dir_clear_lsm_md(inode);
 	}
 
-	/* set the directory layout */
+	/* set directory layout */
 	if (!lli->lli_lsm_md) {
 		struct cl_attr *attr;
 
 		rc = ll_init_lsm_md(inode, md);
+		up_write(&lli->lli_lsm_sem);
 		if (rc)
 			return rc;
 
@@ -1333,18 +1333,25 @@ static int ll_update_lsm_md(struct inode *inode, struct lustre_md *md)
 		 * will not free this lsm
 		 */
 		md->lmv = NULL;
-		lli->lli_lsm_md = lsm;
+
+		/*
+		 * md_merge_attr() may take long, since lsm is already set,
+		 * switch to read lock.
+		 */
+		down_read(&lli->lli_lsm_sem);
 
 		attr = kzalloc(sizeof(*attr), GFP_NOFS);
-		if (!attr)
-			return -ENOMEM;
+		if (!attr) {
+			rc = -ENOMEM;
+			goto unlock;
+		}
 
 		/* validate the lsm */
 		rc = md_merge_attr(ll_i2mdexp(inode), lsm, attr,
 				   ll_md_blocking_ast);
 		if (rc) {
 			kfree(attr);
-			return rc;
+			goto unlock;
 		}
 
 		if (md->body->mbo_valid & OBD_MD_FLNLINK)
@@ -1359,47 +1366,11 @@ static int ll_update_lsm_md(struct inode *inode, struct lustre_md *md)
 			md->body->mbo_mtime = attr->cat_mtime;
 
 		kfree(attr);
-
-		CDEBUG(D_INODE, "Set lsm %p magic %x to " DFID "\n", lsm,
-		       lsm->lsm_md_magic, PFID(ll_inode2fid(inode)));
-		return 0;
 	}
+unlock:
+	up_read(&lli->lli_lsm_sem);
 
-	/* Compare the old and new stripe information */
-	if (!lsm_md_eq(lli->lli_lsm_md, lsm)) {
-		struct lmv_stripe_md *old_lsm = lli->lli_lsm_md;
-		int idx;
-
-		CERROR("%s: inode " DFID "(%p)'s lmv layout mismatch (%p)/(%p) magic:0x%x/0x%x stripe count: %d/%d master_mdt: %d/%d hash_type:0x%x/0x%x layout: 0x%x/0x%x pool:%s/%s\n",
-		       ll_get_fsname(inode->i_sb, NULL, 0), PFID(&lli->lli_fid),
-		       inode, lsm, old_lsm,
-		       lsm->lsm_md_magic, old_lsm->lsm_md_magic,
-		       lsm->lsm_md_stripe_count,
-		       old_lsm->lsm_md_stripe_count,
-		       lsm->lsm_md_master_mdt_index,
-		       old_lsm->lsm_md_master_mdt_index,
-		       lsm->lsm_md_hash_type, old_lsm->lsm_md_hash_type,
-		       lsm->lsm_md_layout_version,
-		       old_lsm->lsm_md_layout_version,
-		       lsm->lsm_md_pool_name,
-		       old_lsm->lsm_md_pool_name);
-
-		for (idx = 0; idx < old_lsm->lsm_md_stripe_count; idx++) {
-			CERROR("%s: sub FIDs in old lsm idx %d, old: " DFID "\n",
-			       ll_get_fsname(inode->i_sb, NULL, 0), idx,
-			       PFID(&old_lsm->lsm_md_oinfo[idx].lmo_fid));
-		}
-
-		for (idx = 0; idx < lsm->lsm_md_stripe_count; idx++) {
-			CERROR("%s: sub FIDs in new lsm idx %d, new: " DFID "\n",
-			       ll_get_fsname(inode->i_sb, NULL, 0), idx,
-			       PFID(&lsm->lsm_md_oinfo[idx].lmo_fid));
-		}
-
-		return -EIO;
-	}
-
-	return 0;
+	return rc;
 }
 
 void ll_clear_inode(struct inode *inode)
@@ -2377,6 +2348,23 @@ out_statfs:
 	return rc;
 }
 
+/*
+ * this is normally called in ll_fini_md_op_data(), but sometimes it needs to
+ * be called early to avoid deadlock.
+ */
+void ll_unlock_md_op_lsm(struct md_op_data *op_data)
+{
+	if (op_data->op_mea2_sem) {
+		up_read(op_data->op_mea2_sem);
+		op_data->op_mea2_sem = NULL;
+	}
+
+	if (op_data->op_mea1_sem) {
+		up_read(op_data->op_mea1_sem);
+		op_data->op_mea1_sem = NULL;
+	}
+}
+
 /* this function prepares md_op_data hint for passing ot down to MD stack. */
 struct md_op_data *ll_prep_md_op_data(struct md_op_data *op_data,
 				      struct inode *i1, struct inode *i2,
@@ -2404,7 +2392,10 @@ struct md_op_data *ll_prep_md_op_data(struct md_op_data *op_data,
 	ll_i2gids(op_data->op_suppgids, i1, i2);
 	op_data->op_fid1 = *ll_inode2fid(i1);
 	op_data->op_default_stripe_offset = -1;
+
 	if (S_ISDIR(i1->i_mode)) {
+		down_read(&ll_i2info(i1)->lli_lsm_sem);
+		op_data->op_mea1_sem = &ll_i2info(i1)->lli_lsm_sem;
 		op_data->op_mea1 = ll_i2info(i1)->lli_lsm_md;
 		if (opc == LUSTRE_OPC_MKDIR)
 			op_data->op_default_stripe_offset =
@@ -2413,8 +2404,14 @@ struct md_op_data *ll_prep_md_op_data(struct md_op_data *op_data,
 
 	if (i2) {
 		op_data->op_fid2 = *ll_inode2fid(i2);
-		if (S_ISDIR(i2->i_mode))
+		if (S_ISDIR(i2->i_mode)) {
+			if (i2 != i1) {
+				down_read(&ll_i2info(i2)->lli_lsm_sem);
+				op_data->op_mea2_sem =
+						&ll_i2info(i2)->lli_lsm_sem;
+			}
 			op_data->op_mea2 = ll_i2info(i2)->lli_lsm_md;
+		}
 	} else {
 		fid_zero(&op_data->op_fid2);
 	}
@@ -2443,6 +2440,7 @@ struct md_op_data *ll_prep_md_op_data(struct md_op_data *op_data,
 
 void ll_finish_md_op_data(struct md_op_data *op_data)
 {
+	ll_unlock_md_op_lsm(op_data);
 	security_release_secctx(op_data->op_file_secctx,
 				op_data->op_file_secctx_size);
 	kfree(op_data);

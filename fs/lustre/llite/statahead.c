@@ -332,6 +332,58 @@ __sa_make_ready(struct ll_statahead_info *sai, struct sa_entry *entry, int ret)
 	return (index == sai->sai_index_wait);
 }
 
+/* finish async stat RPC arguments */
+static void sa_fini_data(struct md_enqueue_info *minfo)
+{
+	ll_unlock_md_op_lsm(&minfo->mi_data);
+	iput(minfo->mi_dir);
+	kfree(minfo);
+}
+
+static int ll_statahead_interpret(struct ptlrpc_request *req,
+				  struct md_enqueue_info *minfo, int rc);
+
+/*
+ * prepare arguments for async stat RPC.
+ */
+static struct md_enqueue_info *
+sa_prep_data(struct inode *dir, struct inode *child, struct sa_entry *entry)
+{
+	struct md_enqueue_info   *minfo;
+	struct ldlm_enqueue_info *einfo;
+	struct md_op_data        *op_data;
+
+	minfo = kzalloc(sizeof(*minfo), GFP_NOFS);
+	if (!minfo)
+		return ERR_PTR(-ENOMEM);
+
+	op_data = ll_prep_md_op_data(&minfo->mi_data, dir, child,
+				     entry->se_qstr.name, entry->se_qstr.len, 0,
+				     LUSTRE_OPC_ANY, NULL);
+	if (IS_ERR(op_data)) {
+		kfree(minfo);
+		return (struct md_enqueue_info *)op_data;
+	}
+
+	if (!child)
+		op_data->op_fid2 = entry->se_fid;
+
+	minfo->mi_it.it_op = IT_GETATTR;
+	minfo->mi_dir = igrab(dir);
+	minfo->mi_cb = ll_statahead_interpret;
+	minfo->mi_cbdata = entry;
+
+	einfo = &minfo->mi_einfo;
+	einfo->ei_type   = LDLM_IBITS;
+	einfo->ei_mode   = it_to_lock_mode(&minfo->mi_it);
+	einfo->ei_cb_bl  = ll_md_blocking_ast;
+	einfo->ei_cb_cp  = ldlm_completion_ast;
+	einfo->ei_cb_gl  = NULL;
+	einfo->ei_cbdata = NULL;
+
+	return minfo;
+}
+
 /*
  * release resources used in async stat RPC, update entry state and wakeup if
  * scanner process it waiting on this entry.
@@ -348,8 +400,7 @@ sa_make_ready(struct ll_statahead_info *sai, struct sa_entry *entry, int ret)
 	if (minfo) {
 		entry->se_minfo = NULL;
 		ll_intent_release(&minfo->mi_it);
-		iput(minfo->mi_dir);
-		kfree(minfo);
+		sa_fini_data(minfo);
 	}
 
 	if (req) {
@@ -685,17 +736,16 @@ static int ll_statahead_interpret(struct ptlrpc_request *req,
 
 	if (rc) {
 		ll_intent_release(it);
-		iput(dir);
-		kfree(minfo);
+		sa_fini_data(minfo);
 	} else {
-		/*
-		 * release ibits lock ASAP to avoid deadlock when statahead
+		/* release ibits lock ASAP to avoid deadlock when statahead
 		 * thread enqueues lock on parent in readdir and another
 		 * process enqueues lock on child with parent lock held, eg.
 		 * unlink.
 		 */
 		handle = it->it_lock_handle;
 		ll_intent_drop_lock(it);
+		ll_unlock_md_op_lsm(&minfo->mi_data);
 	}
 
 	spin_lock(&lli->lli_sa_lock);
@@ -727,54 +777,6 @@ static int ll_statahead_interpret(struct ptlrpc_request *req,
 	spin_unlock(&lli->lli_sa_lock);
 
 	return rc;
-}
-
-/* finish async stat RPC arguments */
-static void sa_fini_data(struct md_enqueue_info *minfo)
-{
-	iput(minfo->mi_dir);
-	kfree(minfo);
-}
-
-/**
- * prepare arguments for async stat RPC.
- */
-static struct md_enqueue_info *
-sa_prep_data(struct inode *dir, struct inode *child, struct sa_entry *entry)
-{
-	struct md_enqueue_info *minfo;
-	struct ldlm_enqueue_info *einfo;
-	struct md_op_data *op_data;
-
-	minfo = kzalloc(sizeof(*minfo), GFP_NOFS);
-	if (!minfo)
-		return ERR_PTR(-ENOMEM);
-
-	op_data = ll_prep_md_op_data(&minfo->mi_data, dir, child,
-				     entry->se_qstr.name, entry->se_qstr.len, 0,
-				     LUSTRE_OPC_ANY, NULL);
-	if (IS_ERR(op_data)) {
-		kfree(minfo);
-		return (struct md_enqueue_info *)op_data;
-	}
-
-	if (!child)
-		op_data->op_fid2 = entry->se_fid;
-
-	minfo->mi_it.it_op = IT_GETATTR;
-	minfo->mi_dir = igrab(dir);
-	minfo->mi_cb = ll_statahead_interpret;
-	minfo->mi_cbdata = entry;
-
-	einfo = &minfo->mi_einfo;
-	einfo->ei_type = LDLM_IBITS;
-	einfo->ei_mode = it_to_lock_mode(&minfo->mi_it);
-	einfo->ei_cb_bl = ll_md_blocking_ast;
-	einfo->ei_cb_cp = ldlm_completion_ast;
-	einfo->ei_cb_gl = NULL;
-	einfo->ei_cbdata = NULL;
-
-	return minfo;
 }
 
 /* async stat for file not found in dcache */
@@ -818,20 +820,18 @@ static int sa_revalidate(struct inode *dir, struct sa_entry *entry,
 	if (d_mountpoint(dentry))
 		return 1;
 
+	minfo = sa_prep_data(dir, inode, entry);
+	if (IS_ERR(minfo))
+		return PTR_ERR(minfo);
+
 	entry->se_inode = igrab(inode);
 	rc = md_revalidate_lock(ll_i2mdexp(dir), &it, ll_inode2fid(inode),
 				NULL);
 	if (rc == 1) {
 		entry->se_handle = it.it_lock_handle;
 		ll_intent_release(&it);
+		sa_fini_data(minfo);
 		return 1;
-	}
-
-	minfo = sa_prep_data(dir, inode, entry);
-	if (IS_ERR(minfo)) {
-		entry->se_inode = NULL;
-		iput(inode);
-		return PTR_ERR(minfo);
 	}
 
 	rc = md_intent_getattr_async(ll_i2mdexp(dir), minfo);
@@ -981,10 +981,9 @@ static int ll_statahead_thread(void *arg)
 	CDEBUG(D_READA, "statahead thread starting: sai %p, parent %pd\n",
 	       sai, parent);
 
-	op_data = ll_prep_md_op_data(NULL, dir, dir, NULL, 0, 0,
-				     LUSTRE_OPC_ANY, dir);
-	if (IS_ERR(op_data)) {
-		rc = PTR_ERR(op_data);
+	op_data = kzalloc(sizeof(*op_data), GFP_NOFS);
+	if (!op_data) {
+		rc = -ENOMEM;
 		goto out;
 	}
 
@@ -992,8 +991,16 @@ static int ll_statahead_thread(void *arg)
 		struct lu_dirpage *dp;
 		struct lu_dirent *ent;
 
+		op_data = ll_prep_md_op_data(op_data, dir, dir, NULL, 0, 0,
+				     LUSTRE_OPC_ANY, dir);
+		if (IS_ERR(op_data)) {
+			rc = PTR_ERR(op_data);
+			break;
+		}
+
 		sai->sai_in_readpage = 1;
 		page = ll_get_dir_page(dir, op_data, pos);
+		ll_unlock_md_op_lsm(op_data);
 		sai->sai_in_readpage = 0;
 		if (IS_ERR(page)) {
 			rc = PTR_ERR(page);
