@@ -200,12 +200,12 @@ ptlrpcd_select_pc(struct ptlrpc_request *req)
 static int ptlrpcd_steal_rqset(struct ptlrpc_request_set *des,
 			       struct ptlrpc_request_set *src)
 {
-	struct ptlrpc_request *req, *tmp;
+	struct ptlrpc_request *req;
 	int rc = 0;
 
 	spin_lock(&src->set_new_req_lock);
 	if (likely(!list_empty(&src->set_new_requests))) {
-		list_for_each_entry_safe(req, tmp, &src->set_new_requests, rq_set_chain)
+		list_for_each_entry(req, &src->set_new_requests, rq_set_chain)
 			req->rq_set = des;
 
 		list_splice_init(&src->set_new_requests, &des->set_requests);

@@ -271,11 +271,11 @@ ptlrpc_inflight_deadline(struct ptlrpc_request *req, time64_t now)
 static time64_t ptlrpc_inflight_timeout(struct obd_import *imp)
 {
 	time64_t now = ktime_get_real_seconds();
-	struct ptlrpc_request *req, *n;
+	struct ptlrpc_request *req;
 	time64_t timeout = 0;
 
 	spin_lock(&imp->imp_lock);
-	list_for_each_entry_safe(req, n, &imp->imp_sending_list, rq_list)
+	list_for_each_entry(req, &imp->imp_sending_list, rq_list)
 		timeout = max(ptlrpc_inflight_deadline(req, now), timeout);
 
 	spin_unlock(&imp->imp_lock);
@@ -290,7 +290,7 @@ static time64_t ptlrpc_inflight_timeout(struct obd_import *imp)
  */
 void ptlrpc_invalidate_import(struct obd_import *imp)
 {
-	struct ptlrpc_request *req, *n;
+	struct ptlrpc_request *req;
 	time64_t timeout;
 	int rc;
 
@@ -370,13 +370,13 @@ void ptlrpc_invalidate_import(struct obd_import *imp)
 				 */
 				rc = 0;
 			} else {
-				list_for_each_entry_safe(req, n,
-							 &imp->imp_sending_list, rq_list) {
+				list_for_each_entry(req, &imp->imp_sending_list,
+						    rq_list) {
 					DEBUG_REQ(D_ERROR, req,
 						  "still on sending list");
 				}
-				list_for_each_entry_safe(req, n,
-							 &imp->imp_delayed_list, rq_list) {
+				list_for_each_entry(req, &imp->imp_delayed_list,
+						    rq_list) {
 					DEBUG_REQ(D_ERROR, req,
 						  "still on delayed list");
 				}
