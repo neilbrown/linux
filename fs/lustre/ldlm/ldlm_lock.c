@@ -1630,16 +1630,7 @@ ldlm_work_bl_ast_lock(struct ptlrpc_request_set *rqset, void *opaq)
 
 	lock = list_first_entry(arg->list, struct ldlm_lock, l_bl_ast);
 
-	/* nobody should touch l_bl_ast */
-	lock_res_and_lock(lock);
-	list_del_init(&lock->l_bl_ast);
-
-	LASSERT(ldlm_is_ast_sent(lock));
-	LASSERT(lock->l_bl_ast_run == 0);
 	LASSERT(lock->l_blocking_lock);
-	lock->l_bl_ast_run++;
-	unlock_res_and_lock(lock);
-
 	ldlm_lock2desc(lock->l_blocking_lock, &d);
 	/* copy blocking lock ibits in cancel_bits as well,
 	 * new client may use them for lock convert and it is
@@ -1649,9 +1640,16 @@ ldlm_work_bl_ast_lock(struct ptlrpc_request_set *rqset, void *opaq)
 	d.l_policy_data.l_inodebits.cancel_bits =
 		lock->l_blocking_lock->l_policy_data.l_inodebits.bits;
 
+	/* nobody should touch l_bl_ast */
+	lock_res_and_lock(lock);
+	list_del_init(&lock->l_bl_ast);
+
+	LASSERT(ldlm_is_ast_sent(lock));
+	LASSERT(lock->l_bl_ast_run == 0);
+	lock->l_bl_ast_run++;
+	unlock_res_and_lock(lock);
+
 	rc = lock->l_blocking_ast(lock, &d, (void *)arg, LDLM_CB_BLOCKING);
-	LDLM_LOCK_RELEASE(lock->l_blocking_lock);
-	lock->l_blocking_lock = NULL;
 	LDLM_LOCK_RELEASE(lock);
 
 	return rc;
