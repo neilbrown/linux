@@ -265,49 +265,6 @@ lnet_iov_nob(unsigned int niov, struct kvec *iov)
 EXPORT_SYMBOL(lnet_iov_nob);
 
 void
-lnet_copy_iov2iter(struct iov_iter *to,
-		   unsigned int nsiov, const struct kvec *siov,
-		   unsigned int soffset, unsigned int nob)
-{
-	/* NB diov, siov are READ-ONLY */
-	const char *s;
-	size_t left;
-
-	if (!nob)
-		return;
-
-	/* skip complete frags before 'soffset' */
-	LASSERT(nsiov > 0);
-	while (soffset >= siov->iov_len) {
-		soffset -= siov->iov_len;
-		siov++;
-		nsiov--;
-		LASSERT(nsiov > 0);
-	}
-
-	s = (char *)siov->iov_base + soffset;
-	left = siov->iov_len - soffset;
-	do {
-		size_t n, copy = left;
-
-		LASSERT(nsiov > 0);
-
-		if (copy > nob)
-			copy = nob;
-		n = copy_to_iter(s, copy, to);
-		if (n != copy)
-			return;
-		nob -= n;
-
-		siov++;
-		s = (char *)siov->iov_base;
-		left = siov->iov_len;
-		nsiov--;
-	} while (nob > 0);
-}
-EXPORT_SYMBOL(lnet_copy_iov2iter);
-
-void
 lnet_copy_kiov2iter(struct iov_iter *to,
 		    unsigned int nsiov, const struct bio_vec *siov,
 		    unsigned int soffset, unsigned int nob)
@@ -344,55 +301,6 @@ lnet_copy_kiov2iter(struct iov_iter *to,
 	} while (nob > 0);
 }
 EXPORT_SYMBOL(lnet_copy_kiov2iter);
-
-int
-lnet_extract_iov(int dst_niov, struct kvec *dst,
-		 int src_niov, const struct kvec *src,
-		 unsigned int offset, unsigned int len)
-{
-	/*
-	 * Initialise 'dst' to the subset of 'src' starting at 'offset',
-	 * for exactly 'len' bytes, and return the number of entries.
-	 * NB not destructive to 'src'
-	 */
-	unsigned int frag_len;
-	unsigned int niov;
-
-	if (!len)			/* no data => */
-		return 0;		/* no frags */
-
-	LASSERT(src_niov > 0);
-	while (offset >= src->iov_len) {	/* skip initial frags */
-		offset -= src->iov_len;
-		src_niov--;
-		src++;
-		LASSERT(src_niov > 0);
-	}
-
-	niov = 1;
-	for (;;) {
-		LASSERT(src_niov > 0);
-		LASSERT((int)niov <= dst_niov);
-
-		frag_len = src->iov_len - offset;
-		dst->iov_base = ((char *)src->iov_base) + offset;
-
-		if (len <= frag_len) {
-			dst->iov_len = len;
-			return niov;
-		}
-
-		dst->iov_len = frag_len;
-
-		len -= frag_len;
-		dst++;
-		src++;
-		niov++;
-		src_niov--;
-		offset = 0;
-	}
-}
-EXPORT_SYMBOL(lnet_extract_iov);
 
 unsigned int
 lnet_kiov_nob(unsigned int niov, struct bio_vec *kiov)

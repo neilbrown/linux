@@ -606,18 +606,12 @@ void lnet_counters_get(struct lnet_counters *counters);
 void lnet_counters_reset(void);
 
 unsigned int lnet_iov_nob(unsigned int niov, struct kvec *iov);
-int lnet_extract_iov(int dst_niov, struct kvec *dst,
-		     int src_niov, const struct kvec *src,
-		     unsigned int offset, unsigned int len);
 
 unsigned int lnet_kiov_nob(unsigned int niov, struct bio_vec *iov);
 int lnet_extract_kiov(int dst_niov, struct bio_vec *dst,
 		      int src_niov, const struct bio_vec *src,
 		      unsigned int offset, unsigned int len);
 
-void lnet_copy_iov2iter(struct iov_iter *to,
-			unsigned int nsiov, const struct kvec *siov,
-			unsigned int soffset, unsigned int nob);
 void lnet_copy_kiov2iter(struct iov_iter *to,
 			 unsigned int nkiov, const struct bio_vec *kiov,
 			 unsigned int kiovoffset, unsigned int nob);
