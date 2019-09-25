@@ -416,10 +416,10 @@ static enum cl_lock_mode vvp_mode_from_vma(struct vm_area_struct *vma)
 static int vvp_mmap_locks(const struct lu_env *env,
 			  struct vvp_io *vio, struct cl_io *io)
 {
-	struct vvp_thread_info *cti = vvp_env_info(env);
+	struct vvp_thread_info *vti = vvp_env_info(env);
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct  *vma;
-	struct cl_lock_descr *descr = &cti->vti_descr;
+	struct cl_lock_descr *descr = &vti->vti_descr;
 	union ldlm_policy_data policy;
 	unsigned long addr;
 	ssize_t	count;

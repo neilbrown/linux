@@ -30,8 +30,6 @@
  * This file is part of Lustre, http://www.lustre.org/
  * Lustre is a trademark of Sun Microsystems, Inc.
  *
- * cl code used by vvp (and other Lustre clients in the future).
- *
  *   Author: Nikita Danilov <nikita.danilov@sun.com>
  */
 
@@ -63,6 +61,7 @@
  * Vvp device and device type functions.
  *
  */
+#include "vvp_internal.h"
 
 /**
  * An `emergency' environment used by cl_inode_fini() when cl_env_get()
@@ -279,7 +278,7 @@ u64 cl_fid_build_ino(const struct lu_fid *fid, bool api32)
 		return fid_flatten(fid);
 }
 
-/**
+/*
  * build inode generation from passed @fid.  If our FID overflows the 32-bit
  * inode number then return a non-zero generation to distinguish them.
  */

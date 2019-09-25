@@ -46,7 +46,7 @@
  * maximum-sized (= maximum striped) EA and cookie without having to
  * calculate this (via a call into the LOV + OSCs) each time we make an RPC.
  */
-int cl_init_ea_size(struct obd_export *md_exp, struct obd_export *dt_exp)
+static int cl_init_ea_size(struct obd_export *md_exp, struct obd_export *dt_exp)
 {
 	u32 val_size, max_easize, def_easize;
 	int rc;
@@ -115,7 +115,7 @@ int cl_ocd_update(struct obd_device *host, struct obd_device *watched,
 #define GROUPLOCK_SCOPE "grouplock"
 
 int cl_get_grouplock(struct cl_object *obj, unsigned long gid, int nonblock,
-		     struct ll_grouplock *cg)
+		     struct ll_grouplock *lg)
 {
 	struct lu_env	  *env;
 	struct cl_io	   *io;
@@ -160,22 +160,22 @@ int cl_get_grouplock(struct cl_object *obj, unsigned long gid, int nonblock,
 		return rc;
 	}
 
-	cg->lg_env  = env;
-	cg->lg_io   = io;
-	cg->lg_lock = lock;
-	cg->lg_gid  = gid;
+	lg->lg_env  = env;
+	lg->lg_io   = io;
+	lg->lg_lock = lock;
+	lg->lg_gid  = gid;
 
 	return 0;
 }
 
-void cl_put_grouplock(struct ll_grouplock *cg)
+void cl_put_grouplock(struct ll_grouplock *lg)
 {
-	struct lu_env  *env  = cg->lg_env;
-	struct cl_io   *io   = cg->lg_io;
-	struct cl_lock *lock = cg->lg_lock;
+	struct lu_env  *env  = lg->lg_env;
+	struct cl_io   *io   = lg->lg_io;
+	struct cl_lock *lock = lg->lg_lock;
 
-	LASSERT(cg->lg_env);
-	LASSERT(cg->lg_gid);
+	LASSERT(lg->lg_env);
+	LASSERT(lg->lg_gid);
 
 	cl_lock_release(env, lock);
 	cl_io_fini(env, io);
