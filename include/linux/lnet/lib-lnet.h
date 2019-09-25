@@ -223,29 +223,6 @@ lnet_res_lh_invalidate(struct lnet_libhandle *lh)
 }
 
 static inline void
-lnet_eq2handle(struct lnet_handle_eq *handle, struct lnet_eq *eq)
-{
-	if (!eq) {
-		LNetInvalidateEQHandle(handle);
-		return;
-	}
-
-	handle->cookie = eq->eq_lh.lh_cookie;
-}
-
-static inline struct lnet_eq *
-lnet_handle2eq(struct lnet_handle_eq *handle)
-{
-	struct lnet_libhandle *lh;
-
-	lh = lnet_res_lh_lookup(&the_lnet.ln_eq_container, handle->cookie);
-	if (!lh)
-		return NULL;
-
-	return lh_entry(lh, struct lnet_eq, eq_lh);
-}
-
-static inline void
 lnet_md2handle(struct lnet_handle_md *handle, struct lnet_libmd *md)
 {
 	handle->cookie = md->md_lh.lh_cookie;

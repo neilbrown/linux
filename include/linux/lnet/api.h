@@ -140,7 +140,7 @@ int LNetMDUnlink(struct lnet_handle_md md_in);
  * associated with it. If an event handler exists, it will be run for each
  * event that is deposited into the EQ.
  *
- * In addition to the lnet_handle_eq, the LNet API defines two types
+ * In addition to the lnet_eq, the LNet API defines two types
  * associated with events: The ::lnet_event_kind defines the kinds of events
  * that can be stored in an EQ. The lnet_event defines a structure that
  * holds the information about with an event.
@@ -153,13 +153,13 @@ int LNetMDUnlink(struct lnet_handle_md md_in);
  * on multiple EQs.
  * @{
  */
-int LNetEQAlloc(unsigned int count_in,
-		lnet_eq_handler_t  handler,
-		struct lnet_handle_eq *handle_out);
+struct lnet_eq *
+LNetEQAlloc(unsigned int count_in,
+	    lnet_eq_handler_t  handler);
 
-int LNetEQFree(struct lnet_handle_eq eventq_in);
+int LNetEQFree(struct lnet_eq *eventq_in);
 
-int LNetEQPoll(struct lnet_handle_eq *eventqs_in,
+int LNetEQPoll(struct lnet_eq **eventqs_in,
 	       int neq_in,
 	       signed long timeout,
 	       int interruptible,
