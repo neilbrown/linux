@@ -67,7 +67,7 @@ static void ptlrpc_release_bulk_page_pin(struct ptlrpc_bulk_desc *desc)
 	int i;
 
 	for (i = 0; i < desc->bd_iov_count ; i++)
-		put_page(BD_GET_KIOV(desc, i).bv_page);
+		put_page(desc->bd_vec[i].bv_page);
 }
 
 const struct ptlrpc_bulk_frag_ops ptlrpc_bulk_kiov_pin_ops = {
@@ -149,9 +149,9 @@ struct ptlrpc_bulk_desc *ptlrpc_new_bulk(unsigned int nfrags,
 	if (!desc)
 		return NULL;
 
-	GET_KIOV(desc) = kcalloc(nfrags, sizeof(*GET_KIOV(desc)),
-				 GFP_NOFS);
-	if (!GET_KIOV(desc))
+	desc->bd_vec = kcalloc(nfrags, sizeof(desc->bd_vec[0]),
+			       GFP_NOFS);
+	if (!desc->bd_vec)
 		goto free_desc;
 
 	spin_lock_init(&desc->bd_lock);
@@ -225,7 +225,7 @@ void __ptlrpc_prep_bulk_page(struct ptlrpc_bulk_desc *desc,
 	LASSERT(len > 0);
 	LASSERT(pageoffset + len <= PAGE_SIZE);
 
-	kiov = &BD_GET_KIOV(desc, desc->bd_iov_count);
+	kiov = &desc->bd_vec[desc->bd_iov_count];
 
 	desc->bd_nob += len;
 
@@ -257,7 +257,7 @@ void ptlrpc_free_bulk(struct ptlrpc_bulk_desc *desc)
 	if (desc->bd_frag_ops->release_frags)
 		desc->bd_frag_ops->release_frags(desc);
 
-	kfree(GET_KIOV(desc));
+	kfree(desc->bd_vec);
 	kfree(desc);
 }
 EXPORT_SYMBOL(ptlrpc_free_bulk);
