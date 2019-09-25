@@ -53,6 +53,7 @@
 #include <linux/rhashtable.h>
 
 #define MAX_OBD_DEVICES 8192
+#define LL_MAXQUOTAS 3
 
 struct osc_async_rc {
 	int			ar_rc;
@@ -349,7 +350,7 @@ struct client_obd {
 	void			*cl_writeback_work;
 	void			*cl_lru_work;
 	/* hash tables for osc_quota_info */
-	struct rhashtable	cl_quota_hash[MAXQUOTAS];
+	struct rhashtable	cl_quota_hash[LL_MAXQUOTAS];
 	/* Links to the global list of registered changelog devices */
 	struct list_head	cl_chg_dev_linkage;
 };

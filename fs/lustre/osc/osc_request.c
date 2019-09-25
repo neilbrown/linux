@@ -1740,8 +1740,10 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
 	/* set/clear over quota flag for a uid/gid/projid */
 	if (lustre_msg_get_opc(req->rq_reqmsg) == OST_WRITE &&
 	    body->oa.o_valid & OBD_MD_FLALLQUOTA) {
-		unsigned int qid[MAXQUOTAS] = { body->oa.o_uid, body->oa.o_gid,
-						body->oa.o_projid };
+		unsigned int qid[LL_MAXQUOTAS] = {
+			body->oa.o_uid,
+			body->oa.o_gid,
+			body->oa.o_projid };
 
 		CDEBUG(D_QUOTA,
 		       "setdq for [%u %u %u] with valid %#llx, flags %x\n",
