@@ -512,16 +512,6 @@ extern char obd_jobid_var[];
 #define POISON_PAGE(page, val) do { } while (0)
 #endif
 
-#define OBD_FREE_RCU(ptr, size, handle)			\
-do {							\
-	struct portals_handle *__h = (handle);		\
-							\
-	__h->h_cookie = (unsigned long)(ptr);		\
-	__h->h_size = (size);				\
-	call_rcu(&__h->h_rcu, class_handle_free_cb);	\
-	POISON_PTR(ptr);				\
-} while (0)
-
 #define KEY_IS(str)					\
 	(keylen >= (sizeof(str) - 1) &&			\
 	memcmp(key, str, (sizeof(str) - 1)) == 0)

@@ -155,6 +155,13 @@ struct ldlm_lock *ldlm_lock_get(struct ldlm_lock *lock)
 }
 EXPORT_SYMBOL(ldlm_lock_get);
 
+static void lock_handle_free(struct rcu_head *rcu)
+{
+	struct ldlm_lock *lock = container_of(rcu, struct ldlm_lock,
+					      l_handle.h_rcu);
+	kmem_cache_free(ldlm_lock_slab, lock);
+}
+
 /**
  * Release lock reference.
  *
@@ -188,7 +195,7 @@ void ldlm_lock_put(struct ldlm_lock *lock)
 		kfree(lock->l_lvb_data);
 
 		lu_ref_fini(&lock->l_reference);
-		OBD_FREE_RCU(lock, sizeof(*lock), &lock->l_handle);
+		call_rcu(&lock->l_handle.h_rcu, lock_handle_free);
 	}
 }
 EXPORT_SYMBOL(ldlm_lock_put);
@@ -359,14 +366,7 @@ void ldlm_lock_destroy_nolock(struct ldlm_lock *lock)
 	}
 }
 
-static void lock_handle_free(void *lock, int size)
-{
-	LASSERT(size == sizeof(struct ldlm_lock));
-	kmem_cache_free(ldlm_lock_slab, lock);
-}
-
 static struct portals_handle_ops lock_handle_ops = {
-	.hop_free   = lock_handle_free,
 	.hop_type   = "ldlm",
 };
 
