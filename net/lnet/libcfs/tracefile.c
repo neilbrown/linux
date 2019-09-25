@@ -544,7 +544,7 @@ console:
 	if (cdls) {
 		if (libcfs_console_ratelimit &&
 		    cdls->cdls_next &&		/* not first time ever */
-		    !time_after(jiffies, cdls->cdls_next)) {
+		    time_before(jiffies, cdls->cdls_next)) {
 			/* skipping a console message */
 			cdls->cdls_count++;
 			if (tcd)
