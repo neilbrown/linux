@@ -155,7 +155,6 @@ struct ptlrpc_bulk_desc *ptlrpc_new_bulk(unsigned int nfrags,
 		goto free_desc;
 
 	spin_lock_init(&desc->bd_lock);
-	init_waitqueue_head(&desc->bd_waitq);
 	desc->bd_max_iov = nfrags;
 	desc->bd_iov_count = 0;
 	desc->bd_portal = portal;

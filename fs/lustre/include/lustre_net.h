@@ -1178,7 +1178,6 @@ struct ptlrpc_bulk_desc {
 	/** Back pointer to the request */
 	struct ptlrpc_request		*bd_req;
 	const struct ptlrpc_bulk_frag_ops *bd_frag_ops;
-	wait_queue_head_t		bd_waitq;     /* server side only WQ */
 	int				bd_iov_count; /* # entries in bd_iov */
 	int				bd_max_iov;   /* allocated size of bd_iov */
 	int				bd_nob;	      /* # bytes covered */
