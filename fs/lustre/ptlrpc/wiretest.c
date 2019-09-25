@@ -326,10 +326,6 @@ void lustre_assert_wire_constants(void)
 	BUILD_BUG_ON(LUSTRE_RES_ID_HSH_OFF != 3);
 	LASSERTF(OBD_PING == 400, "found %lld\n",
 		 (long long)OBD_PING);
-	LASSERTF(OBD_LOG_CANCEL == 401, "found %lld\n",
-		 (long long)OBD_LOG_CANCEL);
-	LASSERTF(OBD_QC_CALLBACK == 402, "found %lld\n",
-		 (long long)OBD_QC_CALLBACK);
 	LASSERTF(OBD_IDX_READ == 403, "found %lld\n",
 		 (long long)OBD_IDX_READ);
 	LASSERTF(OBD_LAST_OPC == 404, "found %lld\n",
