@@ -1076,7 +1076,7 @@ lnet_ping_router_locked(struct lnet_peer_ni *rtr)
 		lnet_net_unlock(rtr->lpni_cpt);
 
 		rc = LNetGet(LNET_NID_ANY, mdh, id, LNET_RESERVED_PORTAL,
-			     LNET_PROTO_PING_MATCHBITS, 0);
+			     LNET_PROTO_PING_MATCHBITS, 0, false);
 
 		lnet_net_lock(rtr->lpni_cpt);
 		lnet_peer_ni_decref_locked(rtr);

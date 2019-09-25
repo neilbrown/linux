@@ -62,6 +62,20 @@
 /* forward refs */
 struct lnet_libmd;
 
+enum lnet_msg_hstatus {
+	LNET_MSG_STATUS_OK = 0,
+	LNET_MSG_STATUS_LOCAL_INTERRUPT,
+	LNET_MSG_STATUS_LOCAL_DROPPED,
+	LNET_MSG_STATUS_LOCAL_ABORTED,
+	LNET_MSG_STATUS_LOCAL_NO_ROUTE,
+	LNET_MSG_STATUS_LOCAL_ERROR,
+	LNET_MSG_STATUS_LOCAL_TIMEOUT,
+	LNET_MSG_STATUS_REMOTE_ERROR,
+	LNET_MSG_STATUS_REMOTE_DROPPED,
+	LNET_MSG_STATUS_REMOTE_TIMEOUT,
+	LNET_MSG_STATUS_NETWORK_TIMEOUT
+};
+
 struct lnet_msg {
 	struct list_head	msg_activelist;
 	struct list_head	msg_list;	/* Q for credits/MD */
@@ -85,6 +99,13 @@ struct lnet_msg {
 	 * has not completed.
 	 */
 	ktime_t			msg_deadline;
+
+	/* The message health status. */
+	enum lnet_msg_hstatus	msg_health_status;
+	/* This is a recovery message */
+	bool			msg_recovery;
+	/* flag to indicate that we do not want to resend this message */
+	bool			msg_no_resend;
 
 	/* committed for sending */
 	unsigned int		msg_tx_committed:1;
@@ -259,18 +280,11 @@ struct lnet_tx_queue {
 	struct list_head	tq_delayed;	/* delayed TXs */
 };
 
-enum lnet_ni_state {
-	/* set when NI block is allocated */
-	LNET_NI_STATE_INIT	= 0,
-	/* set when NI is started successfully */
-	LNET_NI_STATE_ACTIVE,
-	/* set when LND notifies NI failed */
-	LNET_NI_STATE_FAILED,
-	/* set when LND notifies NI degraded */
-	LNET_NI_STATE_DEGRADED,
-	/* set when shuttding down NI */
-	LNET_NI_STATE_DELETING
-};
+#define LNET_NI_STATE_INIT		(1 << 0)
+#define LNET_NI_STATE_ACTIVE		(1 << 1)
+#define LNET_NI_STATE_FAILED		(1 << 2)
+#define LNET_NI_STATE_RECOVERY_PENDING	(1 << 3)
+#define LNET_NI_STATE_DELETING		(1 << 4)
 
 enum lnet_stats_type {
 	LNET_STATS_TYPE_SEND	= 0,
@@ -333,6 +347,12 @@ struct lnet_ni {
 	/* chain on the lnet_net structure */
 	struct list_head	ni_netlist;
 
+	/* chain on the recovery queue */
+	struct list_head	ni_recovery;
+
+	/* MD handle for recovery ping */
+	struct lnet_handle_md	ni_ping_mdh;
+
 	/* number of CPTs */
 	int			ni_ncpts;
 
@@ -364,7 +384,7 @@ struct lnet_ni {
 	struct lnet_ni_status	*ni_status;
 
 	/* NI FSM */
-	enum lnet_ni_state	ni_state;
+	u32			ni_state;
 
 	/* per NI LND tunables */
 	struct lnet_lnd_tunables ni_lnd_tunables;
@@ -1043,6 +1063,14 @@ struct lnet {
 	 * checking routes, timedout messages and resending messages.
 	 */
 	wait_queue_head_t		ln_mt_waitq;
+
+	/* per-cpt resend queues */
+	struct list_head		**ln_mt_resendqs;
+	/* local NIs to recover */
+	struct list_head		ln_mt_localNIRecovq;
+	/* recovery eq handler */
+	lnet_eq_handler_t		ln_mt_eqh;
+
 };
 
 #endif
