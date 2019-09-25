@@ -746,7 +746,7 @@ restart:
 		pgoff_t ext_chk_end = ext->oe_end >> ppc_bits;
 
 		LASSERT(osc_extent_sanity_check_nolock(ext) == 0);
-		if (chunk > ext_chk_end + 1)
+		if (chunk > ext_chk_end + 1 || chunk < ext_chk_start)
 			break;
 
 		/* if covering by different locks, no chance to match */
