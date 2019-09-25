@@ -317,6 +317,10 @@ static inline u64 attr_pack(unsigned int ia_valid, enum op_xvalid ia_xvalid)
 		sa_valid |= MDS_OPEN_OWNEROVERRIDE;
 	if (ia_xvalid & OP_XVALID_PROJID)
 		sa_valid |= MDS_ATTR_PROJID;
+	if (ia_xvalid & OP_XVALID_LAZYSIZE)
+		sa_valid |= MDS_ATTR_LSIZE;
+	if (ia_xvalid & OP_XVALID_LAZYBLOCKS)
+		sa_valid |= MDS_ATTR_LBLOCKS;
 	return sa_valid;
 }
 
