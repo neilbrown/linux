@@ -69,4 +69,17 @@ void lnet_insert_debugfs(struct ctl_table *table);
 #define NUM_CACHEPAGES totalram_pages()
 #endif
 
+#define wait_var_event_warning(var, condition, format, ...)		\
+do {									\
+	int counter = 4;						\
+	might_sleep();							\
+	if (condition)							\
+		break;							\
+	___wait_var_event(var, condition, TASK_UNINTERRUPTIBLE, 0, 0,	\
+			  if (schedule_timeout(HZ) == 0)		\
+				  CDEBUG(is_power_of_2(counter++) ? D_WARNING : D_NET, \
+					 format, ## __VA_ARGS__)	\
+		);							\
+	} while (0)
+
 #endif /* __LIBCFS_LIBCFS_H__ */
