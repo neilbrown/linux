@@ -38,7 +38,6 @@
 #define DEBUG_SUBSYSTEM S_RPC
 
 #include <linux/kthread.h>
-#include <linux/fs_struct.h>
 #include <obd_support.h>
 #include <lustre_ha.h>
 #include <lustre_net.h>
@@ -1331,8 +1330,6 @@ static int signal_completed_replay(struct obd_import *imp)
 static int ptlrpc_invalidate_import_thread(void *data)
 {
 	struct obd_import *imp = data;
-
-	unshare_fs_struct();
 
 	CDEBUG(D_HA, "thread invalidate import %s to %s@%s\n",
 	       imp->imp_obd->obd_name, obd2cli_tgt(imp->imp_obd),

@@ -45,7 +45,6 @@
 #define DEBUG_SUBSYSTEM S_LOG
 
 #include <linux/kthread.h>
-#include <linux/fs_struct.h>
 #include <llog_swab.h>
 #include <lustre_log.h>
 #include <obd_class.h>
@@ -399,8 +398,6 @@ static int llog_process_thread_daemonize(void *arg)
 	struct llog_process_info *lpi = arg;
 	struct lu_env env;
 	int rc;
-
-	unshare_fs_struct();
 
 	/* client env has no keys, tags is just 0 */
 	rc = lu_env_init(&env, LCT_LOCAL | LCT_MG_THREAD);
