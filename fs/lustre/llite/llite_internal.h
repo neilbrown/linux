@@ -190,7 +190,8 @@ struct ll_inode_info {
 			 *    struct list_head wait_list;
 			 * }
 			 */
-			struct rw_semaphore		lli_trunc_sem;
+			atomic_t			lli_trunc_readers;
+			atomic_t			lli_trunc_waiters;
 			struct range_lock_tree		lli_write_tree;
 
 			struct rw_semaphore		lli_glimpse_sem;
