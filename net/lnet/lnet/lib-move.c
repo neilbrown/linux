@@ -2610,7 +2610,8 @@ lnet_unlink_ni_recovery_mdh_locked(struct lnet_ni *ni, int cpt, bool force)
 
 	LNetInvalidateMDHandle(&recovery_mdh);
 
-	if (ni->ni_state & LNET_NI_STATE_RECOVERY_PENDING || force) {
+	if (ni->ni_recovery_state & LNET_NI_RECOVERY_PENDING ||
+	    force) {
 		recovery_mdh = ni->ni_ping_mdh;
 		LNetInvalidateMDHandle(&ni->ni_ping_mdh);
 	}
@@ -2663,7 +2664,7 @@ lnet_recover_local_nis(void)
 
 		lnet_net_lock(0);
 		lnet_ni_lock(ni);
-		if (!(ni->ni_state & LNET_NI_STATE_ACTIVE) ||
+		if (ni->ni_state != LNET_NI_STATE_ACTIVE ||
 		    healthv == LNET_MAX_HEALTH_VALUE) {
 			list_del_init(&ni->ni_recovery);
 			lnet_unlink_ni_recovery_mdh_locked(ni, 0, false);
@@ -2678,9 +2679,9 @@ lnet_recover_local_nis(void)
 		 * But we want to keep the local_ni on the recovery queue
 		 * so we can continue the attempts to recover it.
 		 */
-		if (ni->ni_state & LNET_NI_STATE_RECOVERY_FAILED) {
+		if (ni->ni_recovery_state & LNET_NI_RECOVERY_FAILED) {
 			lnet_unlink_ni_recovery_mdh_locked(ni, 0, true);
-			ni->ni_state &= ~LNET_NI_STATE_RECOVERY_FAILED;
+			ni->ni_recovery_state &= ~LNET_NI_RECOVERY_FAILED;
 		}
 
 		lnet_ni_unlock(ni);
@@ -2690,8 +2691,8 @@ lnet_recover_local_nis(void)
 		       libcfs_nid2str(ni->ni_nid));
 
 		lnet_ni_lock(ni);
-		if (!(ni->ni_state & LNET_NI_STATE_RECOVERY_PENDING)) {
-			ni->ni_state |= LNET_NI_STATE_RECOVERY_PENDING;
+		if (!(ni->ni_recovery_state & LNET_NI_RECOVERY_PENDING)) {
+			ni->ni_recovery_state |= LNET_NI_RECOVERY_PENDING;
 			lnet_ni_unlock(ni);
 
 			ev_info = kzalloc(sizeof(*ev_info), GFP_NOFS);
@@ -2699,7 +2700,8 @@ lnet_recover_local_nis(void)
 				CERROR("out of memory. Can't recover %s\n",
 				       libcfs_nid2str(ni->ni_nid));
 				lnet_ni_lock(ni);
-				ni->ni_state &= ~LNET_NI_STATE_RECOVERY_PENDING;
+				ni->ni_recovery_state &=
+				  ~LNET_NI_RECOVERY_PENDING;
 				lnet_ni_unlock(ni);
 				continue;
 			}
@@ -2772,7 +2774,8 @@ lnet_recover_local_nis(void)
 
 			lnet_ni_lock(ni);
 			if (rc)
-				ni->ni_state &= ~LNET_NI_STATE_RECOVERY_PENDING;
+				ni->ni_recovery_state &=
+					~LNET_NI_RECOVERY_PENDING;
 		}
 		lnet_ni_unlock(ni);
 	}
@@ -3187,9 +3190,9 @@ lnet_handle_recovery_reply(struct lnet_mt_event_info *ev_info,
 			return;
 		}
 		lnet_ni_lock(ni);
-		ni->ni_state &= ~LNET_NI_STATE_RECOVERY_PENDING;
+		ni->ni_recovery_state &= ~LNET_NI_RECOVERY_PENDING;
 		if (status)
-			ni->ni_state |= LNET_NI_STATE_RECOVERY_FAILED;
+			ni->ni_recovery_state |= LNET_NI_RECOVERY_FAILED;
 		lnet_ni_unlock(ni);
 		lnet_net_unlock(0);
 
