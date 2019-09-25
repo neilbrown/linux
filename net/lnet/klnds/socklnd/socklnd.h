@@ -274,6 +274,7 @@ struct ksock_tx {				/* transmit packet */
 	time64_t		tx_deadline;	/* when (in secs) tx times out */
 	struct ksock_msg	tx_msg;		/* socklnd message buffer */
 	int			tx_desc_size;	/* size of this descriptor */
+	enum lnet_msg_hstatus tx_hstatus; /* health status of tx */
 
 	struct kvec		tx_hdr;		/* virt hdr */
 	struct bio_vec		tx_payload[0];	/* paged payload */
