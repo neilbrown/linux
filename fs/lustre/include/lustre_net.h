@@ -1188,13 +1188,6 @@ struct ptlrpc_bulk_frag_ops {
 	void (*add_kiov_frag)(struct ptlrpc_bulk_desc *desc,
 			      struct page *page, int pageoffset, int len);
 
-	/*
-	 * Add a @fragment to the bulk descriptor @desc.
-	 * Data to transfer in the fragment is pointed to by @frag
-	 * The size of the fragment is @len
-	 */
-	int (*add_iov_frag)(struct ptlrpc_bulk_desc *desc, void *frag, int len);
-
 	/**
 	 * Uninitialize and free bulk descriptor @desc.
 	 * Works on bulk descriptors both from server and client side.
@@ -1224,7 +1217,7 @@ struct ptlrpc_bulk_desc {
 	spinlock_t			bd_lock;
 	/** Import generation when request for this bulk was sent */
 	int				bd_import_generation;
-	/** {put,get}{source,sink}{kvec,kiov} */
+	/** {put,get}{source,sink}kiov} */
 	enum ptlrpc_bulk_op_type	bd_type;
 	/** LNet portal for this bulk */
 	u32				bd_portal;
