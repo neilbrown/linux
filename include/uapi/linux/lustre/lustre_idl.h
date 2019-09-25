@@ -791,6 +791,8 @@ struct ptlrpc_body_v2 {
 #define OBD_CONNECT2_LOCKAHEAD		0x2ULL		/* ladvise lockahead
 							 * v2
 							 */
+#define OBD_CONNECT2_DIR_MIGRATE	0x4ULL		/* migrate striped dir
+							 */
 #define OBD_CONNECT2_FLR		0x20ULL		/* FLR support */
 
 /* XXX README XXX:
