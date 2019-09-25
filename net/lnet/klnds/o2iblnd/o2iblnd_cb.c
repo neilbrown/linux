@@ -3513,7 +3513,6 @@ kiblnd_scheduler(void *arg)
 	unsigned long flags;
 	struct ib_wc wc;
 	int did_something;
-	int busy_loops = 0;
 	int rc;
 
 	init_waitqueue_entry(&wait, current);
@@ -3529,11 +3528,10 @@ kiblnd_scheduler(void *arg)
 	spin_lock_irqsave(&sched->ibs_lock, flags);
 
 	while (!kiblnd_data.kib_shutdown) {
-		if (busy_loops++ >= IBLND_RESCHED) {
+		if (need_resched()) {
 			spin_unlock_irqrestore(&sched->ibs_lock, flags);
 
 			cond_resched();
-			busy_loops = 0;
 
 			spin_lock_irqsave(&sched->ibs_lock, flags);
 		}
@@ -3626,7 +3624,6 @@ kiblnd_scheduler(void *arg)
 		spin_unlock_irqrestore(&sched->ibs_lock, flags);
 
 		schedule();
-		busy_loops = 0;
 
 		remove_wait_queue(&sched->ibs_waitq, &wait);
 		spin_lock_irqsave(&sched->ibs_lock, flags);
