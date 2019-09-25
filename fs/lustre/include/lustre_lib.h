@@ -93,7 +93,7 @@ static inline int l_fatal_signal_pending(struct task_struct *p)
 ({									\
 	sigset_t __new_blocked, __old_blocked;				\
 	int __ret = 0;							\
-	siginitset(&__new_blocked, LUSTRE_FATAL_SIGS);			\
+	siginitsetinv(&__new_blocked, LUSTRE_FATAL_SIGS);		\
 	sigprocmask(SIG_BLOCK, &__new_blocked, &__old_blocked);		\
 	__ret = wait_event_interruptible(wq, condition);		\
 	sigprocmask(SIG_SETMASK, &__old_blocked, NULL);			\
@@ -104,7 +104,7 @@ static inline int l_fatal_signal_pending(struct task_struct *p)
 ({									\
 	sigset_t __new_blocked, __old_blocked;				\
 	int __ret = 0;							\
-	siginitset(&__new_blocked, LUSTRE_FATAL_SIGS);			\
+	siginitsetinv(&__new_blocked, LUSTRE_FATAL_SIGS);		\
 	sigprocmask(SIG_BLOCK, &__new_blocked, &__old_blocked);		\
 	__ret = wait_event_interruptible_timeout(wq, condition, timeout);\
 	sigprocmask(SIG_SETMASK, &__old_blocked, NULL);			\
@@ -115,7 +115,7 @@ static inline int l_fatal_signal_pending(struct task_struct *p)
 ({									\
 	sigset_t __new_blocked, __old_blocked;				\
 	int __ret = 0;							\
-	siginitset(&__new_blocked, LUSTRE_FATAL_SIGS);			\
+	siginitsetinv(&__new_blocked, LUSTRE_FATAL_SIGS);		\
 	sigprocmask(SIG_BLOCK, &__new_blocked, &__old_blocked);		\
 	__ret = wait_event_interruptible_exclusive(wq, condition);	\
 	sigprocmask(SIG_SETMASK, &__old_blocked, NULL);			\
