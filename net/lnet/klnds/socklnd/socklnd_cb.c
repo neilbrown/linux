@@ -1324,20 +1324,18 @@ ksocknal_sched_cansleep(struct ksock_sched *sched)
 
 int ksocknal_scheduler(void *arg)
 {
-	struct ksock_sched_info *info;
 	struct ksock_sched *sched;
 	struct ksock_conn *conn;
 	struct ksock_tx *tx;
 	int rc;
 	long id = (long)arg;
 
-	info = ksocknal_data.ksnd_sched_info[KSOCK_THREAD_CPT(id)];
-	sched = &info->ksi_scheds[KSOCK_THREAD_SID(id)];
+	sched = ksocknal_data.ksnd_schedulers[KSOCK_THREAD_CPT(id)];
 
-	rc = cfs_cpt_bind(lnet_cpt_table(), info->ksi_cpt);
+	rc = cfs_cpt_bind(lnet_cpt_table(), sched->kss_cpt);
 	if (rc) {
 		CWARN("Can't set CPU partition affinity to %d: %d\n",
-		      info->ksi_cpt, rc);
+		      sched->kss_cpt, rc);
 	}
 
 	spin_lock_bh(&sched->kss_lock);
