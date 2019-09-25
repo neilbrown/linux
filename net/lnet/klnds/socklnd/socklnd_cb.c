@@ -1428,10 +1428,9 @@ int ksocknal_scheduler(void *arg)
 			spin_unlock_bh(&sched->kss_lock);
 
 			if (!did_something) {   /* wait for something to do */
-				rc = wait_event_interruptible_exclusive(
+				wait_event_idle_exclusive(
 					sched->kss_waitq,
 					!ksocknal_sched_cansleep(sched));
-				LASSERT(!rc);
 			} else {
 				cond_resched();
 			}
@@ -2114,7 +2113,7 @@ ksocknal_connd(void *arg)
 		}
 
 		/* Nothing to do for 'timeout'  */
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_IDLE);
 		add_wait_queue_exclusive(&ksocknal_data.ksnd_connd_waitq,
 					 &wait);
 		spin_unlock_bh(connd_lock);
@@ -2511,7 +2510,7 @@ ksocknal_reaper(void *arg)
 		ksocknal_data.ksnd_reaper_waketime = ktime_get_seconds() +
 						     timeout;
 
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_IDLE);
 		add_wait_queue(&ksocknal_data.ksnd_reaper_waitq, &wait);
 
 		if (!ksocknal_data.ksnd_shuttingdown &&

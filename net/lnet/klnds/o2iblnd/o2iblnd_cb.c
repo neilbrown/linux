@@ -3250,7 +3250,7 @@ kiblnd_connd(void *arg)
 	while (!kiblnd_data.kib_shutdown) {
 		int reconn = 0;
 
-		wait_event_interruptible_timeout(
+		wait_event_idle_timeout(
 			kiblnd_data.kib_connd_waitq,
 			kiblnd_data.kib_shutdown ||
 			!list_empty(&kiblnd_data.kib_connd_zombies) ||
@@ -3502,9 +3502,9 @@ kiblnd_scheduler(void *arg)
 	while (!kiblnd_data.kib_shutdown) {
 		cond_resched();
 
-		wait_event_interruptible(sched->ibs_waitq,
-					 !kiblnd_data.kib_shutdown ||
-					 !list_empty(&sched->ibs_conns));
+		wait_event_idle(sched->ibs_waitq,
+				!kiblnd_data.kib_shutdown ||
+				!list_empty(&sched->ibs_conns));
 
 		spin_lock_irqsave(&sched->ibs_lock, flags);
 
@@ -3642,7 +3642,7 @@ kiblnd_failover_thread(void *arg)
 		/* long sleep if no more pending failover */
 		long_sleep = list_empty(&kiblnd_data.kib_failed_devs);
 
-		set_current_state(TASK_INTERRUPTIBLE);
+		set_current_state(TASK_IDLE);
 		add_wait_queue(&kiblnd_data.kib_failover_waitq, &wait);
 		write_unlock_irqrestore(glock, flags);
 
