@@ -103,7 +103,7 @@ static void ll_prepare_close(struct inode *inode, struct md_op_data *op_data,
 	op_data->op_attr_flags = ll_inode_to_ext_flags(inode->i_flags);
 	if (test_bit(LLIF_PROJECT_INHERIT, &lli->lli_flags))
 		op_data->op_attr_flags |= LUSTRE_PROJINHERIT_FL;
-	op_data->op_handle = och->och_fh;
+	op_data->op_open_handle = och->och_open_handle;
 
 	/*
 	 * For HSM: if inode data has been modified, pack it so that
@@ -229,7 +229,7 @@ static int ll_close_inode_openhandle(struct inode *inode,
 
 out:
 	md_clear_open_replay_data(md_exp, och);
-	och->och_fh.cookie = DEAD_HANDLE_MAGIC;
+	och->och_open_handle.cookie = DEAD_HANDLE_MAGIC;
 	kfree(och);
 
 	ptlrpc_req_finished(req);
@@ -602,7 +602,7 @@ static int ll_och_fill(struct obd_export *md_exp, struct lookup_intent *it,
 	struct mdt_body *body;
 
 	body = req_capsule_server_get(&it->it_request->rq_pill, &RMF_MDT_BODY);
-	och->och_fh = body->mbo_handle;
+	och->och_open_handle = body->mbo_open_handle;
 	och->och_fid = body->mbo_fid1;
 	och->och_lease_handle.cookie = it->it_lock_handle;
 	och->och_magic = OBD_CLIENT_HANDLE_MAGIC;
@@ -892,7 +892,7 @@ static int ll_md_blocking_lease_ast(struct ldlm_lock *lock,
  * if it has an open lock in cache already.
  */
 static int ll_lease_och_acquire(struct inode *inode, struct file *file,
-				struct lustre_handle *old_handle)
+				struct lustre_handle *old_open_handle)
 {
 	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
 	struct ll_inode_info *lli = ll_i2info(inode);
@@ -928,7 +928,7 @@ static int ll_lease_och_acquire(struct inode *inode, struct file *file,
 		*och_p = NULL;
 	}
 
-	*old_handle = fd->fd_och->och_fh;
+	*old_open_handle = fd->fd_och->och_open_handle;
 
 out_unlock:
 	mutex_unlock(&lli->lli_och_mutex);
@@ -988,7 +988,7 @@ ll_lease_open(struct inode *inode, struct file *file, fmode_t fmode,
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
 	struct md_op_data *op_data;
 	struct ptlrpc_request *req = NULL;
-	struct lustre_handle old_handle = { 0 };
+	struct lustre_handle old_open_handle = { 0 };
 	struct obd_client_handle *och = NULL;
 	int rc;
 	int rc2;
@@ -1000,7 +1000,7 @@ ll_lease_open(struct inode *inode, struct file *file, fmode_t fmode,
 		if (!(fmode & file->f_mode) || (file->f_mode & FMODE_EXEC))
 			return ERR_PTR(-EPERM);
 
-		rc = ll_lease_och_acquire(inode, file, &old_handle);
+		rc = ll_lease_och_acquire(inode, file, &old_open_handle);
 		if (rc)
 			return ERR_PTR(rc);
 	}
@@ -1017,7 +1017,7 @@ ll_lease_open(struct inode *inode, struct file *file, fmode_t fmode,
 	}
 
 	/* To tell the MDT this openhandle is from the same owner */
-	op_data->op_handle = old_handle;
+	op_data->op_open_handle = old_open_handle;
 
 	it.it_flags = fmode | open_flags;
 	it.it_flags |= MDS_OPEN_LOCK | MDS_OPEN_BY_FID | MDS_OPEN_LEASE;
@@ -1223,7 +1223,7 @@ static int ll_lease_file_resync(struct obd_client_handle *och,
 	if (rc)
 		goto out;
 
-	op_data->op_handle = och->och_lease_handle;
+	op_data->op_lease_handle = och->och_lease_handle;
 	op_data->op_mirror_id = ioc.lil_mirror_id;
 	rc = md_file_resync(sbi->ll_md_exp, op_data);
 	if (rc)
@@ -3893,7 +3893,7 @@ again:
 		if (rc)
 			goto out_close;
 
-		op_data->op_handle = och->och_fh;
+		op_data->op_open_handle = och->och_open_handle;
 		op_data->op_data_version = data_version;
 		op_data->op_lease_handle = och->och_lease_handle;
 		op_data->op_bias |= MDS_CLOSE_MIGRATE;
@@ -3920,7 +3920,7 @@ again:
 			obd_mod_put(och->och_mod);
 			md_clear_open_replay_data(ll_i2sbi(parent)->ll_md_exp,
 						  och);
-			och->och_fh.cookie = DEAD_HANDLE_MAGIC;
+			och->och_open_handle.cookie = DEAD_HANDLE_MAGIC;
 			kfree(och);
 			och = NULL;
 		}

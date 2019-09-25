@@ -734,7 +734,7 @@ struct md_op_data {
 	struct lu_fid		op_fid4; /* to the operation locks. */
 	u32			op_mds;  /* what mds server open will go to */
 	u32			op_mode;
-	struct lustre_handle	op_handle;
+	struct lustre_handle	op_open_handle;
 	s64			op_mod_time;
 	const char	       *op_name;
 	size_t			op_namelen;
@@ -951,7 +951,7 @@ struct md_open_data {
 };
 
 struct obd_client_handle {
-	struct lustre_handle		och_fh;
+	struct lustre_handle		och_open_handle;
 	struct lu_fid			och_fid;
 	struct md_open_data	       *och_mod;
 	struct lustre_handle		och_lease_handle; /* open lock for lease */
