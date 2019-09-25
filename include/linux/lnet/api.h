@@ -91,7 +91,7 @@ lnet_nid_t LNetPrimaryNID(lnet_nid_t nid);
  * and a set of match criteria. The match criteria can be used to reject
  * incoming requests based on process ID or the match bits provided in the
  * request. MEs can be dynamically inserted into a match list by LNetMEAttach()
- * and LNetMEInsert(), and removed from its list by LNetMEUnlink().
+ * and removed from its list by LNetMEUnlink().
  * @{
  */
 int LNetMEAttach(unsigned int portal,
@@ -100,14 +100,6 @@ int LNetMEAttach(unsigned int portal,
 		 u64 ignore_bits_in,
 		 enum lnet_unlink unlink_in,
 		 enum lnet_ins_pos pos_in,
-		 struct lnet_handle_me *handle_out);
-
-int LNetMEInsert(struct lnet_handle_me current_in,
-		 struct lnet_process_id match_id_in,
-		 u64 match_bits_in,
-		 u64 ignore_bits_in,
-		 enum lnet_unlink unlink_in,
-		 enum lnet_ins_pos position_in,
 		 struct lnet_handle_me *handle_out);
 
 int LNetMEUnlink(struct lnet_handle_me current_in);
