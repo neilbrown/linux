@@ -439,7 +439,7 @@ static void mdc_close_intent_pack(struct ptlrpc_request *req,
 	struct close_data *data;
 	struct ldlm_lock *lock;
 
-	if (!(bias & (MDS_CLOSE_INTENT | MDS_RENAME_MIGRATE)))
+	if (!(bias & (MDS_CLOSE_INTENT | MDS_CLOSE_MIGRATE)))
 		return;
 
 	data = req_capsule_client_get(&req->rq_pill, &RMF_CLOSE_DATA);
@@ -503,13 +503,20 @@ void mdc_rename_pack(struct ptlrpc_request *req, struct md_op_data *op_data,
 	if (new)
 		mdc_pack_name(req, &RMF_SYMTGT, new, newlen);
 
-	if (op_data->op_cli_flags & CLI_MIGRATE &&
-	    op_data->op_bias & MDS_RENAME_MIGRATE) {
-		struct mdt_ioepoch *epoch;
+	if (op_data->op_cli_flags & CLI_MIGRATE) {
+		char *tmp;
 
-		mdc_close_intent_pack(req, op_data);
-		epoch = req_capsule_client_get(&req->rq_pill, &RMF_MDT_EPOCH);
-		mdc_ioepoch_pack(epoch, op_data);
+		if (op_data->op_bias & MDS_CLOSE_MIGRATE) {
+			struct mdt_ioepoch *epoch;
+
+			mdc_close_intent_pack(req, op_data);
+			epoch = req_capsule_client_get(&req->rq_pill,
+							&RMF_MDT_EPOCH);
+			mdc_ioepoch_pack(epoch, op_data);
+		}
+
+		tmp = req_capsule_client_get(&req->rq_pill, &RMF_EADATA);
+		memcpy(tmp, op_data->op_data, op_data->op_data_size);
 	}
 }
 
