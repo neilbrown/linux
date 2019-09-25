@@ -596,20 +596,21 @@ static int osc_unstable_stats_seq_show(struct seq_file *m, void *v)
 
 LPROC_SEQ_FOPS_RO(osc_unstable_stats);
 
-static int osc_idle_timeout_seq_show(struct seq_file *m, void *v)
+static ssize_t idle_timeout_show(struct kobject *kobj, struct attribute *attr,
+				 char *buf)
 {
-	struct obd_device *obd = m->private;
+	struct obd_device *obd = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
 	struct client_obd *cli = &obd->u.cli;
 
-	seq_printf(m, "%u\n", cli->cl_import->imp_idle_timeout);
-	return 0;
+	return sprintf(buf, "%u\n", cli->cl_import->imp_idle_timeout);
 }
 
-static ssize_t osc_idle_timeout_seq_write(struct file *f,
-					  const char __user *buffer,
-					  size_t count, loff_t *off)
+static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
+				  const char *buffer, size_t count)
 {
-	struct obd_device *dev = ((struct seq_file *)f->private_data)->private;
+	struct obd_device *dev = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
 	struct client_obd *cli = &dev->u.cli;
 	struct ptlrpc_request *req;
 	unsigned int val;
@@ -626,6 +627,7 @@ static ssize_t osc_idle_timeout_seq_write(struct file *f,
 	rc = kstrtouint(buffer, 10, &val);
 	if (rc)
 		return rc;
+
 	if (val > CONNECTION_SWITCH_MAX)
 		return -ERANGE;
 
@@ -640,18 +642,13 @@ static ssize_t osc_idle_timeout_seq_write(struct file *f,
 
 	return count;
 }
-LPROC_SEQ_FOPS(osc_idle_timeout);
+LUSTRE_RW_ATTR(idle_timeout);
 
-static int osc_idle_connect_seq_show(struct seq_file *m, void *v)
+static ssize_t idle_connect_store(struct kobject *kobj, struct attribute *attr,
+				  const char *buffer, size_t count)
 {
-	return 0;
-}
-
-static ssize_t osc_idle_connect_seq_write(struct file *f,
-					  const char __user *buffer,
-					  size_t count, loff_t *off)
-{
-	struct obd_device *dev = ((struct seq_file *)f->private_data)->private;
+	struct obd_device *dev = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
 	struct client_obd *cli = &dev->u.cli;
 	struct ptlrpc_request *req;
 
@@ -663,7 +660,7 @@ static ssize_t osc_idle_connect_seq_write(struct file *f,
 
 	return count;
 }
-LPROC_SEQ_FOPS(osc_idle_connect);
+LUSTRE_WO_ATTR(idle_connect);
 
 LPROC_SEQ_FOPS_RO_TYPE(osc, connect_flags);
 LPROC_SEQ_FOPS_RO_TYPE(osc, server_uuid);
@@ -696,10 +693,6 @@ static struct lprocfs_vars lprocfs_osc_obd_vars[] = {
 	  .fops	=	&osc_pinger_recov_fops		},
 	{ .name	=	"unstable_stats",
 	  .fops	=	&osc_unstable_stats_fops	},
-	{ .name	=	"idle_timeout",
-	  .fops	=	&osc_idle_timeout_fops		},
-	{ .name	=	"idle_connect",
-	  .fops	=	&osc_idle_connect_fops		},
 	{ NULL }
 };
 
@@ -885,6 +878,8 @@ static struct attribute *osc_attrs[] = {
 	&lustre_attr_short_io_bytes.attr,
 	&lustre_attr_resend_count.attr,
 	&lustre_attr_ost_conn_uuid.attr,
+	&lustre_attr_idle_timeout.attr,
+	&lustre_attr_idle_connect.attr,
 	NULL,
 };
 
