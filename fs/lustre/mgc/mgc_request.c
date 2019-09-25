@@ -1486,13 +1486,6 @@ again:
 	}
 
 	mne_swab = !!ptlrpc_rep_need_swab(req);
-#if OBD_OCD_VERSION(3, 0, 53, 0) > LUSTRE_VERSION_CODE
-	/* This import flag means the server did an extra swab of IR MNE
-	 * records (fixed in LU-1252), reverse it here if needed. LU-1644
-	 */
-	if (unlikely(req->rq_import->imp_need_mne_swab))
-		mne_swab = !mne_swab;
-#endif
 
 	for (i = 0; i < nrpages && ealen > 0; i++) {
 		int rc2;
