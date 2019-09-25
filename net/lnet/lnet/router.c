@@ -1038,7 +1038,14 @@ lnet_ping_router_locked(struct lnet_peer_ni *rtr)
 		return;
 
 	rcd = rtr->lpni_rcd;
-	if (!rcd || rcd->rcd_nnis > rcd->rcd_pingbuffer->pb_nnis)
+
+	/*
+	 * The response to the router checker ping could've timed out and
+	 * the mdh might've been invalidated, so we need to update it
+	 * again.
+	 */
+	if (!rcd || rcd->rcd_nnis > rcd->rcd_pingbuffer->pb_nnis ||
+	    LNetMDHandleIsInvalid(rcd->rcd_mdh))
 		rcd = lnet_update_rc_data_locked(rtr);
 	if (!rcd)
 		return;

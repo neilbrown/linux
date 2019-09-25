@@ -572,7 +572,8 @@ lnet_peer_is_alive(struct lnet_peer_ni *lp, unsigned long now)
  *     may drop the lnet_net_lock
  */
 static int
-lnet_peer_alive_locked(struct lnet_ni *ni, struct lnet_peer_ni *lp)
+lnet_peer_alive_locked(struct lnet_ni *ni, struct lnet_peer_ni *lp,
+		       struct lnet_msg *msg)
 {
 	time64_t now = ktime_get_seconds();
 
@@ -580,6 +581,13 @@ lnet_peer_alive_locked(struct lnet_ni *ni, struct lnet_peer_ni *lp)
 		return -ENODEV;
 
 	if (lnet_peer_is_alive(lp, now))
+		return 1;
+
+	/*
+	 * If we're resending a message, let's attempt to send it even if
+	 * the peer is down to fulfill our resend quota on the message
+	 */
+	if (msg->msg_retry_count > 0)
 		return 1;
 
 	/*
@@ -640,7 +648,7 @@ lnet_post_send_locked(struct lnet_msg *msg, int do_send)
 
 	/* NB 'lp' is always the next hop */
 	if (!(msg->msg_target.pid & LNET_PID_USERFLAG) &&
-	    !lnet_peer_alive_locked(ni, lp)) {
+	    !lnet_peer_alive_locked(ni, lp, msg)) {
 		the_lnet.ln_counters[cpt]->drop_count++;
 		the_lnet.ln_counters[cpt]->drop_length += msg->msg_len;
 		lnet_net_unlock(cpt);
