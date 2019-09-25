@@ -892,7 +892,7 @@ static inline void unstable_page_accounting(struct ptlrpc_bulk_desc *desc,
 		pg_data_t *pgdat;
 
 		if (desc)
-			pgdat = page_pgdat(BD_GET_KIOV(desc, i).bv_page);
+			pgdat = page_pgdat(desc->bd_vec[i].bv_page);
 		else
 			pgdat = page_pgdat(aa->aa_ppga[i]->pg);
 
