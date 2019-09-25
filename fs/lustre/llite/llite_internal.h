@@ -196,11 +196,11 @@ struct ll_inode_info {
 			int				lli_async_rc;
 
 			/*
-			 * whenever a process try to read/write the file, the
+			 * Whenever a process try to read/write the file, the
 			 * jobid of the process will be saved here, and it'll
 			 * be packed into the write PRC when flush later.
 			 *
-			 * so the read/write statistics for jobid will not be
+			 * So the read/write statistics for jobid will not be
 			 * accurate if the file is shared by different jobs.
 			 */
 			char				lli_jobid[LUSTRE_JOBID_SIZE];
