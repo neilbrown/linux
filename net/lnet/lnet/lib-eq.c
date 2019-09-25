@@ -319,7 +319,7 @@ __must_hold(&the_lnet.ln_eq_wait_lock)
 	if (!tms)
 		return -ENXIO; /* don't want to wait and no new event */
 
-	init_waitqueue_entry(&wl, current);
+	init_wait(&wl);
 	set_current_state(state);
 	add_wait_queue(&the_lnet.ln_eq_waitq, &wl);
 

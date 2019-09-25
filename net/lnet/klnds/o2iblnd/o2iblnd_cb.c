@@ -3597,7 +3597,7 @@ kiblnd_failover_thread(void *arg)
 
 	LASSERT(*kiblnd_tunables.kib_dev_failover);
 
-	init_waitqueue_entry(&wait, current);
+	init_wait(&wait);
 	write_lock_irqsave(glock, flags);
 
 	while (!kiblnd_data.kib_shutdown) {
