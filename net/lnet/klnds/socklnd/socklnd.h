@@ -182,7 +182,7 @@ struct ksock_nal_data {
 							 * known peers
 							 */
 
-	int			ksnd_nthreads;		/* # live threads */
+	atomic_t		ksnd_nthreads;		/* # live threads */
 	int			ksnd_shuttingdown;	/* tell threads to exit
 							 */
 	struct ksock_sched_info	**ksnd_sched_info;	/* schedulers info */

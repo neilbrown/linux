@@ -2298,17 +2298,13 @@ ksocknal_base_shutdown(void)
 		}
 
 		i = 4;
-		read_lock(&ksocknal_data.ksnd_global_lock);
-		while (ksocknal_data.ksnd_nthreads) {
+		while (atomic_read(&ksocknal_data.ksnd_nthreads)) {
 			i++;
 			CDEBUG(((i & (-i)) == i) ? D_WARNING : D_NET, /* power of 2? */
 			       "waiting for %d threads to terminate\n",
-				ksocknal_data.ksnd_nthreads);
-			read_unlock(&ksocknal_data.ksnd_global_lock);
+			       atomic_read(&ksocknal_data.ksnd_nthreads));
 			schedule_timeout_uninterruptible(HZ);
-			read_lock(&ksocknal_data.ksnd_global_lock);
 		}
-		read_unlock(&ksocknal_data.ksnd_global_lock);
 
 		ksocknal_free_buffers();
 
