@@ -122,7 +122,7 @@ out:
 }
 
 static struct lnet_libmd *
-lnet_md_build(struct lnet_md *umd, int unlink)
+lnet_md_build(const struct lnet_md *umd, int unlink)
 {
 	int i;
 	unsigned int niov;
@@ -277,7 +277,7 @@ lnet_md_deconstruct(struct lnet_libmd *lmd, struct lnet_event *ev)
 }
 
 static int
-lnet_md_validate(struct lnet_md *umd)
+lnet_md_validate(const struct lnet_md *umd)
 {
 	if (!umd->start && umd->length) {
 		CERROR("MD start pointer can not be NULL with length %u\n",
@@ -305,7 +305,7 @@ lnet_md_validate(struct lnet_md *umd)
  * @unlink	A flag to indicate whether the MD is automatically unlinked
  *		when it becomes inactive, either because the operation
  *		threshold drops to zero or because the available memory
- *		becomes less than @umd.max_size. (Note that the check for
+ *		becomes less than @umd->max_size. (Note that the check for
  *		unlinking a MD only occurs after the completion of a
  *		successful operation on the MD.) The value LNET_UNLINK
  *		enables auto unlinking; the value LNET_RETAIN disables it.
@@ -315,14 +315,14 @@ lnet_md_validate(struct lnet_md *umd)
  * Return:	0 on success.
  *		-EINVAL If @umd is not valid.
  *		-ENOMEM If new MD cannot be allocated.
- *		-ENOENT Either @meh or @umd.eq_handle does not point to a
- *		valid object. Note that it's OK to supply a NULL @umd.eq_handle
+ *		-ENOENT Either @meh or @umd->eq_handle does not point to a
+ *		valid object. Note that it's OK to supply a NULL @umd->eq_handle
  *		by calling LNetInvalidateHandle() on it.
  *		-EBUSY if the ME pointed to by @meh is already associated with
  *		a MD.
  */
 int
-LNetMDAttach(struct lnet_handle_me meh, struct lnet_md umd,
+LNetMDAttach(struct lnet_handle_me meh, const struct lnet_md *umd,
 	     enum lnet_unlink unlink, struct lnet_handle_md *handle)
 {
 	LIST_HEAD(matches);
@@ -334,15 +334,15 @@ LNetMDAttach(struct lnet_handle_me meh, struct lnet_md umd,
 
 	LASSERT(the_lnet.ln_refcount > 0);
 
-	if (lnet_md_validate(&umd))
+	if (lnet_md_validate(umd))
 		return -EINVAL;
 
-	if (!(umd.options & (LNET_MD_OP_GET | LNET_MD_OP_PUT))) {
+	if (!(umd->options & (LNET_MD_OP_GET | LNET_MD_OP_PUT))) {
 		CERROR("Invalid option: no MD_OP set\n");
 		return -EINVAL;
 	}
 
-	md = lnet_md_build(&umd, unlink);
+	md = lnet_md_build(umd, unlink);
 	if (IS_ERR(md))
 		return PTR_ERR(md);
 
@@ -356,7 +356,7 @@ LNetMDAttach(struct lnet_handle_me meh, struct lnet_md umd,
 	else if (me->me_md)
 		rc = -EBUSY;
 	else
-		rc = lnet_md_link(md, umd.eq_handle, cpt);
+		rc = lnet_md_link(md, umd->eq_handle, cpt);
 
 	if (rc)
 		goto out_unlock;
@@ -387,7 +387,7 @@ EXPORT_SYMBOL(LNetMDAttach);
  * Create a "free floating" memory descriptor - a MD that is not associated
  * with a ME. Such MDs are usually used in LNetPut() and LNetGet() operations.
  *
- * @umd,unlink		See the discussion for LNetMDAttach().
+ * @umd->unlink		See the discussion for LNetMDAttach().
  * @handle		On successful returns, a handle to the newly created
  *			MD is saved here. This handle can be used later in
  *			LNetMDUnlink(), LNetPut(), and LNetGet() operations.
@@ -395,12 +395,12 @@ EXPORT_SYMBOL(LNetMDAttach);
  * Return:		0 On success.
  *			-EINVAL If @umd is not valid.
  *			-ENOMEM If new MD cannot be allocated.
- *			-ENOENT @umd.eq_handle does not point to a valid EQ.
- *			Note that it's OK to supply a NULL @umd.eq_handle by
+ *			-ENOENT @umd->eq_handle does not point to a valid EQ.
+ *			Note that it's OK to supply a NULL @umd->eq_handle by
  *			calling LNetInvalidateHandle() on it.
  */
 int
-LNetMDBind(struct lnet_md umd, enum lnet_unlink unlink,
+LNetMDBind(const struct lnet_md *umd, enum lnet_unlink unlink,
 	   struct lnet_handle_md *handle)
 {
 	struct lnet_libmd *md;
@@ -409,21 +409,21 @@ LNetMDBind(struct lnet_md umd, enum lnet_unlink unlink,
 
 	LASSERT(the_lnet.ln_refcount > 0);
 
-	if (lnet_md_validate(&umd))
+	if (lnet_md_validate(umd))
 		return -EINVAL;
 
-	if ((umd.options & (LNET_MD_OP_GET | LNET_MD_OP_PUT))) {
+	if ((umd->options & (LNET_MD_OP_GET | LNET_MD_OP_PUT))) {
 		CERROR("Invalid option: GET|PUT illegal on active MDs\n");
 		return -EINVAL;
 	}
 
-	md = lnet_md_build(&umd, unlink);
+	md = lnet_md_build(umd, unlink);
 	if (IS_ERR(md))
 		return PTR_ERR(md);
 
 	cpt = lnet_res_lock_current();
 
-	rc = lnet_md_link(md, umd.eq_handle, cpt);
+	rc = lnet_md_link(md, umd->eq_handle, cpt);
 	if (rc)
 		goto out_unlock;
 

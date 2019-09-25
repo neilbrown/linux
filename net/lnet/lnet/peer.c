@@ -2740,7 +2740,7 @@ __must_hold(&lp->lp_lock)
 	md.user_ptr = lp;
 	md.eq_handle = the_lnet.ln_dc_eqh;
 
-	rc = LNetMDBind(md, LNET_UNLINK, &lp->lp_ping_mdh);
+	rc = LNetMDBind(&md, LNET_UNLINK, &lp->lp_ping_mdh);
 	if (rc != 0) {
 		lnet_ping_buffer_decref(pbuf);
 		CERROR("Can't bind MD: %d\n", rc);
@@ -2845,7 +2845,7 @@ __must_hold(&lp->lp_lock)
 	md.eq_handle = the_lnet.ln_dc_eqh;
 	md.user_ptr = lp;
 
-	rc = LNetMDBind(md, LNET_UNLINK, &lp->lp_push_mdh);
+	rc = LNetMDBind(&md, LNET_UNLINK, &lp->lp_push_mdh);
 	if (rc) {
 		lnet_ping_buffer_decref(pbuf);
 		CERROR("Can't bind push source MD: %d\n", rc);
