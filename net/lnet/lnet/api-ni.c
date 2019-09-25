@@ -748,10 +748,10 @@ static void lnet_assert_wire_constants(void)
 	BUILD_BUG_ON((int)sizeof(((struct lnet_ping_info *)0)->pi_ni) != 0);
 }
 
-static struct lnet_lnd *
+static const struct lnet_lnd *
 lnet_find_lnd_by_type(u32 type)
 {
-	struct lnet_lnd *lnd;
+	const struct lnet_lnd *lnd;
 
 	/* holding lnd mutex */
 	if (type >= NUM_LNDS)
@@ -770,7 +770,7 @@ lnet_get_lnd_timeout(void)
 EXPORT_SYMBOL(lnet_get_lnd_timeout);
 
 void
-lnet_register_lnd(struct lnet_lnd *lnd)
+lnet_register_lnd(const struct lnet_lnd *lnd)
 {
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 
@@ -786,7 +786,7 @@ lnet_register_lnd(struct lnet_lnd *lnd)
 EXPORT_SYMBOL(lnet_register_lnd);
 
 void
-lnet_unregister_lnd(struct lnet_lnd *lnd)
+lnet_unregister_lnd(const struct lnet_lnd *lnd)
 {
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 
@@ -2203,7 +2203,7 @@ lnet_startup_lndnet(struct lnet_net *net, struct lnet_lnd_tunables *tun)
 	LIST_HEAD(local_ni_list);
 	int ni_count = 0;
 	u32 lnd_type;
-	struct lnet_lnd *lnd;
+	const struct lnet_lnd *lnd;
 	int rc;
 	int peer_timeout =
 		net->net_tunables.lct_peer_timeout;
