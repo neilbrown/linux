@@ -867,7 +867,6 @@ ksocknal_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 	int type = lntmsg->msg_type;
 	struct lnet_process_id target = lntmsg->msg_target;
 	unsigned int payload_niov = lntmsg->msg_niov;
-	struct kvec *payload_iov = lntmsg->msg_iov;
 	struct bio_vec *payload_kiov = lntmsg->msg_kiov;
 	unsigned int payload_offset = lntmsg->msg_offset;
 	unsigned int payload_nob = lntmsg->msg_len;
@@ -884,16 +883,10 @@ ksocknal_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 
 	LASSERT(!payload_nob || payload_niov > 0);
 	LASSERT(payload_niov <= LNET_MAX_IOV);
-	/* payload is either all vaddrs or all pages */
-	LASSERT(!(payload_kiov && payload_iov));
 	LASSERT(!in_interrupt());
 
-	if (payload_iov)
-		desc_size = offsetof(struct ksock_tx,
-				     tx_frags.virt.iov[1 + payload_niov]);
-	else
-		desc_size = offsetof(struct ksock_tx,
-				     tx_frags.paged.kiov[payload_niov]);
+	desc_size = offsetof(struct ksock_tx,
+			     tx_frags.paged.kiov[payload_niov]);
 
 	if (lntmsg->msg_vmflush)
 		mpflag = memalloc_noreclaim_save();
@@ -909,25 +902,15 @@ ksocknal_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 	tx->tx_conn = NULL;		/* set when assigned a conn */
 	tx->tx_lnetmsg = lntmsg;
 
-	if (payload_iov) {
-		tx->tx_kiov = NULL;
-		tx->tx_nkiov = 0;
-		tx->tx_iov = tx->tx_frags.virt.iov;
-		tx->tx_niov = 1 +
-			      lnet_extract_iov(payload_niov, &tx->tx_iov[1],
-					       payload_niov, payload_iov,
-					       payload_offset, payload_nob);
-	} else {
-		tx->tx_niov = 1;
-		tx->tx_iov = &tx->tx_frags.paged.iov;
-		tx->tx_kiov = tx->tx_frags.paged.kiov;
-		tx->tx_nkiov = lnet_extract_kiov(payload_niov, tx->tx_kiov,
-						 payload_niov, payload_kiov,
-						 payload_offset, payload_nob);
+	tx->tx_niov = 1;
+	tx->tx_iov = &tx->tx_frags.paged.iov;
+	tx->tx_kiov = tx->tx_frags.paged.kiov;
+	tx->tx_nkiov = lnet_extract_kiov(payload_niov, tx->tx_kiov,
+					 payload_niov, payload_kiov,
+					 payload_offset, payload_nob);
 
-		if (payload_nob >= *ksocknal_tunables.ksnd_zc_min_payload)
-			tx->tx_zc_capable = 1;
-	}
+	if (payload_nob >= *ksocknal_tunables.ksnd_zc_min_payload)
+		tx->tx_zc_capable = 1;
 
 	tx->tx_msg.ksm_csum = 0;
 	tx->tx_msg.ksm_type = KSOCK_MSG_LNET;
