@@ -3487,13 +3487,9 @@ kiblnd_scheduler(void *arg)
 	long id = (long)arg;
 	struct kib_sched_info *sched;
 	struct kib_conn *conn;
-	wait_queue_entry_t wait;
 	unsigned long flags;
 	struct ib_wc wc;
-	bool did_something;
 	int rc;
-
-	init_waitqueue_entry(&wait, current);
 
 	sched = kiblnd_data.kib_scheds[KIB_THREAD_CPT(id)];
 
@@ -3503,18 +3499,14 @@ kiblnd_scheduler(void *arg)
 		      sched->ibs_cpt);
 	}
 
-	spin_lock_irqsave(&sched->ibs_lock, flags);
-
 	while (!kiblnd_data.kib_shutdown) {
-		if (need_resched()) {
-			spin_unlock_irqrestore(&sched->ibs_lock, flags);
+		cond_resched();
 
-			cond_resched();
+		wait_event_interruptible(sched->ibs_waitq,
+					 !kiblnd_data.kib_shutdown ||
+					 !list_empty(&sched->ibs_conns));
 
-			spin_lock_irqsave(&sched->ibs_lock, flags);
-		}
-
-		did_something = false;
+		spin_lock_irqsave(&sched->ibs_lock, flags);
 
 		conn = list_first_entry_or_null(&sched->ibs_conns,
 						struct kib_conn,
@@ -3538,8 +3530,6 @@ kiblnd_scheduler(void *arg)
 					      libcfs_nid2str(conn->ibc_peer->ibp_nid), rc);
 					kiblnd_close_conn(conn, -EIO);
 					kiblnd_conn_decref(conn);
-					spin_lock_irqsave(&sched->ibs_lock,
-							  flags);
 					continue;
 				}
 
@@ -3561,7 +3551,6 @@ kiblnd_scheduler(void *arg)
 				      rc);
 				kiblnd_close_conn(conn, -EIO);
 				kiblnd_conn_decref(conn);
-				spin_lock_irqsave(&sched->ibs_lock, flags);
 				continue;
 			}
 
@@ -3583,28 +3572,12 @@ kiblnd_scheduler(void *arg)
 				conn->ibc_scheduled = 0;
 			}
 
-			if (rc) {
-				spin_unlock_irqrestore(&sched->ibs_lock, flags);
+			spin_unlock_irqrestore(&sched->ibs_lock, flags);
+			if (rc)
 				kiblnd_complete(&wc);
 
-				spin_lock_irqsave(&sched->ibs_lock, flags);
-			}
-
 			kiblnd_conn_decref(conn); /* ...drop my ref from above */
-			did_something = true;
 		}
-
-		if (did_something)
-			continue;
-
-		set_current_state(TASK_INTERRUPTIBLE);
-		add_wait_queue_exclusive(&sched->ibs_waitq, &wait);
-		spin_unlock_irqrestore(&sched->ibs_lock, flags);
-
-		schedule();
-
-		remove_wait_queue(&sched->ibs_waitq, &wait);
-		spin_lock_irqsave(&sched->ibs_lock, flags);
 	}
 
 	spin_unlock_irqrestore(&sched->ibs_lock, flags);
