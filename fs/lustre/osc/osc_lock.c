@@ -608,8 +608,8 @@ static bool weigh_cb(const struct lu_env *env, struct cl_io *io,
 	struct cl_page *page = ops->ops_cl.cpl_page;
 
 	if (cl_page_is_vmlocked(env, page) ||
-	    PageDirty(page->cp_vmpage) || PageWriteback(page->cp_vmpage)
-	   )
+	    PageDirty(page->cp_vmpage) ||
+	    PageWriteback(page->cp_vmpage))
 		return false;
 
 	*(pgoff_t *)cbdata = osc_index(ops) + 1;
@@ -618,7 +618,7 @@ static bool weigh_cb(const struct lu_env *env, struct cl_io *io,
 
 static unsigned long osc_lock_weight(const struct lu_env *env,
 				     struct osc_object *oscobj,
-				     struct ldlm_extent *extent)
+				     loff_t start, loff_t end)
 {
 	struct cl_io *io = osc_env_thread_io(env);
 	struct cl_object *obj = cl_object_top(&oscobj->oo_cl);
@@ -631,11 +631,10 @@ static unsigned long osc_lock_weight(const struct lu_env *env,
 	if (result != 0)
 		return result;
 
-	page_index = cl_index(obj, extent->start);
+	page_index = cl_index(obj, start);
 
 	if (!osc_page_gang_lookup(env, io, oscobj,
-				 page_index,
-				 cl_index(obj, extent->end),
+				 page_index, cl_index(obj, end),
 				 weigh_cb, (void *)&page_index))
 		result = 1;
 	cl_io_fini(env, io);
@@ -650,7 +649,7 @@ unsigned long osc_ldlm_weigh_ast(struct ldlm_lock *dlmlock)
 {
 	struct lu_env *env;
 	struct osc_object *obj;
-	struct osc_lock	*oscl;
+	struct osc_lock *oscl;
 	unsigned long weight;
 	bool found = false;
 	u16 refcheck;
@@ -668,7 +667,8 @@ unsigned long osc_ldlm_weigh_ast(struct ldlm_lock *dlmlock)
 		/* Mostly because lack of memory, do not eliminate this lock */
 		return 1;
 
-	LASSERT(dlmlock->l_resource->lr_type == LDLM_EXTENT);
+	LASSERT(dlmlock->l_resource->lr_type == LDLM_EXTENT ||
+		ldlm_has_dom(dlmlock));
 	lock_res_and_lock(dlmlock);
 	obj = dlmlock->l_ast_data;
 	if (obj)
@@ -695,7 +695,12 @@ unsigned long osc_ldlm_weigh_ast(struct ldlm_lock *dlmlock)
 		goto out;
 	}
 
-	weight = osc_lock_weight(env, obj, &dlmlock->l_policy_data.l_extent);
+	if (ldlm_has_dom(dlmlock))
+		weight = osc_lock_weight(env, obj, 0, OBD_OBJECT_EOF);
+	else
+		weight = osc_lock_weight(env, obj,
+					 dlmlock->l_policy_data.l_extent.start,
+					 dlmlock->l_policy_data.l_extent.end);
 
 out:
 	if (obj)
@@ -704,6 +709,7 @@ out:
 	cl_env_put(env, &refcheck);
 	return weight;
 }
+EXPORT_SYMBOL(osc_ldlm_weigh_ast);
 
 static void osc_lock_build_einfo(const struct lu_env *env,
 				 const struct cl_lock *lock,
