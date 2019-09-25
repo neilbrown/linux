@@ -72,7 +72,7 @@ ksocknal_create_route(u32 ipaddr, int port)
 	if (!route)
 		return NULL;
 
-	atomic_set(&route->ksnr_refcount, 1);
+	refcount_set(&route->ksnr_refcount, 1);
 	route->ksnr_peer = NULL;
 	route->ksnr_retry_interval = 0;		/* OK to connect at any time */
 	route->ksnr_ipaddr = ipaddr;
@@ -90,7 +90,7 @@ ksocknal_create_route(u32 ipaddr, int port)
 void
 ksocknal_destroy_route(struct ksock_route *route)
 {
-	LASSERT(!atomic_read(&route->ksnr_refcount));
+	LASSERT(!refcount_read(&route->ksnr_refcount));
 
 	if (route->ksnr_peer)
 		ksocknal_peer_decref(route->ksnr_peer);
@@ -122,7 +122,7 @@ ksocknal_create_peer(struct lnet_ni *ni, struct lnet_process_id id)
 
 	peer_ni->ksnp_ni = ni;
 	peer_ni->ksnp_id = id;
-	atomic_set(&peer_ni->ksnp_refcount, 1);   /* 1 ref for caller */
+	refcount_set(&peer_ni->ksnp_refcount, 1);   /* 1 ref for caller */
 	peer_ni->ksnp_closing = 0;
 	peer_ni->ksnp_accepting = 0;
 	peer_ni->ksnp_proto = NULL;
@@ -146,7 +146,7 @@ ksocknal_destroy_peer(struct ksock_peer *peer_ni)
 	CDEBUG(D_NET, "peer_ni %s %p deleted\n",
 	       libcfs_id2str(peer_ni->ksnp_id), peer_ni);
 
-	LASSERT(!atomic_read(&peer_ni->ksnp_refcount));
+	LASSERT(!refcount_read(&peer_ni->ksnp_refcount));
 	LASSERT(!peer_ni->ksnp_accepting);
 	LASSERT(list_empty(&peer_ni->ksnp_conns));
 	LASSERT(list_empty(&peer_ni->ksnp_routes));
@@ -182,7 +182,7 @@ ksocknal_find_peer_locked(struct lnet_ni *ni, struct lnet_process_id id)
 
 		CDEBUG(D_NET, "got peer_ni [%p] -> %s (%d)\n",
 		       peer_ni, libcfs_id2str(id),
-		       atomic_read(&peer_ni->ksnp_refcount));
+		       refcount_read(&peer_ni->ksnp_refcount));
 		return peer_ni;
 	}
 	return NULL;
@@ -1035,10 +1035,10 @@ ksocknal_create_conn(struct lnet_ni *ni, struct ksock_route *route,
 	 * 2 ref, 1 for conn, another extra ref prevents socket
 	 * being closed before establishment of connection
 	 */
-	atomic_set(&conn->ksnc_sock_refcount, 2);
+	refcount_set(&conn->ksnc_sock_refcount, 2);
 	conn->ksnc_type = type;
 	ksocknal_lib_save_callback(sock, conn);
-	atomic_set(&conn->ksnc_conn_refcount, 1); /* 1 ref for me */
+	refcount_set(&conn->ksnc_conn_refcount, 1); /* 1 ref for me */
 
 	conn->ksnc_rx_ready = 0;
 	conn->ksnc_rx_scheduled = 0;
@@ -1634,7 +1634,7 @@ ksocknal_queue_zombie_conn(struct ksock_conn *conn)
 {
 	/* Queue the conn for the reaper to destroy */
 
-	LASSERT(!atomic_read(&conn->ksnc_conn_refcount));
+	LASSERT(!refcount_read(&conn->ksnc_conn_refcount));
 	spin_lock_bh(&ksocknal_data.ksnd_reaper_lock);
 
 	list_add_tail(&conn->ksnc_list, &ksocknal_data.ksnd_zombie_conns);
@@ -1651,8 +1651,8 @@ ksocknal_destroy_conn(struct ksock_conn *conn)
 	/* Final coup-de-grace of the reaper */
 	CDEBUG(D_NET, "connection %p\n", conn);
 
-	LASSERT(!atomic_read(&conn->ksnc_conn_refcount));
-	LASSERT(!atomic_read(&conn->ksnc_sock_refcount));
+	LASSERT(!refcount_read(&conn->ksnc_conn_refcount));
+	LASSERT(!refcount_read(&conn->ksnc_sock_refcount));
 	LASSERT(!conn->ksnc_sock);
 	LASSERT(!conn->ksnc_route);
 	LASSERT(!conn->ksnc_tx_scheduled);
@@ -2508,7 +2508,7 @@ ksocknal_debug_peerhash(struct lnet_ni *ni)
 
 			CWARN("Active peer_ni on shutdown: %s, ref %d, scnt %d, closing %d, accepting %d, err %d, zcookie %llu, txq %d, zc_req %d\n",
 			      libcfs_id2str(peer_ni->ksnp_id),
-			      atomic_read(&peer_ni->ksnp_refcount),
+			      refcount_read(&peer_ni->ksnp_refcount),
 			      peer_ni->ksnp_sharecount, peer_ni->ksnp_closing,
 			      peer_ni->ksnp_accepting, peer_ni->ksnp_error,
 			      peer_ni->ksnp_zc_next_cookie,
@@ -2518,7 +2518,7 @@ ksocknal_debug_peerhash(struct lnet_ni *ni)
 			list_for_each_entry(route, &peer_ni->ksnp_routes,
 					    ksnr_list) {
 				CWARN("Route: ref %d, schd %d, conn %d, cnted %d, del %d\n",
-				      atomic_read(&route->ksnr_refcount),
+				      refcount_read(&route->ksnr_refcount),
 				      route->ksnr_scheduled,
 				      route->ksnr_connecting,
 				      route->ksnr_connected,
@@ -2528,8 +2528,8 @@ ksocknal_debug_peerhash(struct lnet_ni *ni)
 			list_for_each_entry(conn, &peer_ni->ksnp_conns,
 					    ksnc_list) {
 				CWARN("Conn: ref %d, sref %d, t %d, c %d\n",
-				      atomic_read(&conn->ksnc_conn_refcount),
-				      atomic_read(&conn->ksnc_sock_refcount),
+				      refcount_read(&conn->ksnc_conn_refcount),
+				      refcount_read(&conn->ksnc_sock_refcount),
 				      conn->ksnc_type, conn->ksnc_closing);
 			}
 			goto done;
