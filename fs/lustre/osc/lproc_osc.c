@@ -47,8 +47,13 @@ static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
 {
 	struct obd_device *dev = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
+	struct obd_import *imp;
+	ssize_t rc;
 
-	return sprintf(buf, "%d\n", !dev->u.cli.cl_import->imp_deactive);
+	with_obd_cl_sem(rc, dev, imp)
+		rc = sprintf(buf, "%d\n", !imp->imp_deactive);
+
+	return rc;
 }
 
 static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
@@ -56,6 +61,7 @@ static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
 {
 	struct obd_device *dev = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
+	struct obd_import *imp;
 	bool val;
 	int rc;
 
@@ -63,12 +69,17 @@ static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
 	if (rc)
 		return rc;
 
-	/* opposite senses */
-	if (dev->u.cli.cl_import->imp_deactive == val)
-		rc = ptlrpc_set_import_active(dev->u.cli.cl_import, val);
-	else
-		CDEBUG(D_CONFIG, "activate %u: ignoring repeat request\n",
-		       val);
+	with_obd_cl_sem(count, dev, imp) {
+		/* opposite senses */
+		if (imp->imp_deactive == val) {
+			rc = ptlrpc_set_import_active(imp, val);
+			if (rc)
+				count = rc;
+		} else {
+			CDEBUG(D_CONFIG,
+			       "activate %u: ignoring repeat request\n", val);
+		}
+	}
 
 	return count;
 }
