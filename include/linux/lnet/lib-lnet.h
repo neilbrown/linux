@@ -387,6 +387,7 @@ struct lnet_net *lnet_get_net_locked(u32 net_id);
 
 extern unsigned int lnet_transaction_timeout;
 extern unsigned int lnet_numa_range;
+extern unsigned int lnet_health_sensitivity;
 extern unsigned int lnet_peer_discovery_disabled;
 extern int portal_rotor;
 
