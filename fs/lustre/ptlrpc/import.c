@@ -170,13 +170,13 @@ int ptlrpc_set_import_discon(struct obd_import *imp, u32 conn_cnt)
 			LCONSOLE_WARN("%s: Connection to %.*s (at %s) was lost; in progress operations using this service will wait for recovery to complete\n",
 				      imp->imp_obd->obd_name,
 				      target_len, target_start,
-				      libcfs_nid2str(imp->imp_connection->c_peer.nid));
+				      obd_import_nid2str(imp));
 		} else {
 			LCONSOLE_ERROR_MSG(0x166,
 					   "%s: Connection to %.*s (at %s) was lost; in progress operations using this service will fail\n",
 					   imp->imp_obd->obd_name,
 					   target_len, target_start,
-					   libcfs_nid2str(imp->imp_connection->c_peer.nid));
+					   obd_import_nid2str(imp));
 		}
 		IMPORT_SET_STATE_NOLOCK(imp, LUSTRE_IMP_DISCON);
 		spin_unlock(&imp->imp_lock);
@@ -1458,7 +1458,7 @@ int ptlrpc_import_recovery_state_machine(struct obd_import *imp)
 		LCONSOLE_INFO("%s: Connection restored to %.*s (at %s)\n",
 			      imp->imp_obd->obd_name,
 			      target_len, target_start,
-			      libcfs_nid2str(imp->imp_connection->c_peer.nid));
+			      obd_import_nid2str(imp));
 	}
 
 	if (imp->imp_state == LUSTRE_IMP_FULL) {
