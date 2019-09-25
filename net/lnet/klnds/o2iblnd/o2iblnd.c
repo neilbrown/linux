@@ -127,7 +127,7 @@ static int kiblnd_msgtype2size(int type)
 	}
 }
 
-static int kiblnd_unpack_rd(struct kib_msg *msg, int flip)
+static int kiblnd_unpack_rd(struct kib_msg *msg, bool flip)
 {
 	struct kib_rdma_desc *rd;
 	int nob;
@@ -206,7 +206,7 @@ int kiblnd_unpack_msg(struct kib_msg *msg, int nob)
 	u32 msg_cksum;
 	u16 version;
 	int msg_nob;
-	int flip;
+	bool flip;
 
 	/* 6 bytes are enough to have received magic + version */
 	if (nob < 6) {
@@ -215,9 +215,9 @@ int kiblnd_unpack_msg(struct kib_msg *msg, int nob)
 	}
 
 	if (msg->ibm_magic == IBLND_MSG_MAGIC) {
-		flip = 0;
+		flip = false;
 	} else if (msg->ibm_magic == __swab32(IBLND_MSG_MAGIC)) {
-		flip = 1;
+		flip = true;
 	} else {
 		CERROR("Bad magic: %08x\n", msg->ibm_magic);
 		return -EPROTO;
@@ -1701,7 +1701,7 @@ again:
 
 			if (!tx_pages_mapped) {
 				npages = kiblnd_map_tx_pages(tx, rd);
-				tx_pages_mapped = 1;
+				tx_pages_mapped = true;
 			}
 
 			pfmr = ib_fmr_pool_map_phys(fpo->fmr.fpo_fmr_pool,
