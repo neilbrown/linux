@@ -1122,8 +1122,6 @@ enum ptlrpc_bulk_op_type {
 	PTLRPC_BULK_OP_PASSIVE	= 0x00000002,
 	PTLRPC_BULK_OP_PUT	= 0x00000004,
 	PTLRPC_BULK_OP_GET	= 0x00000008,
-	PTLRPC_BULK_BUF_KVEC	= 0x00000010,
-	PTLRPC_BULK_BUF_KIOV	= 0x00000020,
 	PTLRPC_BULK_GET_SOURCE	= PTLRPC_BULK_OP_PASSIVE | PTLRPC_BULK_OP_GET,
 	PTLRPC_BULK_PUT_SINK	= PTLRPC_BULK_OP_PASSIVE | PTLRPC_BULK_OP_PUT,
 	PTLRPC_BULK_GET_SINK	= PTLRPC_BULK_OP_ACTIVE | PTLRPC_BULK_OP_GET,
@@ -1153,18 +1151,6 @@ static inline bool ptlrpc_is_bulk_get_sink(enum ptlrpc_bulk_op_type type)
 static inline bool ptlrpc_is_bulk_put_source(enum ptlrpc_bulk_op_type type)
 {
 	return (type & PTLRPC_BULK_PUT_SOURCE) == PTLRPC_BULK_PUT_SOURCE;
-}
-
-static inline bool ptlrpc_is_bulk_desc_kvec(enum ptlrpc_bulk_op_type type)
-{
-	return ((type & PTLRPC_BULK_BUF_KVEC) | (type & PTLRPC_BULK_BUF_KIOV))
-		== PTLRPC_BULK_BUF_KVEC;
-}
-
-static inline bool ptlrpc_is_bulk_desc_kiov(enum ptlrpc_bulk_op_type type)
-{
-	return ((type & PTLRPC_BULK_BUF_KVEC) | (type & PTLRPC_BULK_BUF_KIOV))
-		== PTLRPC_BULK_BUF_KIOV;
 }
 
 static inline bool ptlrpc_is_bulk_op_active(enum ptlrpc_bulk_op_type type)

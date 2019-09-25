@@ -155,8 +155,6 @@ static void corrupt_bulk_data(struct ptlrpc_bulk_desc *desc)
 	char *ptr;
 	unsigned int off, i;
 
-	LASSERT(ptlrpc_is_bulk_desc_kiov(desc->bd_type));
-
 	for (i = 0; i < desc->bd_iov_count; i++) {
 		if (!BD_GET_KIOV(desc, i).bv_len)
 			continue;
