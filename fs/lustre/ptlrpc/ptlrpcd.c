@@ -53,7 +53,6 @@
 #define DEBUG_SUBSYSTEM S_RPC
 
 #include <linux/kthread.h>
-#include <linux/fs_struct.h>
 #include <linux/libcfs/libcfs.h>
 #include <linux/libcfs/libcfs_cpu.h>
 #include <linux/libcfs/libcfs_string.h>
@@ -390,7 +389,6 @@ static int ptlrpcd(void *arg)
 	int rc = 0;
 	int exit = 0;
 
-	unshare_fs_struct();
 	if (cfs_cpt_bind(cfs_cpt_tab, pc->pc_cpt) != 0)
 		CWARN("Failed to bind %s on CPT %d\n", pc->pc_name, pc->pc_cpt);
 
