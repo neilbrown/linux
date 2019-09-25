@@ -370,7 +370,6 @@ LNetEQPoll(struct lnet_handle_eq *eventqs, int neq, signed long timeout,
 	   int interruptible,
 	   struct lnet_event *event, int *which)
 {
-	int wait = 1;
 	int rc;
 	int i;
 
@@ -381,7 +380,7 @@ LNetEQPoll(struct lnet_handle_eq *eventqs, int neq, signed long timeout,
 
 	lnet_eq_wait_lock();
 
-	for (;;) {
+	do {
 		for (i = 0; i < neq; i++) {
 			struct lnet_eq *eq = lnet_handle2eq(&eventqs[i]);
 
@@ -398,22 +397,15 @@ LNetEQPoll(struct lnet_handle_eq *eventqs, int neq, signed long timeout,
 			}
 		}
 
-		if (!wait)
-			break;
-
 		/*
-		 * return value of lnet_eq_wait_locked:
-		 * -1 : did nothing and it's sure no new event
-		 *  1 : sleep inside and wait until new event
-		 *  0 : don't want to wait anymore, but might have new event
-		 *      so need to call dequeue again
+		 * 'timeout' is updated to reflect any time
+		 * that was waited, or set to a negative error
+		 * if it was already zero.
 		 */
-		wait = lnet_eq_wait_locked(&timeout,
-					   interruptible ? TASK_INTERRUPTIBLE
-					   : TASK_IDLE);
-		if (wait < 0) /* no new event */
-			break;
-	}
+		lnet_eq_wait_locked(&timeout,
+				    interruptible ? TASK_INTERRUPTIBLE
+				    : TASK_IDLE);
+	} while (timeout >= 0);
 
 	lnet_eq_wait_unlock();
 	return 0;
