@@ -872,7 +872,7 @@ struct lustre_md {
 	struct mdt_body			*body;
 	struct lu_buf			 layout;
 	struct lmv_stripe_md		*lmv;
-#ifdef CONFIG_FS_POSIX_ACL
+#ifdef CONFIG_LUSTRE_FS_POSIX_ACL
 	struct posix_acl		*posix_acl;
 #endif
 	struct mdt_remote_perm		*remote_perm;

@@ -30,6 +30,17 @@ config LUSTRE_FS
 
 	  See also http://wiki.lustre.org/
 
+config LUSTRE_FS_POSIX_ACL
+	bool "Lustre POSIX Access Control Lists"
+	depends on LUSTRE_FS
+	select FS_POSIX_ACL
+	help
+	  POSIX Access Control Lists (ACLs) support permissions for users and
+	  groups beyond the owner/group/world scheme.
+	  Lustre can support these ACLs.
+
+	  In in doubt, say Y.
+
 config LUSTRE_DEBUG_EXPENSIVE_CHECK
 	bool "Enable Lustre DEBUG checks"
 	depends on LUSTRE_FS

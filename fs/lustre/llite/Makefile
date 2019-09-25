@@ -9,4 +9,4 @@ lustre-y := dcache.o dir.o file.o llite_lib.o llite_nfs.o \
 	    vvp_dev.o vvp_page.o vvp_lock.o vvp_io.o vvp_object.o \
 	    lproc_llite.o
 
-lustre-$(CONFIG_FS_POSIX_ACL) += acl.o
+lustre-$(CONFIG_LUSTRE_FS_POSIX_ACL) += acl.o

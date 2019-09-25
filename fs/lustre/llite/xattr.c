@@ -422,7 +422,7 @@ static int ll_xattr_get_common(const struct xattr_handler *handler,
 	if (rc)
 		return rc;
 
-#ifdef CONFIG_FS_POSIX_ACL
+#ifdef CONFIG_LUSTRE_FS_POSIX_ACL
 	/* posix acl is under protection of LOOKUP lock. when calling to this,
 	 * we just have path resolution to the target inode, so we have great
 	 * chance that cached ACL is uptodate.
@@ -665,7 +665,7 @@ const struct xattr_handler *ll_xattr_handlers[] = {
 	&ll_user_xattr_handler,
 	&ll_trusted_xattr_handler,
 	&ll_security_xattr_handler,
-#ifdef CONFIG_FS_POSIX_ACL
+#ifdef CONFIG_LUSTRE_FS_POSIX_ACL
 	&ll_acl_access_xattr_handler,
 	&ll_acl_default_xattr_handler,
 #endif

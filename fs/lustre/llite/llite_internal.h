@@ -807,13 +807,13 @@ int ll_release_openhandle(struct inode *inode, struct lookup_intent *it);
 int ll_md_real_close(struct inode *inode, fmode_t fmode);
 int ll_getattr(const struct path *path, struct kstat *stat,
 	       u32 request_mask, unsigned int flags);
-#ifdef CONFIG_FS_POSIX_ACL
+#ifdef CONFIG_LUSTRE_FS_POSIX_ACL
 struct posix_acl *ll_get_acl(struct inode *inode, int type);
 int ll_set_acl(struct inode *inode, struct posix_acl *acl, int type);
 #else
 #define ll_get_acl NULL
 #define ll_set_acl NULL
-#endif /* CONFIG_FS_POSIX_ACL */
+#endif /* CONFIG_LUSTRE_FS_POSIX_ACL */
 
 int ll_migrate(struct inode *parent, struct file *file, int mdtidx,
 	       const char *name, int namelen);
