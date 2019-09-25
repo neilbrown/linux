@@ -602,14 +602,11 @@ static ssize_t idle_timeout_show(struct kobject *kobj, struct attribute *attr,
 {
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &obd->u.cli;
+	struct obd_import *imp;
 	int ret;
 
-	ret = lprocfs_climp_check(obd);
-	if (ret)
-		return ret;
-	ret = sprintf(buf, "%u\n", cli->cl_import->imp_idle_timeout);
-	up_read(&obd->u.cli.cl_sem);
+	with_obd_cl_sem(ret, obd, imp)
+		ret = sprintf(buf, "%u\n", imp->imp_idle_timeout);
 
 	return ret;
 }
@@ -619,7 +616,7 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 {
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &obd->u.cli;
+	struct obd_import *imp;
 	struct ptlrpc_request *req;
 	unsigned int idle_debug = 0;
 	unsigned int val;
@@ -638,24 +635,21 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 			return -ERANGE;
 	}
 
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
-
-	if (idle_debug) {
-		cli->cl_import->imp_idle_timeout = val;
-	} else {
-		/* to initiate the connection if it's in IDLE state */
-		if (!val) {
-			req = ptlrpc_request_alloc(cli->cl_import,
-						   &RQF_OST_STATFS);
-			if (req)
-				ptlrpc_req_finished(req);
+	with_obd_cl_sem(rc, obd, imp) {
+		if (idle_debug) {
+			imp->imp_idle_timeout = val;
+		} else {
+			/* to initiate the connection if it's in IDLE state */
+			if (!val) {
+				req = ptlrpc_request_alloc(imp,
+							   &RQF_OST_STATFS);
+				if (req)
+					ptlrpc_req_finished(req);
+			}
 		}
 	}
-	up_read(&obd->u.cli.cl_sem);
 
-	return count;
+	return rc ?: count;
 }
 LUSTRE_RW_ATTR(idle_timeout);
 
@@ -664,22 +658,19 @@ static ssize_t idle_connect_store(struct kobject *kobj, struct attribute *attr,
 {
 	struct obd_device *dev = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_import *imp;
 	struct ptlrpc_request *req;
 	int rc;
 
-	rc = lprocfs_climp_check(dev);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, dev, imp) {
+		/* to initiate the connection if it's in IDLE state */
+		req = ptlrpc_request_alloc(imp, &RQF_OST_STATFS);
+		if (req)
+			ptlrpc_req_finished(req);
+		ptlrpc_pinger_force(imp);
+	}
 
-	/* to initiate the connection if it's in IDLE state */
-	req = ptlrpc_request_alloc(cli->cl_import, &RQF_OST_STATFS);
-	if (req)
-		ptlrpc_req_finished(req);
-	ptlrpc_pinger_force(cli->cl_import);
-	up_read(&dev->u.cli.cl_sem);
-
-	return count;
+	return rc ?: count;
 }
 LUSTRE_WO_ATTR(idle_connect);
 
@@ -691,15 +682,12 @@ static ssize_t grant_shrink_show(struct kobject *kobj, struct attribute *attr,
 	struct obd_import *imp;
 	ssize_t len;
 
-	len = lprocfs_climp_check(obd);
-	if (len)
-		return len;
-
-	imp = obd->u.cli.cl_import;
-	len = scnprintf(buf, PAGE_SIZE, "%d\n",
+	with_obd_cl_sem(len, obd, imp) {
+		len = scnprintf(
+			buf, PAGE_SIZE, "%d\n",
 			!imp->imp_grant_shrink_disabled &&
 			OCD_HAS_FLAG(&imp->imp_connect_data, GRANT_SHRINK));
-	up_read(&obd->u.cli.cl_sem);
+	}
 
 	return len;
 }
@@ -720,18 +708,13 @@ static ssize_t grant_shrink_store(struct kobject *kobj, struct attribute *attr,
 	if (rc)
 		return rc;
 
-	rc = lprocfs_climp_check(dev);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, dev, imp) {
+		spin_lock(&imp->imp_lock);
+		imp->imp_grant_shrink_disabled = !val;
+		spin_unlock(&imp->imp_lock);
+	}
 
-	imp = dev->u.cli.cl_import;
-	spin_lock(&imp->imp_lock);
-	imp->imp_grant_shrink_disabled = !val;
-	spin_unlock(&imp->imp_lock);
-
-	up_read(&dev->u.cli.cl_sem);
-
-	return count;
+	return rc ?: count;
 }
 LUSTRE_RW_ATTR(grant_shrink);
 
