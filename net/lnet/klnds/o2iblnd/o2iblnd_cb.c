@@ -3456,6 +3456,19 @@ kiblnd_qp_event(struct ib_event *event, void *arg)
 		rdma_notify(conn->ibc_cmid, IB_EVENT_COMM_EST);
 		return;
 
+	case IB_EVENT_PORT_ERR:
+	case IB_EVENT_DEVICE_FATAL:
+		CERROR("Fatal device error for NI %s\n",
+		       libcfs_nid2str(conn->ibc_peer->ibp_ni->ni_nid));
+		atomic_set(&conn->ibc_peer->ibp_ni->ni_fatal_error_on, 1);
+		return;
+
+	case IB_EVENT_PORT_ACTIVE:
+		CERROR("Port reactivated for NI %s\n",
+		       libcfs_nid2str(conn->ibc_peer->ibp_ni->ni_nid));
+		atomic_set(&conn->ibc_peer->ibp_ni->ni_fatal_error_on, 0);
+		return;
+
 	default:
 		CERROR("%s: Async QP event type %d\n",
 		       libcfs_nid2str(conn->ibc_peer->ibp_nid), event->event);
