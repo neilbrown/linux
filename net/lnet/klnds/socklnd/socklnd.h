@@ -289,18 +289,12 @@ struct ksock_tx {				/* transmit packet */
 	time64_t		tx_deadline;	/* when (in secs) tx times out */
 	struct ksock_msg	tx_msg;		/* socklnd message buffer */
 	int			tx_desc_size;	/* size of this descriptor */
-	union {
-		struct {
-			struct kvec	iov;	/* virt hdr */
-			struct bio_vec	kiov[0];/* paged payload */
-		} paged;
-		struct {
-			struct kvec	iov[1];	/* virt hdr + payload */
-		} virt;
-	} tx_frags;
+
+	struct kvec		tx_hdr;		/* virt hdr */
+	struct bio_vec		tx_payload[0];	/* paged payload */
 };
 
-#define KSOCK_NOOP_TX_SIZE (offsetof(struct ksock_tx, tx_frags.paged.kiov[0]))
+#define KSOCK_NOOP_TX_SIZE (offsetof(struct ksock_tx, tx_payload[0]))
 
 /* network zero copy callback descriptor embedded in struct ksock_tx */
 
