@@ -298,7 +298,7 @@ lnet_md_validate(const struct lnet_md *umd)
 /**
  * Create a memory descriptor and attach it to a ME
  *
- * @meh		A handle for a ME to associate the new MD with.
+ * @me		An ME to associate the new MD with.
  * @umd		Provides initial values for the user-visible parts of a MD.
  *		Other than its use for initialization, there is no linkage
  *		between this structure and the MD maintained by the LNet.
@@ -315,19 +315,18 @@ lnet_md_validate(const struct lnet_md *umd)
  * Return:	0 on success.
  *		-EINVAL If @umd is not valid.
  *		-ENOMEM If new MD cannot be allocated.
- *		-ENOENT Either @meh or @umd->eq_handle does not point to a
+ *		-ENOENT Either @me or @umd->eq_handle does not point to a
  *		valid object. Note that it's OK to supply a NULL @umd->eq_handle
  *		by calling LNetInvalidateHandle() on it.
- *		-EBUSY if the ME pointed to by @meh is already associated with
+ *		-EBUSY if the ME pointed to by @me is already associated with
  *		a MD.
  */
 int
-LNetMDAttach(struct lnet_handle_me meh, const struct lnet_md *umd,
+LNetMDAttach(struct lnet_me *me, const struct lnet_md *umd,
 	     enum lnet_unlink unlink, struct lnet_handle_md *handle)
 {
 	LIST_HEAD(matches);
 	LIST_HEAD(drops);
-	struct lnet_me *me;
 	struct lnet_libmd *md;
 	int cpt;
 	int rc;
@@ -346,14 +345,11 @@ LNetMDAttach(struct lnet_handle_me meh, const struct lnet_md *umd,
 	if (IS_ERR(md))
 		return PTR_ERR(md);
 
-	cpt = lnet_cpt_of_cookie(meh.cookie);
+	cpt = me->me_cpt;
 
 	lnet_res_lock(cpt);
 
-	me = lnet_handle2me(&meh);
-	if (!me)
-		rc = -ENOENT;
-	else if (me->me_md)
+	if (me->me_md)
 		rc = -EBUSY;
 	else
 		rc = lnet_md_link(md, umd->eq_handle, cpt);
