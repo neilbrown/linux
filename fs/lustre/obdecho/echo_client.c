@@ -1344,7 +1344,8 @@ static int echo_client_prep_commit(const struct lu_env *env,
 	npages = batch >> PAGE_SHIFT;
 	tot_pages = count >> PAGE_SHIFT;
 
-	lnb = kcalloc(npages, sizeof(struct niobuf_local), GFP_NOFS);
+	lnb = kvmalloc_array(npages, sizeof(struct niobuf_local),
+			     GFP_NOFS | __GFP_ZERO);
 	if (!lnb) {
 		ret = -ENOMEM;
 		goto out;
@@ -1412,7 +1413,7 @@ static int echo_client_prep_commit(const struct lu_env *env,
 	}
 
 out:
-	kfree(lnb);
+	kvfree(lnb);
 	return ret;
 }
 
