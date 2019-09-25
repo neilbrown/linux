@@ -1442,14 +1442,16 @@ struct ptlrpc_service {
 	int				srv_watchdog_factor;
 	/** under unregister_service */
 	unsigned			srv_is_stopping:1;
+	/** Whether or not to restrict service threads to CPUs in this CPT */
+	unsigned			srv_cpt_bind:1;
 
 	/** max # request buffers */
 	int				srv_nrqbds_max;
 	/** max # request buffers in history per partition */
 	int				srv_hist_nrqbds_cpt_max;
-	/** number of CPTs this service bound on */
+	/** number of CPTs this service associated with */
 	int				srv_ncpts;
-	/** CPTs array this service bound on */
+	/** CPTs array this service associated with */
 	u32				*srv_cpts;
 	/** 2^srv_cptab_bits >= cfs_cpt_numbert(srv_cptable) */
 	int				srv_cpt_bits;
@@ -1922,8 +1924,8 @@ struct ptlrpc_service_thr_conf {
 	 * other members of this structure.
 	 */
 	unsigned int			tc_nthrs_user;
-	/* set NUMA node affinity for service threads */
-	unsigned int			tc_cpu_affinity;
+	/* bind service threads to only CPUs in their associated CPT */
+	unsigned int			tc_cpu_bind;
 	/* Tags for lu_context associated with service thread */
 	u32				tc_ctx_tags;
 };
@@ -1932,6 +1934,8 @@ struct ptlrpc_service_cpt_conf {
 	struct cfs_cpt_table		*cc_cptable;
 	/* string pattern to describe CPTs for a service */
 	char				*cc_pattern;
+	/* whether or not to have per-CPT service partitions */
+	bool				cc_affinity;
 };
 
 struct ptlrpc_service_conf {
