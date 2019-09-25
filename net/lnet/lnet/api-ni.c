@@ -118,7 +118,15 @@ MODULE_PARM_DESC(lnet_transaction_timeout,
 		 "Time in seconds to wait for a REPLY or an ACK");
 
 unsigned int lnet_retry_count = 0;
-module_param(lnet_retry_count, uint, 0444);
+static int retry_count_set(const char *val, const struct kernel_param *kp);
+static struct kernel_param_ops param_ops_retry_count = {
+	.set = retry_count_set,
+	.get = param_get_int,
+};
+
+#define param_check_retry_count(name, p) \
+		__param_check(name, p, int)
+module_param(lnet_retry_count, retry_count, 0644);
 MODULE_PARM_DESC(lnet_retry_count,
 		 "Maximum number of times to retry transmitting a message");
 
@@ -228,9 +236,9 @@ discovery_set(const char *val, const struct kernel_param *kp)
 static int
 transaction_to_set(const char *val, const struct kernel_param *kp)
 {
+	int rc;
 	unsigned int *transaction_to = (unsigned int *)kp->arg;
 	unsigned long value;
-	int rc;
 
 	rc = kstrtoul(val, 0, &value);
 	if (rc) {
@@ -238,15 +246,21 @@ transaction_to_set(const char *val, const struct kernel_param *kp)
 		return rc;
 	}
 
-	/* The purpose of locking the api_mutex here is to ensure that
+	/*
+	 * The purpose of locking the api_mutex here is to ensure that
 	 * the correct value ends up stored properly.
 	 */
 	mutex_lock(&the_lnet.ln_api_mutex);
 
-	if (value == 0) {
+	if (the_lnet.ln_state != LNET_STATE_RUNNING) {
 		mutex_unlock(&the_lnet.ln_api_mutex);
-		CERROR("Invalid value for lnet_transaction_timeout (%lu).\n",
-		       value);
+		return 0;
+	}
+
+	if (value < lnet_retry_count || value == 0) {
+		mutex_unlock(&the_lnet.ln_api_mutex);
+		CERROR("Invalid value for lnet_transaction_timeout (%lu). Has to be greater than lnet_retry_count (%u)\n",
+		       value, lnet_retry_count);
 		return -EINVAL;
 	}
 
@@ -256,6 +270,58 @@ transaction_to_set(const char *val, const struct kernel_param *kp)
 	}
 
 	*transaction_to = value;
+	if (lnet_retry_count == 0)
+		lnet_lnd_timeout = value;
+	else
+		lnet_lnd_timeout = value / lnet_retry_count;
+
+	mutex_unlock(&the_lnet.ln_api_mutex);
+
+	return 0;
+}
+
+static int
+retry_count_set(const char *val, const struct kernel_param *kp)
+{
+	int rc;
+	unsigned int *retry_count = (unsigned int *)kp->arg;
+	unsigned long value;
+
+	rc = kstrtoul(val, 0, &value);
+	if (rc) {
+		CERROR("Invalid module parameter value for 'lnet_retry_count'\n");
+		return rc;
+	}
+
+	/*
+	 * The purpose of locking the api_mutex here is to ensure that
+	 * the correct value ends up stored properly.
+	 */
+	mutex_lock(&the_lnet.ln_api_mutex);
+
+	if (the_lnet.ln_state != LNET_STATE_RUNNING) {
+		mutex_unlock(&the_lnet.ln_api_mutex);
+		return 0;
+	}
+
+	if (value > lnet_transaction_timeout) {
+		mutex_unlock(&the_lnet.ln_api_mutex);
+		CERROR("Invalid value for lnet_retry_count (%lu). Has to be smaller than lnet_transaction_timeout (%u)\n",
+		       value, lnet_transaction_timeout);
+		return -EINVAL;
+	}
+
+	if (value == *retry_count) {
+		mutex_unlock(&the_lnet.ln_api_mutex);
+		return 0;
+	}
+
+	*retry_count = value;
+
+	if (value == 0)
+		lnet_lnd_timeout = lnet_transaction_timeout;
+	else
+		lnet_lnd_timeout = lnet_transaction_timeout / value;
 
 	mutex_unlock(&the_lnet.ln_api_mutex);
 
