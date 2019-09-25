@@ -1651,9 +1651,6 @@ static inline int md_unpackmd(struct obd_export *exp,
 int obd_init_caches(void);
 void obd_cleanup_caches(void);
 
-/* support routines */
-extern struct kmem_cache *obdo_cachep;
-
 typedef int (*register_lwp_cb)(void *data);
 
 struct lwp_register_item {

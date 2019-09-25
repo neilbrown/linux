@@ -743,7 +743,7 @@ static int osc_shrink_grant_interpret(const struct lu_env *env,
 	LASSERT(body);
 	osc_update_grant(cli, body);
 out:
-	kmem_cache_free(obdo_cachep, oa);
+	kmem_cache_free(osc_obdo_kmem, oa);
 	return rc;
 }
 
@@ -2109,7 +2109,7 @@ static int brw_interpret(const struct lu_env *env,
 			cl_object_attr_update(env, obj, attr, valid);
 		cl_object_attr_unlock(obj);
 	}
-	kmem_cache_free(obdo_cachep, aa->aa_oa);
+	kmem_cache_free(osc_obdo_kmem, aa->aa_oa);
 
 	if (lustre_msg_get_opc(req->rq_reqmsg) == OST_WRITE && rc == 0)
 		osc_inc_unstable_pages(req);
@@ -2217,7 +2217,7 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 		goto out;
 	}
 
-	oa = kmem_cache_zalloc(obdo_cachep, GFP_NOFS);
+	oa = kmem_cache_zalloc(osc_obdo_kmem, GFP_NOFS);
 	if (!oa) {
 		rc = -ENOMEM;
 		goto out;
@@ -2343,8 +2343,7 @@ out:
 	if (rc != 0) {
 		LASSERT(!req);
 
-		if (oa)
-			kmem_cache_free(obdo_cachep, oa);
+		kmem_cache_free(osc_obdo_kmem, oa);
 		kfree(pga);
 		/* this should happen rarely and is pretty bad, it makes the
 		 * pending list not follow the dirty order
@@ -2954,7 +2953,7 @@ int osc_set_info_async(const struct lu_env *env, struct obd_export *exp,
 		struct obdo *oa;
 
 		aa = ptlrpc_req_async_args(aa, req);
-		oa = kmem_cache_zalloc(obdo_cachep, GFP_NOFS);
+		oa = kmem_cache_zalloc(osc_obdo_kmem, GFP_NOFS);
 		if (!oa) {
 			ptlrpc_req_finished(req);
 			return -ENOMEM;
