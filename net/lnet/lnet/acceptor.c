@@ -43,6 +43,7 @@ static int accept_timeout = 5;
 static struct {
 	int			pta_shutdown;
 	struct socket		*pta_sock;
+	struct task_struct	*pta_task;
 	struct completion	pta_signal;
 } lnet_acceptor_state = {
 	.pta_shutdown = 1
@@ -334,6 +335,7 @@ lnet_acceptor(void *arg)
 	int secure = (int)((long)arg);
 
 	LASSERT(!lnet_acceptor_state.pta_sock);
+	allow_signal(SIGKILL);
 
 	rc = lnet_sock_listen(&lnet_acceptor_state.pta_sock, 0, accept_port,
 			      accept_backlog);
@@ -358,9 +360,9 @@ lnet_acceptor(void *arg)
 		return rc;
 
 	while (!lnet_acceptor_state.pta_shutdown) {
-		rc = lnet_sock_accept(&newsock, lnet_acceptor_state.pta_sock);
+		rc = kernel_accept(lnet_acceptor_state.pta_sock, &newsock, 0);
 		if (rc) {
-			if (rc != -EAGAIN) {
+			if (rc != -EINTR && rc != -ERESTARTSYS) {
 				CWARN("Accept error %d: pausing...\n", rc);
 				schedule_timeout_uninterruptible(HZ);
 			}
@@ -472,6 +474,7 @@ lnet_acceptor_start(void)
 	if (!lnet_acceptor_state.pta_shutdown) {
 		/* started OK */
 		LASSERT(lnet_acceptor_state.pta_sock);
+		lnet_acceptor_state.pta_task = task;
 		return 0;
 	}
 
@@ -483,17 +486,14 @@ lnet_acceptor_start(void)
 void
 lnet_acceptor_stop(void)
 {
-	struct sock *sk;
-
 	if (lnet_acceptor_state.pta_shutdown) /* not running */
 		return;
 
 	lnet_acceptor_state.pta_shutdown = 1;
 
-	sk = lnet_acceptor_state.pta_sock->sk;
-
-	/* awake any sleepers using safe method */
-	sk->sk_state_change(sk);
+	/* Cause kernel_accept to abort */
+	send_sig(SIGKILL, lnet_acceptor_state.pta_task, 1);
+	lnet_acceptor_state.pta_task = NULL;
 
 	/* block until acceptor signals exit */
 	wait_for_completion(&lnet_acceptor_state.pta_signal);

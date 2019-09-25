@@ -305,47 +305,6 @@ lnet_sock_listen(struct socket **sockp, u32 local_ip, int local_port,
 }
 
 int
-lnet_sock_accept(struct socket **newsockp, struct socket *sock)
-{
-	wait_queue_entry_t wait;
-	struct socket *newsock;
-	int rc;
-
-	/*
-	 * XXX this should add a ref to sock->ops->owner, if
-	 * TCP could be a module
-	 */
-	rc = sock_create_lite(PF_PACKET, sock->type, IPPROTO_TCP, &newsock);
-	if (rc) {
-		CERROR("Can't allocate socket\n");
-		return rc;
-	}
-
-	newsock->ops = sock->ops;
-
-	rc = sock->ops->accept(sock, newsock, O_NONBLOCK, false);
-	if (rc == -EAGAIN) {
-		/* Nothing ready, so wait for activity */
-		init_waitqueue_entry(&wait, current);
-		add_wait_queue(sk_sleep(sock->sk), &wait);
-		set_current_state(TASK_INTERRUPTIBLE);
-		schedule();
-		remove_wait_queue(sk_sleep(sock->sk), &wait);
-		rc = sock->ops->accept(sock, newsock, O_NONBLOCK, false);
-	}
-
-	if (rc)
-		goto failed;
-
-	*newsockp = newsock;
-	return 0;
-
-failed:
-	sock_release(newsock);
-	return rc;
-}
-
-int
 lnet_sock_connect(struct socket **sockp, int *fatal, u32 local_ip,
 		  int local_port, u32 peer_ip, int peer_port)
 {
