@@ -430,42 +430,6 @@ mdc_intent_getxattr_pack(struct obd_export *exp,
 	return req;
 }
 
-static struct ptlrpc_request *mdc_intent_unlink_pack(struct obd_export *exp,
-						     struct lookup_intent *it,
-						     struct md_op_data *op_data)
-{
-	struct ptlrpc_request *req;
-	struct obd_device *obddev = class_exp2obd(exp);
-	struct ldlm_intent *lit;
-	int rc;
-
-	req = ptlrpc_request_alloc(class_exp2cliimp(exp),
-				   &RQF_LDLM_INTENT_UNLINK);
-	if (!req)
-		return ERR_PTR(-ENOMEM);
-
-	req_capsule_set_size(&req->rq_pill, &RMF_NAME, RCL_CLIENT,
-			     op_data->op_namelen + 1);
-
-	rc = ldlm_prep_enqueue_req(exp, req, NULL, 0);
-	if (rc) {
-		ptlrpc_request_free(req);
-		return ERR_PTR(rc);
-	}
-
-	/* pack the intent */
-	lit = req_capsule_client_get(&req->rq_pill, &RMF_LDLM_INTENT);
-	lit->opc = (u64)it->it_op;
-
-	/* pack the intended request */
-	mdc_unlink_pack(req, op_data);
-
-	req_capsule_set_size(&req->rq_pill, &RMF_MDT_MD, RCL_SERVER,
-			     obddev->u.cli.cl_default_mds_easize);
-	ptlrpc_request_set_replen(req);
-	return req;
-}
-
 static struct ptlrpc_request *
 mdc_intent_getattr_pack(struct obd_export *exp, struct lookup_intent *it,
 			struct md_op_data *op_data, u32 acl_bufsize)
@@ -820,18 +784,18 @@ int mdc_enqueue_base(struct obd_export *exp, struct ldlm_enqueue_info *einfo,
 		LASSERT(!policy);
 
 		saved_flags |= LDLM_FL_HAS_INTENT;
-		if (it->it_op & (IT_UNLINK | IT_GETATTR | IT_READDIR))
+		if (it->it_op & (IT_GETATTR | IT_READDIR))
 			policy = &update_policy;
 		else if (it->it_op & IT_LAYOUT)
 			policy = &layout_policy;
-		else if (it->it_op & (IT_GETXATTR | IT_SETXATTR))
+		else if (it->it_op & IT_GETXATTR)
 			policy = &getxattr_policy;
 		else
 			policy = &lookup_policy;
 	}
 
 	generation = obddev->u.cli.cl_import->imp_generation;
-	if (!it || (it->it_op & (IT_CREAT | IT_OPEN_CREAT)))
+	if (!it || (it->it_op & (IT_OPEN | IT_CREAT)))
 		acl_bufsize = imp->imp_connect_data.ocd_max_easize;
 	else
 		acl_bufsize = LUSTRE_POSIX_ACL_MAX_SIZE_OLD;
@@ -845,8 +809,6 @@ resend:
 		res_id.name[3] = LDLM_FLOCK;
 	} else if (it->it_op & IT_OPEN) {
 		req = mdc_intent_open_pack(exp, it, op_data, acl_bufsize);
-	} else if (it->it_op & IT_UNLINK) {
-		req = mdc_intent_unlink_pack(exp, it, op_data);
 	} else if (it->it_op & (IT_GETATTR | IT_LOOKUP)) {
 		req = mdc_intent_getattr_pack(exp, it, op_data, acl_bufsize);
 	} else if (it->it_op & IT_READDIR) {
