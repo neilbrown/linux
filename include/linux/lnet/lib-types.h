@@ -1007,7 +1007,7 @@ struct lnet {
 	struct list_head		ln_lnds;
 
 	/* test protocol compatibility flags */
-	int				ln_testprotocompat;
+	unsigned long			ln_testprotocompat;
 
 	/*
 	 * 0 - load the NIs from the mod params
