@@ -332,8 +332,7 @@ struct ksock_conn {
 	u32			ksnc_rx_csum;		/* partial checksum for incoming
 							 * data
 							 */
-	void		       *ksnc_cookie;		/* rx lnet_finalize passthru arg
-							 */
+	struct lnet_msg	       *ksnc_lnet_msg;		/* rx lnet_finalize arg */
 	struct ksock_msg	ksnc_msg;		/* incoming message buffer:
 							 * V2.x message takes the
 							 * whole struct

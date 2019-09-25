@@ -341,9 +341,6 @@ ksocknal_tx_done(struct lnet_ni *ni, struct ksock_tx *tx, int rc)
 
 	ksocknal_free_tx(tx);
 	if (lnetmsg) { /* KSOCK_MSG_NOOP go without lnetmsg */
-		if (rc)
-			CERROR("tx failure rc = %d, hstatus = %d\n", rc,
-			       hstatus);
 		lnetmsg->msg_health_status = hstatus;
 		lnet_finalize(lnetmsg, rc);
 	}
@@ -1241,7 +1238,10 @@ again:
 					le64_to_cpu(lhdr->src_nid) != id->nid);
 		}
 
-		lnet_finalize(conn->ksnc_cookie, rc);
+		if (rc && conn->ksnc_lnet_msg)
+			conn->ksnc_lnet_msg->msg_health_status =
+				LNET_MSG_STATUS_REMOTE_ERROR;
+		lnet_finalize(conn->ksnc_lnet_msg, rc);
 
 		if (rc) {
 			ksocknal_new_packet(conn, 0);
@@ -1275,7 +1275,7 @@ ksocknal_recv(struct lnet_ni *ni, void *private, struct lnet_msg *msg,
 	LASSERT(iov_iter_count(to) <= rlen);
 	LASSERT(to->nr_segs <= LNET_MAX_IOV);
 
-	conn->ksnc_cookie = msg;
+	conn->ksnc_lnet_msg = msg;
 	conn->ksnc_rx_nob_left = rlen;
 
 	conn->ksnc_rx_to = *to;
