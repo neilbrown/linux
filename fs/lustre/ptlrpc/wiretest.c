@@ -1915,8 +1915,6 @@ void lustre_assert_wire_constants(void)
 		(unsigned int)MDS_CHECK_SPLIT);
 	LASSERTF(MDS_CROSS_REF == 0x00000002UL, "found 0x%.8xUL\n",
 		(unsigned int)MDS_CROSS_REF);
-	LASSERTF(MDS_VTX_BYPASS == 0x00000004UL, "found 0x%.8xUL\n",
-		(unsigned int)MDS_VTX_BYPASS);
 	LASSERTF(MDS_PERM_BYPASS == 0x00000008UL, "found 0x%.8xUL\n",
 		(unsigned int)MDS_PERM_BYPASS);
 	LASSERTF(MDS_QUOTA_IGNORE == 0x00000020UL, "found 0x%.8xUL\n",
