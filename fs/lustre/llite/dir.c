@@ -945,10 +945,12 @@ static int quotactl_ioctl(struct ll_sb_info *sbi, struct if_quotactl *qctl)
 	switch (cmd) {
 	case Q_SETQUOTA:
 	case Q_SETINFO:
+	case LUSTRE_Q_SETDEFAULT:
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		break;
 	case Q_GETQUOTA:
+	case LUSTRE_Q_GETDEFAULT:
 		if (check_owner(type, id) && !capable(CAP_SYS_ADMIN))
 			return -EPERM;
 		break;
@@ -956,7 +958,7 @@ static int quotactl_ioctl(struct ll_sb_info *sbi, struct if_quotactl *qctl)
 		break;
 	default:
 		CERROR("unsupported quotactl op: %#x\n", cmd);
-		return -ENOTTY;
+		return -ENOTSUPP;
 	}
 
 	if (valid != QC_GENERAL) {
