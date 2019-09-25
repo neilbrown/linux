@@ -210,7 +210,7 @@ struct lnet_libmd {
 	unsigned int		 md_niov;	/* # frags at end of struct */
 	void			*md_user_ptr;
 	struct lnet_rsp_tracker	*md_rspt_ptr;
-	struct lnet_eq		*md_eq;
+	lnet_eq_handler_t	 md_eq;
 	struct lnet_handle_md	 md_bulk_handle;
 	struct bio_vec		 md_kiov[LNET_MAX_IOV];
 };
