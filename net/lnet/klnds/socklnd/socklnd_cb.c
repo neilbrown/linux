@@ -1332,7 +1332,6 @@ int ksocknal_scheduler(void *arg)
 	struct ksock_conn *conn;
 	struct ksock_tx *tx;
 	int rc;
-	int nloops = 0;
 	long id = (long)arg;
 
 	sched = ksocknal_data.ksnd_schedulers[KSOCK_THREAD_CPT(id)];
@@ -1478,10 +1477,8 @@ int ksocknal_scheduler(void *arg)
 			did_something = 1;
 		}
 		if (!did_something ||		/* nothing to do */
-		    ++nloops == SOCKNAL_RESCHED) { /* hogging CPU? */
+		    need_resched()) {		/* hogging CPU? */
 			spin_unlock_bh(&sched->kss_lock);
-
-			nloops = 0;
 
 			if (!did_something) {   /* wait for something to do */
 				rc = wait_event_interruptible_exclusive(
@@ -2085,7 +2082,6 @@ ksocknal_connd(void *arg)
 	spinlock_t *connd_lock = &ksocknal_data.ksnd_connd_lock;
 	struct ksock_connreq *cr;
 	wait_queue_entry_t wait;
-	int nloops = 0;
 	int cons_retry = 0;
 
 	init_waitqueue_entry(&wait, current);
@@ -2163,10 +2159,9 @@ ksocknal_connd(void *arg)
 		}
 
 		if (dropped_lock) {
-			if (++nloops < SOCKNAL_RESCHED)
+			if (!need_resched())
 				continue;
 			spin_unlock_bh(connd_lock);
-			nloops = 0;
 			cond_resched();
 			spin_lock_bh(connd_lock);
 			continue;
@@ -2178,7 +2173,6 @@ ksocknal_connd(void *arg)
 					 &wait);
 		spin_unlock_bh(connd_lock);
 
-		nloops = 0;
 		schedule_timeout(timeout);
 
 		remove_wait_queue(&ksocknal_data.ksnd_connd_waitq, &wait);
