@@ -326,7 +326,6 @@ int ll_xattr_list(struct inode *inode, const char *name, int type, void *buffer,
 	struct ll_inode_info *lli = ll_i2info(inode);
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
 	struct ptlrpc_request *req = NULL;
-	struct mdt_body *body;
 	void *xdata;
 	int rc;
 
@@ -358,37 +357,24 @@ getxattr_nocache:
 		if (rc < 0)
 			goto out_xattr;
 
-		body = req_capsule_server_get(&req->rq_pill, &RMF_MDT_BODY);
-		LASSERT(body);
-
 		/* only detect the xattr size */
-		if (size == 0) {
-			rc = body->mbo_eadatasize;
+		if (size == 0)
 			goto out;
-		}
 
-		if (size < body->mbo_eadatasize) {
-			CERROR("server bug: replied size %u > %u\n",
-			       body->mbo_eadatasize, (int)size);
+		if (size < rc) {
 			rc = -ERANGE;
-			goto out;
-		}
-
-		if (body->mbo_eadatasize == 0) {
-			rc = -ENODATA;
 			goto out;
 		}
 
 		/* do not need swab xattr data */
 		xdata = req_capsule_server_sized_get(&req->rq_pill, &RMF_EADATA,
-						     body->mbo_eadatasize);
+						     rc);
 		if (!xdata) {
-			rc = -EFAULT;
+			rc = -EPROTO;
 			goto out;
 		}
 
-		memcpy(buffer, xdata, body->mbo_eadatasize);
-		rc = body->mbo_eadatasize;
+		memcpy(buffer, xdata, rc);
 	}
 
 out_xattr:
