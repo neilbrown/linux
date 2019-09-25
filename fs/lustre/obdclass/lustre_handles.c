@@ -48,7 +48,7 @@ static spinlock_t handle_base_lock;
 
 static struct handle_bucket {
 	spinlock_t		lock;
-	struct list_head	head;
+	struct hlist_head	head;
 } *handle_hash;
 
 #define HANDLE_HASH_SIZE (1 << 16)
@@ -63,7 +63,7 @@ void class_handle_hash(struct portals_handle *h, const char *owner)
 	struct handle_bucket *bucket;
 
 	LASSERT(h);
-	LASSERT(list_empty(&h->h_link));
+	LASSERT(hlist_unhashed(&h->h_link));
 
 	/*
 	 * This is fast, but simplistic cookie generation algorithm, it will
@@ -89,8 +89,7 @@ void class_handle_hash(struct portals_handle *h, const char *owner)
 
 	bucket = &handle_hash[h->h_cookie & HANDLE_HASH_MASK];
 	spin_lock(&bucket->lock);
-	list_add_rcu(&h->h_link, &bucket->head);
-	h->h_in = 1;
+	hlist_add_head_rcu(&h->h_link, &bucket->head);
 	spin_unlock(&bucket->lock);
 
 	CDEBUG(D_INFO, "added object %p with handle %#llx to hash\n",
@@ -100,7 +99,7 @@ EXPORT_SYMBOL(class_handle_hash);
 
 static void class_handle_unhash_nolock(struct portals_handle *h)
 {
-	if (list_empty(&h->h_link)) {
+	if (hlist_unhashed(&h->h_link)) {
 		CERROR("removing an already-removed handle (%#llx)\n",
 		       h->h_cookie);
 		return;
@@ -110,13 +109,12 @@ static void class_handle_unhash_nolock(struct portals_handle *h)
 	       h, h->h_cookie);
 
 	spin_lock(&h->h_lock);
-	if (h->h_in == 0) {
+	if (hlist_unhashed(&h->h_link)) {
 		spin_unlock(&h->h_lock);
 		return;
 	}
-	h->h_in = 0;
+	hlist_del_init_rcu(&h->h_link);
 	spin_unlock(&h->h_lock);
-	list_del_rcu(&h->h_link);
 }
 
 void class_handle_unhash(struct portals_handle *h)
@@ -145,7 +143,7 @@ void *class_handle2object(u64 cookie, const char *owner)
 	bucket = handle_hash + (cookie & HANDLE_HASH_MASK);
 
 	rcu_read_lock();
-	list_for_each_entry_rcu(h, &bucket->head, h_link) {
+	hlist_for_each_entry_rcu(h, &bucket->head, h_link) {
 		if (h->h_cookie != cookie || h->h_owner != owner)
 			continue;
 
@@ -176,7 +174,7 @@ int class_handle_init(void)
 	spin_lock_init(&handle_base_lock);
 	for (bucket = handle_hash + HANDLE_HASH_SIZE - 1; bucket >= handle_hash;
 	     bucket--) {
-		INIT_LIST_HEAD(&bucket->head);
+		INIT_HLIST_HEAD(&bucket->head);
 		spin_lock_init(&bucket->lock);
 	}
 
@@ -195,7 +193,7 @@ static int cleanup_all_handles(void)
 		struct portals_handle *h;
 
 		spin_lock(&handle_hash[i].lock);
-		list_for_each_entry_rcu(h, &handle_hash[i].head, h_link) {
+		hlist_for_each_entry_rcu(h, &handle_hash[i].head, h_link) {
 			CERROR("force clean handle %#llx addr %p owner %p\n",
 			       h->h_cookie, h, h->h_owner);
 
