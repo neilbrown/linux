@@ -204,8 +204,6 @@ lnet_net_lock_current(void)
 
 #define lnet_ptl_lock(ptl)	spin_lock(&(ptl)->ptl_lock)
 #define lnet_ptl_unlock(ptl)	spin_unlock(&(ptl)->ptl_lock)
-#define lnet_eq_wait_lock()	spin_lock(&the_lnet.ln_eq_wait_lock)
-#define lnet_eq_wait_unlock()	spin_unlock(&the_lnet.ln_eq_wait_lock)
 #define lnet_ni_lock(ni)	spin_lock(&(ni)->ni_lock)
 #define lnet_ni_unlock(ni)	spin_unlock(&(ni)->ni_lock)
 

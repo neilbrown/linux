@@ -128,10 +128,6 @@ struct lnet_libhandle {
 #define lh_entry(ptr, type, member) \
 	((type *)((char *)(ptr) - (char *)(&((type *)0)->member)))
 
-struct lnet_eq {
-	lnet_eq_handler_t	eq_callback;
-};
-
 struct lnet_me {
 	struct list_head	 me_list;
 	int			 me_cpt;
@@ -951,7 +947,7 @@ struct lnet {
 	 * ln_api_mutex.
 	 */
 	struct lnet_handle_md		ln_ping_target_md;
-	struct lnet_eq		       *ln_ping_target_eq;
+	lnet_eq_handler_t		ln_ping_target_eq;
 	struct lnet_ping_buffer	       *ln_ping_target;
 	atomic_t			ln_ping_target_seqno;
 
@@ -963,13 +959,13 @@ struct lnet {
 	 * buffer may linger a while after it has been unlinked, in
 	 * which case the event handler cleans up.
 	 */
-	struct lnet_eq		       *ln_push_target_eq;
+	lnet_eq_handler_t		ln_push_target_eq;
 	struct lnet_handle_md		ln_push_target_md;
 	struct lnet_ping_buffer	       *ln_push_target;
 	int				ln_push_target_nnis;
 
 	/* discovery event queue handle */
-	struct lnet_eq		       *ln_dc_eq;
+	lnet_eq_handler_t		ln_dc_eq;
 	/* discovery requests */
 	struct list_head		ln_dc_request;
 	/* discovery working list */
@@ -984,7 +980,7 @@ struct lnet {
 	/* router checker startup/shutdown state */
 	enum lnet_rc_state		ln_rc_state;
 	/* router checker's event queue */
-	struct lnet_eq		       *ln_rc_eq;
+	lnet_eq_handler_t		ln_rc_eq;
 	/* rcd still pending on net */
 	struct list_head		ln_rcd_deathrow;
 	/* rcd ready for free */
