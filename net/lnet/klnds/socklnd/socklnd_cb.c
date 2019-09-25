@@ -2464,9 +2464,9 @@ ksocknal_reaper(void *arg)
 
 	init_wait(&wait);
 
-	spin_lock_bh(&ksocknal_data.ksnd_reaper_lock);
-
 	while (!ksocknal_data.ksnd_shuttingdown) {
+		spin_lock_bh(&ksocknal_data.ksnd_reaper_lock);
+
 		conn = list_first_entry_or_null(&ksocknal_data.ksnd_deathrow_conns,
 						struct ksock_conn, ksnc_list);
 		if (conn) {
@@ -2477,7 +2477,6 @@ ksocknal_reaper(void *arg)
 			ksocknal_terminate_conn(conn);
 			ksocknal_conn_decref(conn);
 
-			spin_lock_bh(&ksocknal_data.ksnd_reaper_lock);
 			continue;
 		}
 
@@ -2490,7 +2489,6 @@ ksocknal_reaper(void *arg)
 
 			ksocknal_destroy_conn(conn);
 
-			spin_lock_bh(&ksocknal_data.ksnd_reaper_lock);
 			continue;
 		}
 
@@ -2575,11 +2573,7 @@ ksocknal_reaper(void *arg)
 
 		set_current_state(TASK_RUNNING);
 		remove_wait_queue(&ksocknal_data.ksnd_reaper_waitq, &wait);
-
-		spin_lock_bh(&ksocknal_data.ksnd_reaper_lock);
 	}
-
-	spin_unlock_bh(&ksocknal_data.ksnd_reaper_lock);
 
 	ksocknal_thread_fini();
 	return 0;
