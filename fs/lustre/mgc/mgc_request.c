@@ -1042,10 +1042,10 @@ static int mgc_set_info_async(const struct lu_env *env, struct obd_export *exp,
 		if (vallen != sizeof(int))
 			return -EINVAL;
 		value = *(int *)val;
-		CDEBUG(D_MGC, "InitRecov %s %d/d%d:i%d:r%d:or%d:%s\n",
+		CDEBUG(D_MGC, "InitRecov %s %d/d%d:i%d:r%d:%s\n",
 		       imp->imp_obd->obd_name, value,
 		       imp->imp_deactive, imp->imp_invalid,
-		       imp->imp_replayable, imp->imp_obd->obd_replayable,
+		       imp->imp_replayable,
 		       ptlrpc_import_state_name(imp->imp_state));
 		/*
 		 * Resurrect the import immediately if
