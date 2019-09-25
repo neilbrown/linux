@@ -172,7 +172,14 @@ int cl_file_inode_init(struct inode *inode, struct lustre_md *md)
 		 * unnecessary to perform lookup-alloc-lookup-insert, just
 		 * alloc and insert directly.
 		 */
-		LASSERT(inode->i_state & I_NEW);
+		if (!(inode->i_state & I_NEW)) {
+			result = -EIO;
+			CERROR("%s: unexpected not-NEW inode "DFID": rc = %d\n",
+			       ll_get_fsname(inode->i_sb, NULL, 0), PFID(fid),
+			       result);
+			goto out;
+		}
+
 		conf.coc_lu.loc_flags = LOC_F_NEW;
 		clob = cl_object_find(env, lu2cl_dev(site->ls_top_dev),
 				      fid, &conf);
@@ -194,11 +201,13 @@ int cl_file_inode_init(struct inode *inode, struct lustre_md *md)
 		}
 	}
 
+	if (result)
+		CERROR("%s: failed to initialize cl_object "DFID": rc = %d\n",
+			ll_get_fsname(inode->i_sb, NULL, 0), PFID(fid), result);
+
+out:
 	cl_env_put(env, &refcheck);
 
-	if (result != 0)
-		CERROR("Failure to initialize cl object " DFID ": %d\n",
-		       PFID(fid), result);
 	return result;
 }
 
