@@ -2077,9 +2077,18 @@ int ll_iocontrol(struct inode *inode, struct file *file,
 		struct md_op_data *op_data;
 		struct cl_object *obj;
 		struct iattr *attr;
+		struct fsxattr fa = { 0 };
 
 		if (get_user(flags, (int __user *)arg))
 			return -EFAULT;
+
+		fa.fsx_projid = ll_i2info(inode)->lli_projid;
+		if (flags & LUSTRE_PROJINHERIT_FL)
+			fa.fsx_xflags = FS_XFLAG_PROJINHERIT;
+
+		rc = ll_ioctl_check_project(inode, &fa);
+		if (rc)
+			return rc;
 
 		op_data = ll_prep_md_op_data(NULL, inode, NULL, NULL, 0, 0,
 					     LUSTRE_OPC_ANY, NULL);
