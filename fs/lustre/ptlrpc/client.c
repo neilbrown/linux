@@ -845,6 +845,28 @@ ptlrpc_request_alloc_internal(struct obd_import *imp,
 			      const struct req_format *format)
 {
 	struct ptlrpc_request *request;
+	int connect = 0;
+
+	if (unlikely(imp->imp_state == LUSTRE_IMP_IDLE)) {
+		int rc;
+
+		CDEBUG(D_INFO, "%s: connect at new req\n",
+		       imp->imp_obd->obd_name);
+		spin_lock(&imp->imp_lock);
+		if (imp->imp_state == LUSTRE_IMP_IDLE) {
+			imp->imp_generation++;
+			imp->imp_initiated_at = imp->imp_generation;
+			imp->imp_state =  LUSTRE_IMP_NEW;
+			connect = 1;
+		}
+		spin_unlock(&imp->imp_lock);
+		if (connect) {
+			rc = ptlrpc_connect_import(imp);
+			if (rc < 0)
+				return NULL;
+			ptlrpc_pinger_add_import(imp);
+		}
+	}
 
 	request = __ptlrpc_request_alloc(imp, pool);
 	if (!request)
@@ -1035,6 +1057,7 @@ void ptlrpc_set_add_req(struct ptlrpc_request_set *set,
 		return;
 	}
 
+	LASSERT(req->rq_import->imp_state != LUSTRE_IMP_IDLE);
 	LASSERT(list_empty(&req->rq_set_chain));
 
 	/* The set takes over the caller's request reference */
@@ -1143,7 +1166,9 @@ static int ptlrpc_import_delay_req(struct obd_import *imp,
 		if (atomic_read(&imp->imp_inval_count) != 0) {
 			DEBUG_REQ(D_ERROR, req, "invalidate in flight");
 			*status = -EIO;
-		} else if (req->rq_no_delay) {
+		} else if (req->rq_no_delay &&
+			   imp->imp_generation != imp->imp_initiated_at) {
+			/* ignore nodelay for requests initiating connections */
 			*status = -EWOULDBLOCK;
 		} else if (req->rq_allow_replay &&
 			  (imp->imp_state == LUSTRE_IMP_REPLAY ||
@@ -1802,8 +1827,11 @@ int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
 					spin_unlock(&imp->imp_lock);
 					goto interpret;
 				}
+				/* ignore on just initiated connections */
 				if (ptlrpc_no_resend(req) &&
-				    !req->rq_wait_ctx) {
+				    !req->rq_wait_ctx &&
+				    imp->imp_generation !=
+				    imp->imp_initiated_at) {
 					req->rq_status = -ENOTCONN;
 					ptlrpc_rqphase_move(req,
 							    RQ_PHASE_INTERPRET);

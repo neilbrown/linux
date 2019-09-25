@@ -61,6 +61,8 @@ struct ptlrpc_request_pool *osc_rq_pool;
 /* max memory used for request pool, unit is MB */
 static unsigned int osc_reqpool_mem_max = 5;
 module_param(osc_reqpool_mem_max, uint, 0444);
+static int osc_idle_timeout = 20;
+module_param(osc_idle_timeout, uint, 0644);
 
 struct osc_async_args {
 	struct obd_info		*aa_oi;
@@ -3208,6 +3210,7 @@ int osc_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
 	spin_lock(&osc_shrink_lock);
 	list_add_tail(&cli->cl_shrink_list, &osc_shrink_list);
 	spin_unlock(&osc_shrink_lock);
+	cli->cl_import->imp_idle_timeout = osc_idle_timeout;
 
 	return rc;
 
