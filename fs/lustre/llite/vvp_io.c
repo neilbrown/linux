@@ -1020,7 +1020,7 @@ static int vvp_io_write_start(const struct lu_env *env,
 	if (pos + cnt > ll_file_maxbytes(inode)) {
 		CDEBUG(D_INODE,
 		       "%s: file " DFID " offset %llu > maxbytes %llu\n",
-		       ll_get_fsname(inode->i_sb, NULL, 0),
+		       ll_i2sbi(inode)->ll_fsname,
 		       PFID(ll_inode2fid(inode)), pos + cnt,
 		       ll_file_maxbytes(inode));
 		return -EFBIG;
@@ -1454,7 +1454,7 @@ int vvp_io_init(const struct lu_env *env, struct cl_object *obj,
 			result = 0;
 		if (result < 0)
 			CERROR("%s: refresh file layout " DFID " error %d.\n",
-			       ll_get_fsname(inode->i_sb, NULL, 0),
+			       ll_i2sbi(inode)->ll_fsname,
 			       PFID(lu_object_fid(&obj->co_lu)), result);
 	}
 

@@ -573,6 +573,9 @@ struct ll_sb_info {
 
 	struct kset		ll_kset;	/* sysfs object */
 	struct completion	 ll_kobj_unregister;
+
+	/* filesystem fsname */
+	char			  ll_fsname[LUSTRE_MAXFSNAME + 1];
 };
 
 /*
@@ -943,7 +946,6 @@ struct md_op_data *ll_prep_md_op_data(struct md_op_data *op_data,
 				      u32 mode, u32 opc, void *data);
 void ll_finish_md_op_data(struct md_op_data *op_data);
 int ll_get_obd_name(struct inode *inode, unsigned int cmd, unsigned long arg);
-char *ll_get_fsname(struct super_block *sb, char *buf, int buflen);
 void ll_compute_rootsquash_state(struct ll_sb_info *sbi);
 void ll_open_cleanup(struct super_block *sb, struct ptlrpc_request *open_req);
 ssize_t ll_copy_user_md(const struct lov_user_md __user *md,
