@@ -484,20 +484,17 @@ ssize_t conn_uuid_show(struct kobject *kobj, struct attribute *attr, char *buf)
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct ptlrpc_connection *conn;
+	struct obd_import *imp;
 	ssize_t count;
-	int rc;
 
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(count, obd, imp) {
+		conn = imp->imp_connection;
+		if (conn)
+			count = sprintf(buf, "%s\n", conn->c_remote_uuid.uuid);
+		else
+			count = sprintf(buf, "%s\n", "<none>");
 
-	conn = obd->u.cli.cl_import->imp_connection;
-	if (conn && obd->u.cli.cl_import)
-		count = sprintf(buf, "%s\n", conn->c_remote_uuid.uuid);
-	else
-		count = sprintf(buf, "%s\n", "<none>");
-
-	up_read(&obd->u.cli.cl_sem);
+	}
 	return count;
 }
 EXPORT_SYMBOL(conn_uuid_show);
@@ -510,19 +507,15 @@ int lprocfs_rd_server_uuid(struct seq_file *m, void *data)
 	int rc;
 
 	LASSERT(obd);
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, obd, imp) {
+		imp_state_name = ptlrpc_import_state_name(imp->imp_state);
+		seq_printf(m, "%s\t%s%s\n",
+			   obd2cli_tgt(obd), imp_state_name,
+			   imp->imp_deactive ? "\tDEACTIVATED" : "");
 
-	imp = obd->u.cli.cl_import;
-	imp_state_name = ptlrpc_import_state_name(imp->imp_state);
-	seq_printf(m, "%s\t%s%s\n",
-		   obd2cli_tgt(obd), imp_state_name,
-		   imp->imp_deactive ? "\tDEACTIVATED" : "");
+	}
 
-	up_read(&obd->u.cli.cl_sem);
-
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL(lprocfs_rd_server_uuid);
 
@@ -530,23 +523,20 @@ int lprocfs_rd_conn_uuid(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = data;
 	struct ptlrpc_connection *conn;
+	struct obd_import *imp;
 	int rc;
 
 	LASSERT(obd);
 
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, obd, imp) {
+		conn = imp->imp_connection;
+		if (conn)
+			seq_printf(m, "%s\n", conn->c_remote_uuid.uuid);
+		else
+			seq_puts(m, "<none>\n");
+	}
 
-	conn = obd->u.cli.cl_import->imp_connection;
-	if (conn && obd->u.cli.cl_import)
-		seq_printf(m, "%s\n", conn->c_remote_uuid.uuid);
-	else
-		seq_puts(m, "<none>\n");
-
-	up_read(&obd->u.cli.cl_sem);
-
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL(lprocfs_rd_conn_uuid);
 
@@ -757,151 +747,150 @@ int lprocfs_rd_import(struct seq_file *m, void *data)
 	int rc;
 
 	LASSERT(obd);
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
 
-	imp = obd->u.cli.cl_import;
-	ocd = &imp->imp_connect_data;
+	with_obd_cl_sem(rc, obd, imp) {
+		ocd = &imp->imp_connect_data;
 
-	seq_printf(m, "import:\n"
-		   "    name: %s\n"
-		   "    target: %s\n"
-		   "    state: %s\n"
-		   "    instance: %u\n"
-		   "    connect_flags: [ ",
-		   obd->obd_name,
-		   obd2cli_tgt(obd),
-		   ptlrpc_import_state_name(imp->imp_state),
-		   imp->imp_connect_data.ocd_instance);
-	obd_connect_seq_flags2str(m, imp->imp_connect_data.ocd_connect_flags,
-				  imp->imp_connect_data.ocd_connect_flags2,
-				  ", ");
-	seq_puts(m, " ]\n");
-	obd_connect_data_seqprint(m, ocd);
-	seq_puts(m, "    import_flags: [ ");
-	obd_import_flags2str(imp, m);
+		seq_printf(m, "import:\n"
+			   "    name: %s\n"
+			   "    target: %s\n"
+			   "    state: %s\n"
+			   "    instance: %u\n"
+			   "    connect_flags: [ ",
+			   obd->obd_name,
+			   obd2cli_tgt(obd),
+			   ptlrpc_import_state_name(imp->imp_state),
+			   imp->imp_connect_data.ocd_instance);
+		obd_connect_seq_flags2str(m, imp->imp_connect_data.ocd_connect_flags,
+					  imp->imp_connect_data.ocd_connect_flags2,
+					  ", ");
+		seq_puts(m, " ]\n");
+		obd_connect_data_seqprint(m, ocd);
+		seq_puts(m, "    import_flags: [ ");
+		obd_import_flags2str(imp, m);
 
-	seq_puts(m,
-		 " ]\n"
-		 "    connection:\n"
-		 "       failover_nids: [ ");
-	spin_lock(&imp->imp_lock);
-	j = 0;
-	list_for_each_entry(conn, &imp->imp_conn_list, oic_item) {
-		libcfs_nid2str_r(conn->oic_conn->c_peer.nid,
-				 nidstr, sizeof(nidstr));
-		seq_printf(m, "%s%s", j ? ", " : "", nidstr);
-		j++;
-	}
-	if (imp->imp_connection)
-		libcfs_nid2str_r(imp->imp_connection->c_peer.nid,
-				 nidstr, sizeof(nidstr));
-	else
-		strncpy(nidstr, "<none>", sizeof(nidstr));
-	seq_printf(m,
-		   " ]\n"
-		   "       current_connection: %s\n"
-		   "       connection_attempts: %u\n"
-		   "       generation: %u\n"
-		   "       in-progress_invalidations: %u\n"
+		seq_puts(m,
+			 " ]\n"
+			 "    connection:\n"
+			 "       failover_nids: [ ");
+		spin_lock(&imp->imp_lock);
+		j = 0;
+		list_for_each_entry(conn, &imp->imp_conn_list, oic_item) {
+			libcfs_nid2str_r(conn->oic_conn->c_peer.nid,
+					 nidstr, sizeof(nidstr));
+			seq_printf(m, "%s%s", j ? ", " : "", nidstr);
+			j++;
+		}
+		if (imp->imp_connection)
+			libcfs_nid2str_r(imp->imp_connection->c_peer.nid,
+					 nidstr, sizeof(nidstr));
+		else
+			strncpy(nidstr, "<none>", sizeof(nidstr));
+		seq_printf(m,
+			   " ]\n"
+			   "       current_connection: %s\n"
+			   "       connection_attempts: %u\n"
+			   "       generation: %u\n"
+			   "       in-progress_invalidations: %u\n"
 		   "       idle: %lld sec\n",
-		   nidstr,
-		   imp->imp_conn_cnt,
-		   imp->imp_generation,
-		   atomic_read(&imp->imp_inval_count),
+			   nidstr,
+			   imp->imp_conn_cnt,
+			   imp->imp_generation,
+			   atomic_read(&imp->imp_inval_count),
 		   ktime_get_real_seconds() - imp->imp_last_reply_time);
-	spin_unlock(&imp->imp_lock);
+		spin_unlock(&imp->imp_lock);
 
-	if (!obd->obd_svc_stats)
-		goto out_climp;
+		if (!obd->obd_svc_stats)
+			goto out_climp;
 
-	header = &obd->obd_svc_stats->ls_cnt_header[PTLRPC_REQWAIT_CNTR];
-	lprocfs_stats_collect(obd->obd_svc_stats, PTLRPC_REQWAIT_CNTR, &ret);
-	if (ret.lc_count != 0) {
-		/* first argument to do_div MUST be u64 */
-		u64 sum = ret.lc_sum;
-
-		do_div(sum, ret.lc_count);
-		ret.lc_sum = sum;
-	} else {
-		ret.lc_sum = 0;
-	}
-	seq_printf(m,
-		   "    rpcs:\n"
-		   "       inflight: %u\n"
-		   "       unregistering: %u\n"
-		   "       timeouts: %u\n"
-		   "       avg_waittime: %llu %s\n",
-		   atomic_read(&imp->imp_inflight),
-		   atomic_read(&imp->imp_unregistering),
-		   atomic_read(&imp->imp_timeouts),
-		   ret.lc_sum, header->lc_units);
-
-	k = 0;
-	for (j = 0; j < IMP_AT_MAX_PORTALS; j++) {
-		if (imp->imp_at.iat_portal[j] == 0)
-			break;
-		k = max_t(unsigned int, k,
-			  at_get(&imp->imp_at.iat_service_estimate[j]));
-	}
-	seq_printf(m,
-		   "    service_estimates:\n"
-		   "       services: %u sec\n"
-		   "       network: %u sec\n",
-		   k,
-		   at_get(&imp->imp_at.iat_net_latency));
-
-	seq_printf(m,
-		   "    transactions:\n"
-		   "       last_replay: %llu\n"
-		   "       peer_committed: %llu\n"
-		   "       last_checked: %llu\n",
-		   imp->imp_last_replay_transno,
-		   imp->imp_peer_committed_transno,
-		   imp->imp_last_transno_checked);
-
-	/* avg data rates */
-	for (rw = 0; rw <= 1; rw++) {
-		lprocfs_stats_collect(obd->obd_svc_stats,
-				      PTLRPC_LAST_CNTR + BRW_READ_BYTES + rw,
-				      &ret);
-		if (ret.lc_sum > 0 && ret.lc_count > 0) {
+		header = &obd->obd_svc_stats->ls_cnt_header[PTLRPC_REQWAIT_CNTR];
+		lprocfs_stats_collect(obd->obd_svc_stats, PTLRPC_REQWAIT_CNTR, &ret);
+		if (ret.lc_count != 0) {
 			/* first argument to do_div MUST be u64 */
 			u64 sum = ret.lc_sum;
 
 			do_div(sum, ret.lc_count);
 			ret.lc_sum = sum;
-			seq_printf(m,
-				   "    %s_data_averages:\n"
-				   "       bytes_per_rpc: %llu\n",
-				   rw ? "write" : "read",
-				   ret.lc_sum);
+		} else {
+			ret.lc_sum = 0;
 		}
-		k = (int)ret.lc_sum;
-		j = opcode_offset(OST_READ + rw) + EXTRA_MAX_OPCODES;
-		header = &obd->obd_svc_stats->ls_cnt_header[j];
-		lprocfs_stats_collect(obd->obd_svc_stats, j, &ret);
-		if (ret.lc_sum > 0 && ret.lc_count != 0) {
-			/* first argument to do_div MUST be u64 */
-			u64 sum = ret.lc_sum;
+		seq_printf(m,
+			   "    rpcs:\n"
+			   "       inflight: %u\n"
+			   "       unregistering: %u\n"
+			   "       timeouts: %u\n"
+			   "       avg_waittime: %llu %s\n",
+			   atomic_read(&imp->imp_inflight),
+			   atomic_read(&imp->imp_unregistering),
+			   atomic_read(&imp->imp_timeouts),
+			   ret.lc_sum, header->lc_units);
 
-			do_div(sum, ret.lc_count);
-			ret.lc_sum = sum;
-			seq_printf(m,
-				   "       %s_per_rpc: %llu\n",
-				   header->lc_units, ret.lc_sum);
-			j = (int)ret.lc_sum;
-			if (j > 0)
+		k = 0;
+		for (j = 0; j < IMP_AT_MAX_PORTALS; j++) {
+			if (imp->imp_at.iat_portal[j] == 0)
+				break;
+			k = max_t(unsigned int, k,
+				  at_get(&imp->imp_at.iat_service_estimate[j]));
+		}
+		seq_printf(m,
+			   "    service_estimates:\n"
+			   "       services: %u sec\n"
+			   "       network: %u sec\n",
+			   k,
+			   at_get(&imp->imp_at.iat_net_latency));
+
+		seq_printf(m,
+			   "    transactions:\n"
+			   "       last_replay: %llu\n"
+			   "       peer_committed: %llu\n"
+			   "       last_checked: %llu\n",
+			   imp->imp_last_replay_transno,
+			   imp->imp_peer_committed_transno,
+			   imp->imp_last_transno_checked);
+
+		/* avg data rates */
+		for (rw = 0; rw <= 1; rw++) {
+			lprocfs_stats_collect(obd->obd_svc_stats,
+					      PTLRPC_LAST_CNTR + BRW_READ_BYTES + rw,
+					      &ret);
+			if (ret.lc_sum > 0 && ret.lc_count > 0) {
+				/* first argument to do_div MUST be u64 */
+				u64 sum = ret.lc_sum;
+
+				do_div(sum, ret.lc_count);
+				ret.lc_sum = sum;
 				seq_printf(m,
-					   "       MB_per_sec: %u.%.02u\n",
-					   k / j, (100 * k / j) % 100);
+					   "    %s_data_averages:\n"
+					   "       bytes_per_rpc: %llu\n",
+					   rw ? "write" : "read",
+					   ret.lc_sum);
+			}
+			k = (int)ret.lc_sum;
+			j = opcode_offset(OST_READ + rw) + EXTRA_MAX_OPCODES;
+			header = &obd->obd_svc_stats->ls_cnt_header[j];
+			lprocfs_stats_collect(obd->obd_svc_stats, j, &ret);
+			if (ret.lc_sum > 0 && ret.lc_count != 0) {
+				/* first argument to do_div MUST be u64 */
+				u64 sum = ret.lc_sum;
+
+				do_div(sum, ret.lc_count);
+				ret.lc_sum = sum;
+				seq_printf(m,
+					   "       %s_per_rpc: %llu\n",
+					   header->lc_units, ret.lc_sum);
+				j = (int)ret.lc_sum;
+				if (j > 0)
+					seq_printf(m,
+						   "       MB_per_sec: %u.%.02u\n",
+						   k / j, (100 * k / j) % 100);
+			}
 		}
+
+	out_climp:
+		;
 	}
 
-out_climp:
-	up_read(&obd->u.cli.cl_sem);
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL(lprocfs_rd_import);
 
@@ -912,27 +901,24 @@ int lprocfs_rd_state(struct seq_file *m, void *data)
 	int j, k, rc;
 
 	LASSERT(obd);
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, obd, imp) {
+		seq_printf(m, "current_state: %s\n",
+			   ptlrpc_import_state_name(imp->imp_state));
+		seq_puts(m, "state_history:\n");
+		k = imp->imp_state_hist_idx;
+		for (j = 0; j < IMP_STATE_HIST_LEN; j++) {
+			struct import_state_hist *ish =
+				&imp->imp_state_hist[(k + j) %
+						     IMP_STATE_HIST_LEN];
+			if (ish->ish_state == 0)
+				continue;
+			seq_printf(m, " - [ %lld, %s ]\n", (s64)ish->ish_time,
+				   ptlrpc_import_state_name(ish->ish_state));
+		}
 
-	imp = obd->u.cli.cl_import;
-
-	seq_printf(m, "current_state: %s\n",
-		   ptlrpc_import_state_name(imp->imp_state));
-	seq_puts(m, "state_history:\n");
-	k = imp->imp_state_hist_idx;
-	for (j = 0; j < IMP_STATE_HIST_LEN; j++) {
-		struct import_state_hist *ish =
-			&imp->imp_state_hist[(k + j) % IMP_STATE_HIST_LEN];
-		if (ish->ish_state == 0)
-			continue;
-		seq_printf(m, " - [ %lld, %s ]\n", (s64)ish->ish_time,
-			   ptlrpc_import_state_name(ish->ish_state));
 	}
 
-	up_read(&obd->u.cli.cl_sem);
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL(lprocfs_rd_state);
 
@@ -957,61 +943,59 @@ int lprocfs_rd_timeouts(struct seq_file *m, void *data)
 	int i, rc;
 
 	LASSERT(obd);
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, obd, imp) {
+		now = ktime_get_real_seconds();
 
-	imp = obd->u.cli.cl_import;
+		/* Some network health info for kicks */
+		seq_printf(m, "%-10s : %lld, %llds ago\n",
+			   "last reply", (s64)imp->imp_last_reply_time,
+			   (s64)(now - imp->imp_last_reply_time));
 
-	now = ktime_get_real_seconds();
-
-	/* Some network health info for kicks */
-	seq_printf(m, "%-10s : %lld, %llds ago\n",
-		   "last reply", (s64)imp->imp_last_reply_time,
-		   (s64)(now - imp->imp_last_reply_time));
-
-	cur = at_get(&imp->imp_at.iat_net_latency);
-	worst = imp->imp_at.iat_net_latency.at_worst_ever;
-	worstt = imp->imp_at.iat_net_latency.at_worst_time;
-	seq_printf(m, "%-10s : cur %3u  worst %3u (at %lld, %llds ago) ",
-		   "network", cur, worst, (s64)worstt, (s64)(now - worstt));
-	lprocfs_at_hist_helper(m, &imp->imp_at.iat_net_latency);
-
-	for (i = 0; i < IMP_AT_MAX_PORTALS; i++) {
-		if (imp->imp_at.iat_portal[i] == 0)
-			break;
-		cur = at_get(&imp->imp_at.iat_service_estimate[i]);
-		worst = imp->imp_at.iat_service_estimate[i].at_worst_ever;
-		worstt = imp->imp_at.iat_service_estimate[i].at_worst_time;
-		seq_printf(m, "portal %-2d  : cur %3u  worst %3u (at %lld, %llds ago) ",
-			   imp->imp_at.iat_portal[i], cur, worst, (s64)worstt,
+		cur = at_get(&imp->imp_at.iat_net_latency);
+		worst = imp->imp_at.iat_net_latency.at_worst_ever;
+		worstt = imp->imp_at.iat_net_latency.at_worst_time;
+		seq_printf(m, "%-10s : cur %3u  worst %3u (at %lld, %llds ago) ",
+			   "network", cur, worst, (s64)worstt,
 			   (s64)(now - worstt));
-		lprocfs_at_hist_helper(m, &imp->imp_at.iat_service_estimate[i]);
+		lprocfs_at_hist_helper(m, &imp->imp_at.iat_net_latency);
+
+		for (i = 0; i < IMP_AT_MAX_PORTALS; i++) {
+			if (imp->imp_at.iat_portal[i] == 0)
+				break;
+			cur = at_get(&imp->imp_at.iat_service_estimate[i]);
+			worst = imp->imp_at.iat_service_estimate[i]
+				.at_worst_ever;
+			worstt = imp->imp_at.iat_service_estimate[i]
+				.at_worst_time;
+			seq_printf(m, "portal %-2d  : cur %3u  worst %3u (at %lld, %llds ago) ",
+				   imp->imp_at.iat_portal[i], cur, worst,
+				   (s64)worstt, (s64)(now - worstt));
+			lprocfs_at_hist_helper(m, &imp->imp_at.iat_service_estimate[i]);
+		}
+
 	}
 
-	up_read(&obd->u.cli.cl_sem);
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL(lprocfs_rd_timeouts);
 
 int lprocfs_rd_connect_flags(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = data;
+	struct obd_import *imp;
 	u64 flags, flags2;
 	int rc;
 
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, obd, imp) {
+		flags = imp->imp_connect_data.ocd_connect_flags;
+		flags2 = imp->imp_connect_data.ocd_connect_flags2;
+		seq_printf(m, "flags=%#llx\n", flags);
+		seq_printf(m, "flags2=%#llx\n", flags2);
+		obd_connect_seq_flags2str(m, flags, flags2, "\n");
+		seq_puts(m, "\n");
+	}
 
-	flags = obd->u.cli.cl_import->imp_connect_data.ocd_connect_flags;
-	flags2 = obd->u.cli.cl_import->imp_connect_data.ocd_connect_flags2;
-	seq_printf(m, "flags=%#llx\n", flags);
-	seq_printf(m, "flags2=%#llx\n", flags2);
-	obd_connect_seq_flags2str(m, flags, flags2, "\n");
-	seq_puts(m, "\n");
-	up_read(&obd->u.cli.cl_sem);
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL(lprocfs_rd_connect_flags);
 
@@ -1851,6 +1835,7 @@ ssize_t max_pages_per_rpc_store(struct kobject *kobj, struct attribute *attr,
 	struct obd_device *dev = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct client_obd *cli = &dev->u.cli;
+	struct obd_import *imp;
 	struct obd_connect_data *ocd;
 	unsigned long long val;
 	int chunk_mask;
@@ -1865,27 +1850,24 @@ ssize_t max_pages_per_rpc_store(struct kobject *kobj, struct attribute *attr,
 	if (val >= ONE_MB_BRW_SIZE)
 		val >>= PAGE_SHIFT;
 
-	rc = lprocfs_climp_check(dev);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, dev, imp) {
+		ocd = &imp->imp_connect_data;
+		chunk_mask = ~((1 << (cli->cl_chunkbits - PAGE_SHIFT)) - 1);
+		/* max_pages_per_rpc must be chunk aligned */
+		val = (val + ~chunk_mask) & chunk_mask;
+		if (!val || (ocd->ocd_brw_size &&
+			     val > ocd->ocd_brw_size >> PAGE_SHIFT)) {
+			up_read(&dev->u.cli.cl_sem);
+			return -ERANGE;
+		}
 
-	ocd = &cli->cl_import->imp_connect_data;
-	chunk_mask = ~((1 << (cli->cl_chunkbits - PAGE_SHIFT)) - 1);
-	/* max_pages_per_rpc must be chunk aligned */
-	val = (val + ~chunk_mask) & chunk_mask;
-	if (!val || (ocd->ocd_brw_size &&
-		     val > ocd->ocd_brw_size >> PAGE_SHIFT)) {
-		up_read(&dev->u.cli.cl_sem);
-		return -ERANGE;
+		spin_lock(&cli->cl_loi_list_lock);
+		cli->cl_max_pages_per_rpc = val;
+		client_adjust_max_dirty(cli);
+		spin_unlock(&cli->cl_loi_list_lock);
 	}
 
-	spin_lock(&cli->cl_loi_list_lock);
-	cli->cl_max_pages_per_rpc = val;
-	client_adjust_max_dirty(cli);
-	spin_unlock(&cli->cl_loi_list_lock);
-
-	up_read(&dev->u.cli.cl_sem);
-	return count;
+	return rc ?: count;
 }
 EXPORT_SYMBOL(max_pages_per_rpc_store);
 
@@ -1913,12 +1895,9 @@ ssize_t short_io_bytes_store(struct kobject *kobj, struct attribute *attr,
 	struct obd_device *dev = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct client_obd *cli = &dev->u.cli;
+	struct obd_import *imp;
 	u32 val;
 	int rc;
-
-	rc = lprocfs_climp_check(dev);
-	if (rc)
-		return rc;
 
 	rc = kstrtouint(buffer, 0, &val);
 	if (rc)
@@ -1931,15 +1910,16 @@ ssize_t short_io_bytes_store(struct kobject *kobj, struct attribute *attr,
 
 	rc = count;
 
-	spin_lock(&cli->cl_loi_list_lock);
-	if (val > (cli->cl_max_pages_per_rpc << PAGE_SHIFT))
-		rc = -ERANGE;
-	else
-		cli->cl_short_io_bytes = val;
-	spin_unlock(&cli->cl_loi_list_lock);
+	with_obd_cl_sem(rc, dev, imp) {
+		spin_lock(&cli->cl_loi_list_lock);
+		if (val > (cli->cl_max_pages_per_rpc << PAGE_SHIFT))
+			rc = -ERANGE;
+		else
+			cli->cl_short_io_bytes = val;
+		spin_unlock(&cli->cl_loi_list_lock);
 
+	}
 out:
-	up_read(&dev->u.cli.cl_sem);
 	return rc;
 }
 EXPORT_SYMBOL(short_io_bytes_store);
