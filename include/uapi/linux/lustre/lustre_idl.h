@@ -2118,6 +2118,7 @@ static inline bool ldlm_extent_equal(const struct ldlm_extent *ex1,
 
 struct ldlm_inodebits {
 	__u64 bits;
+	__u64 cancel_bits; /* for lock convert */
 };
 
 struct ldlm_flock_wire {
