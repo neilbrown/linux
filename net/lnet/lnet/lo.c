@@ -51,18 +51,11 @@ lolnd_recv(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg,
 	struct lnet_msg *sendmsg = private;
 
 	if (lntmsg) {		/* not discarding */
-		if (sendmsg->msg_iov)
-			lnet_copy_iov2iter(to,
-					   sendmsg->msg_niov,
-					   sendmsg->msg_iov,
-					   sendmsg->msg_offset,
-					   iov_iter_count(to));
-		else
-			lnet_copy_kiov2iter(to,
-					    sendmsg->msg_niov,
-					    sendmsg->msg_kiov,
-					    sendmsg->msg_offset,
-					    iov_iter_count(to));
+		lnet_copy_kiov2iter(to,
+				    sendmsg->msg_niov,
+				    sendmsg->msg_kiov,
+				    sendmsg->msg_offset,
+				    iov_iter_count(to));
 
 		lnet_finalize(lntmsg, 0);
 	}
