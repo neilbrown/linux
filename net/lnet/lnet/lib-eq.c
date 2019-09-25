@@ -137,11 +137,3 @@ out:
 	return rc;
 }
 EXPORT_SYMBOL(LNetEQFree);
-
-void
-lnet_eq_enqueue_event(struct lnet_eq *eq, struct lnet_event *ev)
-{
-	/* MUST called with resource lock hold but w/o lnet_eq_wait_lock */
-	LASSERT(eq->eq_callback != LNET_EQ_HANDLER_NONE);
-	eq->eq_callback(ev);
-}

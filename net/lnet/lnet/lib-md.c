@@ -73,13 +73,6 @@ lnet_md_unlink(struct lnet_libmd *md)
 
 	CDEBUG(D_NET, "Unlinking md %p\n", md);
 
-	if (md->md_eq) {
-		int cpt = lnet_cpt_of_cookie(md->md_lh.lh_cookie);
-
-		LASSERT(*md->md_eq->eq_refs[cpt] > 0);
-		(*md->md_eq->eq_refs[cpt])--;
-	}
-
 	LASSERT(!list_empty(&md->md_list));
 	list_del_init(&md->md_list);
 	lnet_md_free(md);
@@ -250,11 +243,8 @@ lnet_md_link(struct lnet_libmd *md, struct lnet_eq *eq, int cpt)
 	 * maybe there we shouldn't even allow LNET_EQ_NONE!)
 	 * LASSERT(!eq);
 	 */
-	if (eq) {
-		md->md_eq = eq;
-
-		(*md->md_eq->eq_refs[cpt])++;
-	}
+	if (eq)
+		md->md_eq = eq->eq_callback;
 
 	lnet_res_lh_initialize(container, &md->md_lh);
 
@@ -489,7 +479,7 @@ LNetMDUnlink(struct lnet_handle_md mdh)
 	 */
 	if (md->md_eq && !md->md_refcount) {
 		lnet_build_unlink_event(md, &ev);
-		lnet_eq_enqueue_event(md->md_eq, &ev);
+		md->md_eq(&ev);
 	}
 
 	lnet_md_unlink(md);
