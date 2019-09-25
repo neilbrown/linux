@@ -467,15 +467,6 @@ static const struct req_msg_field *ldlm_intent_open_client[] = {
 	&RMF_FILE_SECCTX
 };
 
-static const struct req_msg_field *ldlm_intent_unlink_client[] = {
-	&RMF_PTLRPC_BODY,
-	&RMF_DLM_REQ,
-	&RMF_LDLM_INTENT,
-	&RMF_REC_REINT,    /* coincides with mds_reint_unlink_client[] */
-	&RMF_CAPA1,
-	&RMF_NAME
-};
-
 static const struct req_msg_field *ldlm_intent_getxattr_client[] = {
 	&RMF_PTLRPC_BODY,
 	&RMF_DLM_REQ,
@@ -766,7 +757,6 @@ static struct req_format *req_formats[] = {
 	&RQF_LDLM_INTENT_GETATTR,
 	&RQF_LDLM_INTENT_OPEN,
 	&RQF_LDLM_INTENT_CREATE,
-	&RQF_LDLM_INTENT_UNLINK,
 	&RQF_LDLM_INTENT_GETXATTR,
 	&RQF_LOG_CANCEL,
 	&RQF_LLOG_ORIGIN_HANDLE_CREATE,
@@ -1447,11 +1437,6 @@ struct req_format RQF_LDLM_INTENT_CREATE =
 	DEFINE_REQ_FMT0("LDLM_INTENT_CREATE",
 			ldlm_intent_create_client, ldlm_intent_getattr_server);
 EXPORT_SYMBOL(RQF_LDLM_INTENT_CREATE);
-
-struct req_format RQF_LDLM_INTENT_UNLINK =
-	DEFINE_REQ_FMT0("LDLM_INTENT_UNLINK",
-			ldlm_intent_unlink_client, ldlm_intent_server);
-EXPORT_SYMBOL(RQF_LDLM_INTENT_UNLINK);
 
 struct req_format RQF_LDLM_INTENT_GETXATTR =
 	DEFINE_REQ_FMT0("LDLM_INTENT_GETXATTR",
