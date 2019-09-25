@@ -74,7 +74,7 @@ ksocknal_create_route(u32 ipaddr, int port)
 
 	atomic_set(&route->ksnr_refcount, 1);
 	route->ksnr_peer = NULL;
-	route->ksnr_retry_interval = 0;	 /* OK to connect at any time */
+	route->ksnr_retry_interval = 0;		/* OK to connect at any time */
 	route->ksnr_ipaddr = ipaddr;
 	route->ksnr_port = port;
 	route->ksnr_scheduled = 0;
@@ -427,7 +427,7 @@ ksocknal_del_route_locked(struct ksock_route *route)
 
 	route->ksnr_deleted = 1;
 	list_del(&route->ksnr_list);
-	ksocknal_route_decref(route);	     /* drop peer_ni's ref */
+	ksocknal_route_decref(route);		/* drop peer_ni's ref */
 
 	if (list_empty(&peer_ni->ksnp_routes) &&
 	    list_empty(&peer_ni->ksnp_conns)) {
@@ -601,7 +601,7 @@ ksocknal_del_peer(struct lnet_ni *ni, struct lnet_process_id id, u32 ip)
 
 			ksocknal_peer_decref(peer_ni);     /* ...till here */
 
-			rc = 0;		 /* matched! */
+			rc = 0;		/* matched! */
 		}
 	}
 
@@ -974,7 +974,7 @@ ksocknal_accept(struct lnet_ni *ni, struct socket *sock)
 	int peer_port;
 
 	rc = lnet_sock_getaddr(sock, 1, &peer_ip, &peer_port);
-	LASSERT(!rc);		      /* we succeeded before */
+	LASSERT(!rc);			/* we succeeded before */
 
 	cr = kzalloc(sizeof(*cr), GFP_NOFS);
 	if (!cr) {
@@ -2563,7 +2563,7 @@ ksocknal_shutdown(struct lnet_ni *ni)
 	LASSERT(ksocknal_data.ksnd_nnets > 0);
 
 	spin_lock_bh(&net->ksnn_lock);
-	net->ksnn_shutdown = 1;		 /* prevent new peers */
+	net->ksnn_shutdown = 1;		/* prevent new peers */
 	spin_unlock_bh(&net->ksnn_lock);
 
 	/* Delete all peers */

@@ -101,13 +101,13 @@ do {					\
 #define sfw_batch_active(b)	(atomic_read(&(b)->bat_nactive))
 
 static struct smoketest_framework {
-	struct list_head  fw_zombie_rpcs;     /* RPCs to be recycled */
-	struct list_head  fw_zombie_sessions; /* stopping sessions */
-	struct list_head  fw_tests;	      /* registered test cases */
-	atomic_t	  fw_nzombies;	      /* # zombie sessions */
-	spinlock_t	  fw_lock;	      /* serialise */
-	struct sfw_session	  *fw_session;	      /* _the_ session */
-	int		  fw_shuttingdown;    /* shutdown in progress */
+	struct list_head  fw_zombie_rpcs;	/* RPCs to be recycled */
+	struct list_head  fw_zombie_sessions;	/* stopping sessions */
+	struct list_head  fw_tests;		/* registered test cases */
+	atomic_t	  fw_nzombies;		/* # zombie sessions */
+	spinlock_t	  fw_lock;		/* serialise */
+	struct sfw_session *fw_session;		/* _the_ session */
+	int		  fw_shuttingdown;	/* shutdown in progress */
 	struct srpc_server_rpc *fw_active_srpc;/* running RPC */
 } sfw_data;
 

@@ -702,7 +702,7 @@ char *lustre_msg_string(struct lustre_msg *m, u32 index, u32 max_len)
 
 	slen = strnlen(str, blen);
 
-	if (slen == blen) {		     /* not NULL terminated */
+	if (slen == blen) {		/* not NULL terminated */
 		CERROR("can't unpack non-NULL terminated string in msg %p buffer[%d] len %d\n",
 		       m, index, blen);
 		return NULL;

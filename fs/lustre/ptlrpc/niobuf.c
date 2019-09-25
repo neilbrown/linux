@@ -171,7 +171,7 @@ static int ptlrpc_register_bulk(struct ptlrpc_request *req)
 	desc->bd_md_count = total_md;
 	md.user_ptr = &desc->bd_cbid;
 	md.eq_handle = ptlrpc_eq_h;
-	md.threshold = 1;		       /* PUT or GET */
+	md.threshold = 1;		/* PUT or GET */
 
 	for (posted_md = 0; posted_md < total_md; posted_md++, mbits++) {
 		md.options = PTLRPC_MD_OPTIONS |
@@ -416,7 +416,7 @@ int ptlrpc_send_reply(struct ptlrpc_request *req, int flags)
 		CERROR("not replying on NULL connection\n"); /* bug 9635 */
 		return -ENOTCONN;
 	}
-	ptlrpc_rs_addref(rs);		   /* +1 ref for the network */
+	ptlrpc_rs_addref(rs);		/* +1 ref for the network */
 
 	rc = sptlrpc_svc_wrap_reply(req);
 	if (unlikely(rc))

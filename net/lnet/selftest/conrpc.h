@@ -74,14 +74,14 @@ struct lstcon_rpc {
 };
 
 struct lstcon_rpc_trans {
-	struct list_head  tas_olink;	     /* link chain on owner list */
-	struct list_head  tas_link;	     /* link chain on global list */
-	int		  tas_opc;	     /* operation code of transaction */
-	unsigned int	  tas_feats_updated; /* features mask is uptodate */
-	unsigned int	  tas_features;      /* test features mask */
-	wait_queue_head_t tas_waitq;	     /* wait queue head */
-	atomic_t	  tas_remaining;     /* # of un-scheduled rpcs */
-	struct list_head  tas_rpcs_list;     /* queued requests */
+	struct list_head  tas_olink;		/* link chain on owner list */
+	struct list_head  tas_link;		/* link chain on global list */
+	int		  tas_opc;		/* operation code of transaction */
+	unsigned int	  tas_feats_updated;	/* features mask is uptodate */
+	unsigned int	  tas_features;		/* test features mask */
+	wait_queue_head_t tas_waitq;		/* wait queue head */
+	atomic_t	  tas_remaining;	/* # of un-scheduled rpcs */
+	struct list_head  tas_rpcs_list;	/* queued requests */
 };
 
 #define LST_TRANS_PRIVATE	0x1000

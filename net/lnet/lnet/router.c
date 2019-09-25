@@ -117,10 +117,10 @@ lnet_notify_locked(struct lnet_peer_ni *lp, int notifylnd, int alive,
 	spin_lock(&lp->lpni_lock);
 
 	lp->lpni_timestamp = when;		/* update timestamp */
-	lp->lpni_ping_deadline = 0;	       /* disable ping timeout */
+	lp->lpni_ping_deadline = 0;		/* disable ping timeout */
 
-	if (lp->lpni_alive_count &&	  /* got old news */
-	    (!lp->lpni_alive) == (!alive)) {      /* new date for old news */
+	if (lp->lpni_alive_count &&		/* got old news */
+	    (!lp->lpni_alive) == (!alive)) {	/* new date for old news */
 		spin_unlock(&lp->lpni_lock);
 		CDEBUG(D_NET, "Old news\n");
 		return;
@@ -337,7 +337,7 @@ lnet_add_route(u32 net, u32 hops, lnet_nid_t gateway,
 	    (hops != LNET_UNDEFINED_HOPS && (hops < 1 || hops > 255)))
 		return -EINVAL;
 
-	if (lnet_islocalnet(net))	       /* it's a local network */
+	if (lnet_islocalnet(net))	/* it's a local network */
 		return -EEXIST;
 
 	/* Assume net, route, all new */

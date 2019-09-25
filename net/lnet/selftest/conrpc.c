@@ -294,7 +294,7 @@ lstcon_rpc_trans_abort(struct lstcon_rpc_trans *trans, int error)
 		spin_lock(&rpc->crpc_lock);
 
 		if (!crpc->crp_posted || /* not posted */
-		    crpc->crp_stamp_ns) {	 /* rpc done or aborted already */
+		    crpc->crp_stamp_ns) {	/* rpc done or aborted already */
 			if (!crpc->crp_stamp_ns) {
 				crpc->crp_stamp_ns = ktime_get_ns();
 				crpc->crp_status = -EINTR;

@@ -213,29 +213,29 @@ struct srpc_test_reply {
 
 /* TEST RPCs */
 struct srpc_ping_reqst {
-	u64		   pnr_rpyid;
-	u32		   pnr_magic;
-	u32		   pnr_seq;
-	u64		   pnr_time_sec;
-	u64		   pnr_time_usec;
+	u64	pnr_rpyid;
+	u32	pnr_magic;
+	u32	pnr_seq;
+	u64	pnr_time_sec;
+	u64	pnr_time_usec;
 } __packed;
 
 struct srpc_ping_reply {
-	u32		   pnr_status;
-	u32		   pnr_magic;
-	u32		   pnr_seq;
+	u32	pnr_status;
+	u32	pnr_magic;
+	u32	pnr_seq;
 } __packed;
 
 struct srpc_brw_reqst {
-	u64		   brw_rpyid;	   /* reply buffer matchbits */
-	u64		   brw_bulkid;	   /* bulk buffer matchbits */
-	u32		   brw_rw;	   /* read or write */
-	u32		   brw_len;	   /* bulk data len */
-	u32		   brw_flags;	   /* bulk data patterns */
+	u64	brw_rpyid;	/* reply buffer matchbits */
+	u64	brw_bulkid;	/* bulk buffer matchbits */
+	u32	brw_rw;		/* read or write */
+	u32	brw_len;	/* bulk data len */
+	u32	brw_flags;	/* bulk data patterns */
 } __packed; /* bulk r/w request */
 
 struct srpc_brw_reply {
-	u32		   brw_status;
+	u32	brw_status;
 } __packed; /* bulk r/w reply */
 
 #define SRPC_MSG_MAGIC		0xeeb0f00d

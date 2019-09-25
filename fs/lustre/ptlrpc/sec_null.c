@@ -409,7 +409,7 @@ static void null_init_internal(void)
 	static HLIST_HEAD(__list);
 
 	null_sec.ps_policy = &null_policy;
-	atomic_set(&null_sec.ps_refcount, 1);     /* always busy */
+	atomic_set(&null_sec.ps_refcount, 1);	/* always busy */
 	null_sec.ps_id = -1;
 	null_sec.ps_import = NULL;
 	null_sec.ps_flvr.sf_rpc = SPTLRPC_FLVR_NULL;
@@ -417,7 +417,7 @@ static void null_init_internal(void)
 	null_sec.ps_part = LUSTRE_SP_ANY;
 	null_sec.ps_dying = 0;
 	spin_lock_init(&null_sec.ps_lock);
-	atomic_set(&null_sec.ps_nctx, 1);	 /* for "null_cli_ctx" */
+	atomic_set(&null_sec.ps_nctx, 1);	/* for "null_cli_ctx" */
 	INIT_LIST_HEAD(&null_sec.ps_gc_list);
 	null_sec.ps_gc_interval = 0;
 	null_sec.ps_gc_next = 0;

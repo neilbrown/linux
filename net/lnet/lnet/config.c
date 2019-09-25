@@ -1142,7 +1142,7 @@ lnet_parse_route(char *str, int *im_a_router)
 			tmp2 = &nets;		/* expanding nets */
 		} else if (ntokens == 2 &&
 			   lnet_parse_hops(token, &hops)) {
-			got_hops = 1;	   /* got a hop count */
+			got_hops = 1;		/* got a hop count */
 			continue;
 		} else {
 			tmp2 = &gateways;	/* expanding gateways */
@@ -1347,7 +1347,7 @@ lnet_match_network_tokens(char *net_entry, u32 *ipaddrs, int nip)
 	if (!matched)
 		return 0;
 
-	strcpy(net_entry, net);		 /* replace with matched net */
+	strcpy(net_entry, net);		/* replace with matched net */
 	return 1;
 }
 
@@ -1491,7 +1491,7 @@ lnet_match_networks(char **networksp, char *ip2nets, u32 *ipaddrs, int nip)
 
 		list_del(&tb->ltb_list);
 
-		if (!rc) {		  /* no match */
+		if (!rc) {		/* no match */
 			lnet_free_text_buf(tb);
 			continue;
 		}

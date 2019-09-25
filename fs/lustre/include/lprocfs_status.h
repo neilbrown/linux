@@ -216,7 +216,7 @@ struct lprocfs_stats {
 static inline int opcode_offset(u32 opc)
 {
 	if (opc < OST_LAST_OPC) {
-		 /* OST opcode */
+		/* OST opcode */
 		return (opc - OST_FIRST_OPC);
 	} else if (opc < MDS_LAST_OPC) {
 		/* MDS opcode */

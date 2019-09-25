@@ -76,10 +76,10 @@ static unsigned int plain_at_offset;
 #define PLAIN_FL_BULK		(0x02)
 
 struct plain_header {
-	u8	    ph_ver;	    /* 0 */
+	u8	    ph_ver;		/* 0 */
 	u8	    ph_flags;
-	u8	    ph_sp;	     /* source */
-	u8	    ph_bulk_hash_alg;  /* complete flavor desc */
+	u8	    ph_sp;		/* source */
+	u8	    ph_bulk_hash_alg;	/* complete flavor desc */
 	u8	    ph_pad[4];
 };
 

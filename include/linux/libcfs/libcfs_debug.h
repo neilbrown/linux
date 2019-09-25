@@ -100,8 +100,8 @@ do {									\
 # define DEBUG_SUBSYSTEM S_UNDEFINED
 #endif
 
-#define CDEBUG_DEFAULT_MAX_DELAY (600 * HZ)	 /* jiffies */
-#define CDEBUG_DEFAULT_MIN_DELAY ((HZ + 1) / 2) /* jiffies */
+#define CDEBUG_DEFAULT_MAX_DELAY (600 * HZ)	/* jiffies */
+#define CDEBUG_DEFAULT_MIN_DELAY ((HZ + 1) / 2)	/* jiffies */
 #define CDEBUG_DEFAULT_BACKOFF   2
 struct cfs_debug_limit_state {
 	unsigned long			cdls_next;

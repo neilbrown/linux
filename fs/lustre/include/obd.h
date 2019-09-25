@@ -534,16 +534,16 @@ struct obd_device {
 	char			 obd_name[MAX_OBD_NAME];
 
 	/* bitfield modification is protected by obd_dev_lock */
-	unsigned long obd_attached:1,	  /* finished attach */
-		      obd_set_up:1,	  /* finished setup */
-		      obd_no_recov:1,	  /* fail instead of retry messages */
-		      obd_stopping:1,	  /* started cleanup */
-		      obd_starting:1,	  /* started setup */
-		      obd_force:1,	  /* cleanup with > 0 obd refcount */
-		      obd_fail:1,	  /* cleanup with failover */
-		      obd_inactive:1,	  /* device active/inactive
-					   * (for sysfs status only!!)
-					   */
+	unsigned long obd_attached:1,	/* finished attach */
+		      obd_set_up:1,	/* finished setup */
+		      obd_no_recov:1,	/* fail instead of retry messages */
+		      obd_stopping:1,	/* started cleanup */
+		      obd_starting:1,	/* started setup */
+		      obd_force:1,	/* cleanup with > 0 obd refcount */
+		      obd_fail:1,	/* cleanup with failover */
+		      obd_inactive:1,	/* device active/inactive
+					 * (for sysfs status only!!)
+					 */
 		      obd_process_conf:1;/* device is processing mgs config */
 
 	/* uuid-export hash body */

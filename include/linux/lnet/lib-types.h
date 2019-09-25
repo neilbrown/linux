@@ -57,7 +57,7 @@ struct lnet_libmd;
 
 struct lnet_msg {
 	struct list_head	msg_activelist;
-	struct list_head	msg_list;	   /* Q for credits/MD */
+	struct list_head	msg_list;	/* Q for credits/MD */
 
 	struct lnet_process_id	msg_target;
 	/* Primary NID of the source. */
@@ -101,8 +101,8 @@ struct lnet_msg {
 	unsigned int		msg_onactivelist:1;	/* on the activelist */
 	unsigned int		msg_rdma_get:1;
 
-	struct lnet_peer_ni	*msg_txpeer;	 /* peer I'm sending to */
-	struct lnet_peer_ni	*msg_rxpeer;	 /* peer I received from */
+	struct lnet_peer_ni	*msg_txpeer;		/* peer I'm sending to */
+	struct lnet_peer_ni	*msg_rxpeer;		/* peer I received from */
 
 	void			*msg_private;
 	struct lnet_libmd	*msg_md;
@@ -466,7 +466,7 @@ struct lnet_peer_ni {
 	unsigned int		 lpni_ping_notsent;
 	/* # times router went dead<->alive */
 	int			 lpni_alive_count;
-	 /* ytes queued for sending */
+	/* ytes queued for sending */
 	long			 lpni_txqnob;
 	/* time of last aliveness news */
 	time64_t		 lpni_timestamp;

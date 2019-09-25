@@ -513,7 +513,7 @@ static int kiblnd_del_peer(struct lnet_ni *ni, lnet_nid_t nid)
 			}
 
 			kiblnd_del_peer_locked(peer_ni);
-			rc = 0;	 /* matched something */
+			rc = 0;		/* matched something */
 		}
 	}
 
@@ -730,8 +730,8 @@ struct kib_conn *kiblnd_create_conn(struct kib_peer_ni *peer_ni,
 
 	conn->ibc_state = IBLND_CONN_INIT;
 	conn->ibc_version = version;
-	conn->ibc_peer = peer_ni;		  /* I take the caller's ref */
-	cmid->context = conn;		   /* for future CM callbacks */
+	conn->ibc_peer = peer_ni;		/* I take the caller's ref */
+	cmid->context = conn;			/* for future CM callbacks */
 	conn->ibc_cmid = cmid;
 	conn->ibc_max_frags = peer_ni->ibp_max_frags;
 	conn->ibc_queue_depth = peer_ni->ibp_queue_depth;

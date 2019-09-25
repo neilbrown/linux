@@ -48,7 +48,7 @@ lolnd_recv(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg,
 {
 	struct lnet_msg *sendmsg = private;
 
-	if (lntmsg) {		   /* not discarding */
+	if (lntmsg) {		/* not discarding */
 		lnet_copy_kiov2iter(to,
 				    sendmsg->msg_niov,
 				    sendmsg->msg_kiov,

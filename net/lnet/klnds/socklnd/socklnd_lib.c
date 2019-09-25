@@ -373,7 +373,7 @@ ksocknal_lib_push_conn(struct ksock_conn *conn)
 	int rc;
 
 	rc = ksocknal_connsock_addref(conn);
-	if (rc)			    /* being shut down */
+	if (rc)			/* being shut down */
 		return;
 
 	sk = conn->ksnc_sock->sk;
@@ -408,7 +408,7 @@ ksocknal_data_ready(struct sock *sk)
 	read_lock(&ksocknal_data.ksnd_global_lock);
 
 	conn = sk->sk_user_data;
-	if (!conn) {	     /* raced with ksocknal_terminate_conn */
+	if (!conn) {		/* raced with ksocknal_terminate_conn */
 		LASSERT(sk->sk_data_ready != &ksocknal_data_ready);
 		sk->sk_data_ready(sk);
 	} else {
@@ -442,7 +442,7 @@ ksocknal_write_space(struct sock *sk)
 	       !conn ? "" : (list_empty(&conn->ksnc_tx_queue) ?
 				      " empty" : " queued"));
 
-	if (!conn) {	     /* raced with ksocknal_terminate_conn */
+	if (!conn) {		/* raced with ksocknal_terminate_conn */
 		LASSERT(sk->sk_write_space != &ksocknal_write_space);
 		sk->sk_write_space(sk);
 
@@ -450,7 +450,7 @@ ksocknal_write_space(struct sock *sk)
 		return;
 	}
 
-	if (wspace >= min_wpace) {	      /* got enough space */
+	if (wspace >= min_wpace) {		/* got enough space */
 		ksocknal_write_callback(conn);
 
 		/*

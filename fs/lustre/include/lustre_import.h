@@ -54,8 +54,8 @@
  * @{
  */
 #define D_ADAPTTO D_OTHER
-#define AT_BINS 4		  /* "bin" means "N seconds of history" */
-#define AT_FLG_NOHIST 0x1	  /* use last reported value only */
+#define AT_BINS 4		/* "bin" means "N seconds of history" */
+#define AT_FLG_NOHIST 0x1	/* use last reported value only */
 
 struct adaptive_timeout {
 	time64_t	at_binstart;		/* bin start time */

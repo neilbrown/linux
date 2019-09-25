@@ -358,11 +358,11 @@ lnet_extract_iov(int dst_niov, struct kvec *dst,
 	unsigned int frag_len;
 	unsigned int niov;
 
-	if (!len)			   /* no data => */
-		return 0;		     /* no frags */
+	if (!len)			/* no data => */
+		return 0;		/* no frags */
 
 	LASSERT(src_niov > 0);
-	while (offset >= src->iov_len) {      /* skip initial frags */
+	while (offset >= src->iov_len) {	/* skip initial frags */
 		offset -= src->iov_len;
 		src_niov--;
 		src++;
@@ -420,11 +420,11 @@ lnet_extract_kiov(int dst_niov, struct bio_vec *dst,
 	unsigned int frag_len;
 	unsigned int niov;
 
-	if (!len)			   /* no data => */
-		return 0;		     /* no frags */
+	if (!len)			/* no data => */
+		return 0;		/* no frags */
 
 	LASSERT(src_niov > 0);
-	while (offset >= src->bv_len) {      /* skip initial frags */
+	while (offset >= src->bv_len) {	/* skip initial frags */
 		offset -= src->bv_len;
 		src_niov--;
 		src++;
@@ -2482,7 +2482,7 @@ lnet_parse(struct lnet_ni *ni, struct lnet_hdr *hdr, lnet_nid_t from_nid,
 	 * call back lnd_recv() come what may...
 	 */
 	if (!list_empty(&the_lnet.ln_test_peers) && /* normally we don't */
-	    fail_peer(src_nid, 0)) {	     /* shall we now? */
+	    fail_peer(src_nid, 0)) {		/* shall we now? */
 		CERROR("%s, src %s: Dropping %s to simulate failure\n",
 		       libcfs_nid2str(from_nid), libcfs_nid2str(src_nid),
 		       lnet_msgtyp2str(type));
@@ -2951,7 +2951,7 @@ LNetGet(lnet_nid_t self, struct lnet_handle_md mdh,
 	LASSERT(the_lnet.ln_refcount > 0);
 
 	if (!list_empty(&the_lnet.ln_test_peers) && /* normally we don't */
-	    fail_peer(target.nid, 1)) {	  /* shall we now? */
+	    fail_peer(target.nid, 1)) {		/* shall we now? */
 		CERROR("Dropping GET to %s: simulated failure\n",
 		       libcfs_id2str(target));
 		return -EIO;

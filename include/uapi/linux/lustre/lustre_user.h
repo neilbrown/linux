@@ -382,12 +382,12 @@ struct lov_user_md_v1 {		/* LOV EA user data (host-endian) */
 	__u32 lmm_stripe_size;	/* size of stripe in bytes */
 	__u16 lmm_stripe_count;	/* num stripes in use for this object */
 	union {
-		__u16 lmm_stripe_offset;  /* starting stripe offset in
-					   * lmm_objects, use when writing
-					   */
-		__u16 lmm_layout_gen;	  /* layout generation number
-					   * used when reading
-					   */
+		__u16 lmm_stripe_offset;	/* starting stripe offset in
+						 * lmm_objects, use when writing
+						 */
+		__u16 lmm_layout_gen;		/* layout generation number
+						 * used when reading
+						 */
 	};
 	struct lov_user_ost_data_v1 lmm_objects[0]; /* per-stripe data */
 } __attribute__((packed,  __may_alias__));
@@ -399,12 +399,12 @@ struct lov_user_md_v3 {		/* LOV EA user data (host-endian) */
 	__u32 lmm_stripe_size;	/* size of stripe in bytes */
 	__u16 lmm_stripe_count;	/* num stripes in use for this object */
 	union {
-		__u16 lmm_stripe_offset;  /* starting stripe offset in
-					   * lmm_objects, use when writing
-					   */
-		__u16 lmm_layout_gen;	  /* layout generation number
-					   * used when reading
-					   */
+		__u16 lmm_stripe_offset;	/* starting stripe offset in
+						 * lmm_objects, use when writing
+						 */
+		__u16 lmm_layout_gen;		/* layout generation number
+						 * used when reading
+						 */
 	};
 	char  lmm_pool_name[LOV_MAXPOOLNAME + 1];   /* pool name */
 	struct lov_user_ost_data_v1 lmm_objects[0]; /* per-stripe data */
@@ -490,13 +490,13 @@ static inline __u32 lov_user_md_size(__u16 stripes, __u32 lmm_magic)
 #ifdef HAVE_LOV_USER_MDS_DATA
 #define lov_user_mds_data lov_user_mds_data_v1
 struct lov_user_mds_data_v1 {
-	lstat_t lmd_st;		 /* MDS stat struct */
-	struct lov_user_md_v1 lmd_lmm;  /* LOV EA V1 user data */
+	lstat_t lmd_st;			/* MDS stat struct */
+	struct lov_user_md_v1 lmd_lmm;	/* LOV EA V1 user data */
 } __packed;
 
 struct lov_user_mds_data_v3 {
-	lstat_t lmd_st;		 /* MDS stat struct */
-	struct lov_user_md_v3 lmd_lmm;  /* LOV EA V3 user data */
+	lstat_t lmd_st;			/* MDS stat struct */
+	struct lov_user_md_v3 lmd_lmm;	/* LOV EA V3 user data */
 } __packed;
 #endif
 

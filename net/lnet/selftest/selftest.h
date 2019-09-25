@@ -198,23 +198,23 @@ struct srpc_server_rpc {
 
 /* client-side state of a RPC */
 struct srpc_client_rpc {
-	struct list_head  crpc_list;	  /* chain on user's lists */
-	spinlock_t	  crpc_lock;	  /* serialize */
-	int		  crpc_service;
-	atomic_t	  crpc_refcount;
-	int		  crpc_timeout;   /* # seconds to wait for reply */
-	struct stt_timer       crpc_timer;
+	struct list_head	crpc_list;	/* chain on user's lists */
+	spinlock_t		crpc_lock;	/* serialize */
+	int			crpc_service;
+	atomic_t		crpc_refcount;
+	int			crpc_timeout;	/* # seconds to wait for reply */
+	struct stt_timer	crpc_timer;
 	struct swi_workitem	crpc_wi;
 	struct lnet_process_id	crpc_dest;
 
-	void		  (*crpc_done)(struct srpc_client_rpc *);
-	void		  (*crpc_fini)(struct srpc_client_rpc *);
-	int		  crpc_status;	  /* completion status */
-	void		  *crpc_priv;	  /* caller data */
+	void			(*crpc_done)(struct srpc_client_rpc *);
+	void			(*crpc_fini)(struct srpc_client_rpc *);
+	int			crpc_status;	/* completion status */
+	void			*crpc_priv;	/* caller data */
 
 	/* state flags */
-	unsigned int	  crpc_aborted:1; /* being given up */
-	unsigned int	  crpc_closed:1;  /* completed */
+	unsigned int		crpc_aborted:1;	/* being given up */
+	unsigned int		crpc_closed:1;	/* completed */
 
 	/* RPC events */
 	struct srpc_event	crpc_bulkev;	/* bulk event */
@@ -400,17 +400,17 @@ struct sfw_test_instance {
 #define sfw_id_pages(n)    DIV_ROUND_UP(n, SFW_ID_PER_PAGE)
 
 struct sfw_test_unit {
-	struct list_head    tsu_list;	   /* chain on lst_test_instance */
-	struct lnet_process_id		tsu_dest;	/* id of dest node */
-	int		    tsu_loop;	   /* loop count of the test */
-	struct sfw_test_instance	*tsu_instance; /* pointer to test instance */
-	void		    *tsu_private;  /* private data */
+	struct list_head	tsu_list;	/* chain on lst_test_instance */
+	struct lnet_process_id	tsu_dest;	/* id of dest node */
+	int			tsu_loop;	/* loop count of the test */
+	struct sfw_test_instance *tsu_instance;	/* pointer to test instance */
+	void			*tsu_private;	/* private data */
 	struct swi_workitem	tsu_worker;	/* workitem of the test unit */
 };
 
 struct sfw_test_case {
-	struct list_head      tsc_list;		/* chain on fw_tests */
-	struct srpc_service		*tsc_srv_service;	/* test service */
+	struct list_head		tsc_list;	/* chain on fw_tests */
+	struct srpc_service		*tsc_srv_service; /* test service */
 	struct sfw_test_client_ops	*tsc_cli_ops;	/* ops of test client */
 };
 

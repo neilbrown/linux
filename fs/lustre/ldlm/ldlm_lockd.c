@@ -658,7 +658,7 @@ static int ldlm_callback_handler(struct ptlrpc_request *req)
 		ldlm_handle_gl_callback(req, ns, dlm_req, lock);
 		break;
 	default:
-		LBUG();			 /* checked above */
+		LBUG();			/* checked above */
 	}
 
 	return 0;

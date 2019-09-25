@@ -836,22 +836,22 @@ struct obd_connect_data {
 	 * may result in out-of-bound memory access and kernel oops.
 	 */
 	__u16 ocd_maxmodrpcs;		/* Maximum modify RPCs in parallel */
-	__u16 padding0;			/* added 2.1.0. also fix lustre_swab_connect */
-	__u32 padding1;			/* added 2.1.0. also fix lustre_swab_connect */
+	__u16 padding0;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u32 padding1;		/* added 2.1.0. also fix lustre_swab_connect */
 	__u64 ocd_connect_flags2;
-	__u64 padding3;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 padding4;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 padding5;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 padding6;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 padding7;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 padding8;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 padding9;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 paddingA;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 paddingB;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 paddingC;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 paddingD;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 paddingE;	  /* added 2.1.0. also fix lustre_swab_connect */
-	__u64 paddingF;	  /* added 2.1.0. also fix lustre_swab_connect */
+	__u64 padding3;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 padding4;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 padding5;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 padding6;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 padding7;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 padding8;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 padding9;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 paddingA;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 paddingB;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 paddingC;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 paddingD;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 paddingE;		/* added 2.1.0. also fix lustre_swab_connect */
+	__u64 paddingF;		/* added 2.1.0. also fix lustre_swab_connect */
 };
 
 /* XXX README XXX:
@@ -2189,8 +2189,8 @@ struct ldlm_reply {
 enum mgs_cmd {
 	MGS_CONNECT = 250,
 	MGS_DISCONNECT,
-	MGS_EXCEPTION,	 /* node died, etc. */
-	MGS_TARGET_REG,	/* whenever target starts up */
+	MGS_EXCEPTION,		/* node died, etc. */
+	MGS_TARGET_REG,		/* whenever target starts up */
 	MGS_TARGET_DEL,
 	MGS_SET_INFO,
 	MGS_CONFIG_READ,

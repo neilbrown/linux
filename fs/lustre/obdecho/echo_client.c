@@ -1506,7 +1506,7 @@ echo_client_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 	}
 
 	switch (cmd) {
-	case OBD_IOC_CREATE:		    /* may create echo object */
+	case OBD_IOC_CREATE:		/* may create echo object */
 		if (!capable(CAP_SYS_ADMIN)) {
 			rc = -EPERM;
 			goto out;

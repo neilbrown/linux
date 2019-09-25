@@ -892,17 +892,17 @@ int cfs_trace_copyin_string(char *knl_buffer, int knl_buffer_nob,
 		return -EFAULT;
 
 	nob = strnlen(knl_buffer, usr_buffer_nob);
-	while (--nob >= 0)		      /* strip trailing whitespace */
+	while (--nob >= 0)		/* strip trailing whitespace */
 		if (!isspace(knl_buffer[nob]))
 			break;
 
-	if (nob < 0)			    /* empty string */
+	if (nob < 0)			/* empty string */
 		return -EINVAL;
 
-	if (nob == knl_buffer_nob)	      /* no space to terminate */
+	if (nob == knl_buffer_nob)	/* no space to terminate */
 		return -EOVERFLOW;
 
-	knl_buffer[nob + 1] = 0;		/* terminate */
+	knl_buffer[nob + 1] = 0;	/* terminate */
 	return 0;
 }
 EXPORT_SYMBOL(cfs_trace_copyin_string);

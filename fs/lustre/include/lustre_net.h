@@ -386,7 +386,7 @@ struct ptlrpc_service;
  */
 struct ptlrpc_cb_id {
 	void   (*cbid_fn)(struct lnet_event *ev); /* specific callback fn */
-	void    *cbid_arg;		      /* additional arg */
+	void    *cbid_arg;			  /* additional arg */
 };
 
 /** Maximum number of locks to fit into reply state */
@@ -1181,9 +1181,9 @@ struct ptlrpc_bulk_desc {
 	/** Back pointer to the request */
 	struct ptlrpc_request		*bd_req;
 	const struct ptlrpc_bulk_frag_ops *bd_frag_ops;
-	int				bd_iov_count; /* # entries in bd_iov */
-	int				bd_max_iov;   /* allocated size of bd_iov */
-	int				bd_nob;	      /* # bytes covered */
+	int				bd_iov_count;	/* # entries in bd_iov */
+	int				bd_max_iov;	/* allocated size of bd_iov */
+	int				bd_nob;		/* # bytes covered */
 	int				bd_nob_transferred; /* # bytes GOT/PUT */
 
 	u64				bd_last_mbits;

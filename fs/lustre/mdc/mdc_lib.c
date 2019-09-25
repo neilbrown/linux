@@ -141,7 +141,7 @@ void mdc_readdir_pack(struct ptlrpc_request *req, u64 pgoff, size_t size,
 						    &RMF_MDT_BODY);
 	b->mbo_fid1 = *fid;
 	b->mbo_valid |= OBD_MD_FLID;
-	b->mbo_size = pgoff;		       /* !! */
+	b->mbo_size = pgoff;			/* !! */
 	b->mbo_nlink = size;			/* !! */
 	__mdc_pack_body(b, -1);
 	b->mbo_mode = LUDA_FID | LUDA_TYPE;

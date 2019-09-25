@@ -222,10 +222,10 @@ struct kib_poolset {
 	int			ps_pool_size;	/* new pool size */
 	int			ps_cpt;		/* CPT id */
 
-	kib_ps_pool_create_t	ps_pool_create;	 /* create a new pool */
+	kib_ps_pool_create_t	ps_pool_create;	/* create a new pool */
 	kib_ps_pool_destroy_t	ps_pool_destroy; /* destroy a pool */
-	kib_ps_node_init_t	ps_node_init;	 /* initialize new allocated node */
-	kib_ps_node_fini_t	ps_node_fini;    /* finalize node */
+	kib_ps_node_init_t	ps_node_init;	/* initialize new allocated node */
+	kib_ps_node_fini_t	ps_node_fini;	/* finalize node */
 };
 
 struct kib_pool {
@@ -329,32 +329,48 @@ struct kib_sched_info {
 };
 
 struct kib_data {
-	int			kib_init;	    /* initialisation state */
-	int			kib_shutdown;	    /* shut down? */
-	struct list_head	kib_devs;	    /* IB devices extant */
-	struct list_head	kib_failed_devs;    /* list head of failed devices */
-	wait_queue_head_t	kib_failover_waitq; /* schedulers sleep here */
-	atomic_t		kib_nthreads;	    /* # live threads */
-	rwlock_t		kib_global_lock;    /* stabilize net/dev/peer_ni/conn ops */
-	struct list_head       *kib_peers;	    /* hash table of all my known peers */
-	int			kib_peer_hash_size; /* size of kib_peers */
-	void		       *kib_connd;	    /* the connd task (serialisation assertions) */
-	struct list_head	kib_connd_conns;    /* connections to setup/teardown */
-	struct list_head	kib_connd_zombies;  /* connections with zero refcount */
+	/* initialisation state */
+	int			kib_init;
+	/* shut down? */
+	int			kib_shutdown;
+	/* IB devices extant */
+	struct list_head	kib_devs;
+	/* list head of failed devices */
+	struct list_head	kib_failed_devs;
+	/* schedulers sleep here */
+	wait_queue_head_t	kib_failover_waitq;
+	/* # live threads */
+	atomic_t		kib_nthreads;
+	/* stabilize net/dev/peer_ni/conn ops */
+	rwlock_t		kib_global_lock;
+	/* hash table of all my known peers */
+	struct list_head       *kib_peers;
+	/* size of kib_peers */
+	int			kib_peer_hash_size;
+	/* the connd task (serialisation assertions) */
+	void		       *kib_connd;
+	/* connections to setup/teardown */
+	struct list_head	kib_connd_conns;
+	/* connections with zero refcount */
+	struct list_head	kib_connd_zombies;
 	/* connections to reconnect */
 	struct list_head	kib_reconn_list;
 	/* peers wait for reconnection */
 	struct list_head	kib_reconn_wait;
-	/**
+	/*
 	 * The second that peers are pulled out from @kib_reconn_wait
 	 * for reconnection.
 	 */
 	time64_t		kib_reconn_sec;
 
-	wait_queue_head_t	kib_connd_waitq;    /* connection daemon sleeps here */
-	spinlock_t		kib_connd_lock;	    /* serialise */
-	struct ib_qp_attr	kib_error_qpa;	    /* QP->ERROR */
-	struct kib_sched_info **kib_scheds;	    /* percpt data for schedulers */
+	/* connection daemon sleeps here */
+	wait_queue_head_t	kib_connd_waitq;
+	/* serialise */
+	spinlock_t		kib_connd_lock;
+	/* QP->ERROR */
+	struct ib_qp_attr	kib_error_qpa;
+	/* percpt data for schedulers */
+	struct kib_sched_info **kib_scheds;
 };
 
 #define IBLND_INIT_NOTHING	0
@@ -373,8 +389,8 @@ struct kib_connparams {
 } __packed;
 
 struct kib_immediate_msg {
-	struct lnet_hdr		ibim_hdr;	/* portals header */
-	char			ibim_payload[0];/* piggy-backed payload */
+	struct lnet_hdr		ibim_hdr;	 /* portals header */
+	char			ibim_payload[0]; /* piggy-backed payload */
 } __packed;
 
 struct kib_rdma_frag {
@@ -573,12 +589,12 @@ struct kib_conn {
 	struct kib_connvars	*ibc_connvars;	/* in-progress connection state */
 };
 
-#define IBLND_CONN_INIT			0	 /* being initialised */
-#define IBLND_CONN_ACTIVE_CONNECT	1	 /* active sending req */
-#define IBLND_CONN_PASSIVE_WAIT		2	 /* passive waiting for rtu */
-#define IBLND_CONN_ESTABLISHED		3	 /* connection established */
-#define IBLND_CONN_CLOSING		4	 /* being closed */
-#define IBLND_CONN_DISCONNECTED		5	 /* disconnected */
+#define IBLND_CONN_INIT			0	/* being initialised */
+#define IBLND_CONN_ACTIVE_CONNECT	1	/* active sending req */
+#define IBLND_CONN_PASSIVE_WAIT		2	/* passive waiting for rtu */
+#define IBLND_CONN_ESTABLISHED		3	/* connection established */
+#define IBLND_CONN_CLOSING		4	/* being closed */
+#define IBLND_CONN_DISCONNECTED		5	/* disconnected */
 
 struct kib_peer_ni {
 	struct list_head	ibp_list;	/* stash on global peer_ni list */
@@ -774,11 +790,11 @@ kiblnd_need_noop(struct kib_conn *conn)
 
 	if (!list_empty(&conn->ibc_tx_noops) || /* NOOP already queued */
 	    !list_empty(&conn->ibc_tx_queue_nocred) || /* piggyback NOOP */
-	    !conn->ibc_credits)		    /* no credit */
+	    !conn->ibc_credits)			/* no credit */
 		return 0;
 
-	if (conn->ibc_credits == 1 &&      /* last credit reserved for */
-	    !conn->ibc_outstanding_credits) /* giving back credits */
+	if (conn->ibc_credits == 1 &&		/* last credit reserved for */
+	    !conn->ibc_outstanding_credits)	/* giving back credits */
 		return 0;
 
 	/* No tx to piggyback NOOP onto or no credit to send a tx */

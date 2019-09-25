@@ -46,7 +46,7 @@ extern unsigned int obd_dump_on_eviction;
 /* obd_timeout should only be used for recovery, not for
  * networking / disk / timings affected by load (use Adaptive Timeouts)
  */
-extern unsigned int obd_timeout;	  /* seconds */
+extern unsigned int obd_timeout;	/* seconds */
 extern unsigned int obd_timeout_set;
 extern unsigned int at_min;
 extern unsigned int at_max;

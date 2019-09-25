@@ -367,11 +367,11 @@ struct ll_ra_info {
  * counted by page index.
  */
 struct ra_io_arg {
-	unsigned long ria_start;  /* start offset of read-ahead*/
-	unsigned long ria_end;    /* end offset of read-ahead*/
-	unsigned long ria_reserved; /* reserved pages for read-ahead */
-	unsigned long ria_end_min;  /* minimum end to cover current read */
-	bool ria_eof;		    /* reach end of file */
+	unsigned long ria_start;	/* start offset of read-ahead*/
+	unsigned long ria_end;		/* end offset of read-ahead*/
+	unsigned long ria_reserved;	/* reserved pages for read-ahead */
+	unsigned long ria_end_min;	/* minimum end to cover current read */
+	bool ria_eof;			/* reach end of file */
 	/* If stride read pattern is detected, ria_stoff means where
 	 * stride read is started. Note: for normal read-ahead, the
 	 * value here is meaningless, and also it will not be accessed

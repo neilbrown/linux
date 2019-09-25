@@ -703,9 +703,9 @@ static void ptlrpc_server_free_request(struct ptlrpc_request *req)
 	LASSERT(atomic_read(&req->rq_refcount) == 0);
 	LASSERT(list_empty(&req->rq_timed_list));
 
-	 /* DEBUG_REQ() assumes the reply state of a request with a valid
-	  * ref will not be destroyed until that reference is dropped.
-	  */
+	/* DEBUG_REQ() assumes the reply state of a request with a valid
+	 * ref will not be destroyed until that reference is dropped.
+	 */
 	ptlrpc_req_drop_rs(req);
 
 	sptlrpc_svc_ctx_decref(req);
@@ -1837,8 +1837,8 @@ ptlrpc_handle_rs(struct ptlrpc_reply_state *rs)
 	been_handled = rs->rs_handled;
 	rs->rs_handled = 1;
 
-	nlocks = rs->rs_nlocks;		 /* atomic "steal", but */
-	rs->rs_nlocks = 0;		      /* locks still on rs_locks! */
+	nlocks = rs->rs_nlocks;		/* atomic "steal", but */
+	rs->rs_nlocks = 0;		/* locks still on rs_locks! */
 
 	if (nlocks == 0 && !been_handled) {
 		/* If we see this, we should already have seen the warning

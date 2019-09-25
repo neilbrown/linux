@@ -1594,8 +1594,8 @@ char *lprocfs_find_named_value(const char *buffer, const char *name,
 	if (!val)
 		return (char *)buffer;
 
-	val += strlen(name);			     /* skip prefix */
-	while (val < buffer + buflen && isspace(*val)) /* skip separator */
+	val += strlen(name);				/* skip prefix */
+	while (val < buffer + buflen && isspace(*val))	/* skip separator */
 		val++;
 
 	*count = 0;

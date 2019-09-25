@@ -274,10 +274,10 @@ libcfs_debug_mask2str(char *str, int size, int mask, int is_subsys)
 				continue;
 
 			token = fn(i);
-			if (!token)	      /* unused bit */
+			if (!token)		/* unused bit */
 				continue;
 
-			if (len > 0) {		  /* separator? */
+			if (len > 0) {		/* separator? */
 				if (len < size)
 					str[len] = ' ';
 				len++;
