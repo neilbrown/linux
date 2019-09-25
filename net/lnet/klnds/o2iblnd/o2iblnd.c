@@ -338,7 +338,7 @@ int kiblnd_create_peer(struct lnet_ni *ni, struct kib_peer_ni **peerp,
 	peer_ni->ibp_queue_depth = ni->ni_net->net_tunables.lct_peer_tx_credits;
 	atomic_set(&peer_ni->ibp_refcount, 1);  /* 1 ref for caller */
 
-	INIT_LIST_HEAD(&peer_ni->ibp_list);
+	INIT_HLIST_NODE(&peer_ni->ibp_list);
 	INIT_LIST_HEAD(&peer_ni->ibp_conns);
 	INIT_LIST_HEAD(&peer_ni->ibp_tx_queue);
 
@@ -383,10 +383,10 @@ struct kib_peer_ni *kiblnd_find_peer_locked(struct lnet_ni *ni, lnet_nid_t nid)
 	 * the caller is responsible for accounting the additional reference
 	 * that this creates
 	 */
-	struct list_head *peer_list = kiblnd_nid2peerlist(nid);
 	struct kib_peer_ni *peer_ni;
 
-	list_for_each_entry(peer_ni, peer_list, ibp_list) {
+	hash_for_each_possible(kiblnd_data.kib_peers, peer_ni,
+			       ibp_list, nid) {
 		LASSERT(!kiblnd_peer_idle(peer_ni));
 
 		/*
@@ -413,7 +413,7 @@ void kiblnd_unlink_peer_locked(struct kib_peer_ni *peer_ni)
 	LASSERT(list_empty(&peer_ni->ibp_conns));
 
 	LASSERT(kiblnd_peer_active(peer_ni));
-	list_del_init(&peer_ni->ibp_list);
+	hlist_del_init(&peer_ni->ibp_list);
 	/* lose peerlist's ref */
 	kiblnd_peer_decref(peer_ni);
 }
@@ -427,9 +427,7 @@ static int kiblnd_get_peer_info(struct lnet_ni *ni, int index,
 
 	read_lock_irqsave(&kiblnd_data.kib_global_lock, flags);
 
-	for (i = 0; i < kiblnd_data.kib_peer_hash_size; i++) {
-		list_for_each_entry(peer_ni, &kiblnd_data.kib_peers[i],
-				    ibp_list) {
+	hash_for_each(kiblnd_data.kib_peers, i, peer_ni, ibp_list) {
 			LASSERT(!kiblnd_peer_idle(peer_ni));
 
 			if (peer_ni->ibp_ni != ni)
@@ -444,7 +442,6 @@ static int kiblnd_get_peer_info(struct lnet_ni *ni, int index,
 			read_unlock_irqrestore(&kiblnd_data.kib_global_lock,
 					       flags);
 			return 0;
-		}
 	}
 
 	read_unlock_irqrestore(&kiblnd_data.kib_global_lock, flags);
@@ -473,7 +470,7 @@ static void kiblnd_del_peer_locked(struct kib_peer_ni *peer_ni)
 static int kiblnd_del_peer(struct lnet_ni *ni, lnet_nid_t nid)
 {
 	LIST_HEAD(zombies);
-	struct kib_peer_ni *pnxt;
+	struct hlist_node *pnxt;
 	struct kib_peer_ni *peer_ni;
 	int lo;
 	int hi;
@@ -484,16 +481,16 @@ static int kiblnd_del_peer(struct lnet_ni *ni, lnet_nid_t nid)
 	write_lock_irqsave(&kiblnd_data.kib_global_lock, flags);
 
 	if (nid != LNET_NID_ANY) {
-		lo = kiblnd_nid2peerlist(nid) - kiblnd_data.kib_peers;
-		hi = kiblnd_nid2peerlist(nid) - kiblnd_data.kib_peers;
+		lo = hash_min(nid, HASH_BITS(kiblnd_data.kib_peers));
+		hi = lo;
 	} else {
 		lo = 0;
-		hi = kiblnd_data.kib_peer_hash_size - 1;
+		hi = HASH_SIZE(kiblnd_data.kib_peers) - 1;
 	}
 
 	for (i = lo; i <= hi; i++) {
-		list_for_each_entry_safe(peer_ni, pnxt,
-					 &kiblnd_data.kib_peers[i], ibp_list) {
+		hlist_for_each_entry_safe(peer_ni, pnxt,
+					  &kiblnd_data.kib_peers[i], ibp_list) {
 			LASSERT(!kiblnd_peer_idle(peer_ni));
 
 			if (peer_ni->ibp_ni != ni)
@@ -530,9 +527,7 @@ static struct kib_conn *kiblnd_get_conn_by_idx(struct lnet_ni *ni, int index)
 
 	read_lock_irqsave(&kiblnd_data.kib_global_lock, flags);
 
-	for (i = 0; i < kiblnd_data.kib_peer_hash_size; i++) {
-		list_for_each_entry(peer_ni, &kiblnd_data.kib_peers[i],
-				    ibp_list) {
+	hash_for_each(kiblnd_data.kib_peers, i, peer_ni, ibp_list) {
 			LASSERT(!kiblnd_peer_idle(peer_ni));
 
 			if (peer_ni->ibp_ni != ni)
@@ -549,7 +544,6 @@ static struct kib_conn *kiblnd_get_conn_by_idx(struct lnet_ni *ni, int index)
 					flags);
 				return conn;
 			}
-		}
 	}
 
 	read_unlock_irqrestore(&kiblnd_data.kib_global_lock, flags);
@@ -1013,7 +1007,7 @@ int kiblnd_close_stale_conns_locked(struct kib_peer_ni *peer_ni,
 static int kiblnd_close_matching_conns(struct lnet_ni *ni, lnet_nid_t nid)
 {
 	struct kib_peer_ni *peer_ni;
-	struct kib_peer_ni *pnxt;
+	struct hlist_node *pnxt;
 	int lo;
 	int hi;
 	int i;
@@ -1023,16 +1017,16 @@ static int kiblnd_close_matching_conns(struct lnet_ni *ni, lnet_nid_t nid)
 	write_lock_irqsave(&kiblnd_data.kib_global_lock, flags);
 
 	if (nid != LNET_NID_ANY) {
-		lo = kiblnd_nid2peerlist(nid) - kiblnd_data.kib_peers;
-		hi = kiblnd_nid2peerlist(nid) - kiblnd_data.kib_peers;
+		lo = hash_min(nid, HASH_BITS(kiblnd_data.kib_peers));
+		hi = lo;
 	} else {
 		lo = 0;
-		hi = kiblnd_data.kib_peer_hash_size - 1;
+		hi = HASH_SIZE(kiblnd_data.kib_peers) - 1;
 	}
 
 	for (i = lo; i <= hi; i++) {
-		list_for_each_entry_safe(peer_ni, pnxt,
-					 &kiblnd_data.kib_peers[i], ibp_list) {
+		hlist_for_each_entry_safe(peer_ni, pnxt,
+					  &kiblnd_data.kib_peers[i], ibp_list) {
 			LASSERT(!kiblnd_peer_idle(peer_ni));
 
 			if (peer_ni->ibp_ni != ni)
@@ -2547,6 +2541,7 @@ void kiblnd_destroy_dev(struct kib_dev *dev)
 static void kiblnd_base_shutdown(void)
 {
 	struct kib_sched_info *sched;
+	struct kib_peer_ni *peer_ni;
 	int i;
 
 	LASSERT(list_empty(&kiblnd_data.kib_devs));
@@ -2557,9 +2552,8 @@ static void kiblnd_base_shutdown(void)
 
 	case IBLND_INIT_ALL:
 	case IBLND_INIT_DATA:
-		LASSERT(kiblnd_data.kib_peers);
-		for (i = 0; i < kiblnd_data.kib_peer_hash_size; i++)
-			LASSERT(list_empty(&kiblnd_data.kib_peers[i]));
+		hash_for_each(kiblnd_data.kib_peers, i, peer_ni, ibp_list)
+			LASSERT(0);
 		LASSERT(list_empty(&kiblnd_data.kib_connd_zombies));
 		LASSERT(list_empty(&kiblnd_data.kib_connd_conns));
 		LASSERT(list_empty(&kiblnd_data.kib_reconn_list));
@@ -2594,8 +2588,6 @@ static void kiblnd_base_shutdown(void)
 	case IBLND_INIT_NOTHING:
 		break;
 	}
-
-	kvfree(kiblnd_data.kib_peers);
 
 	if (kiblnd_data.kib_scheds)
 		cfs_percpt_free(kiblnd_data.kib_scheds);
@@ -2682,17 +2674,7 @@ static int kiblnd_base_startup(void)
 
 	rwlock_init(&kiblnd_data.kib_global_lock);
 
-	INIT_LIST_HEAD(&kiblnd_data.kib_devs);
-	INIT_LIST_HEAD(&kiblnd_data.kib_failed_devs);
-
-	kiblnd_data.kib_peer_hash_size = IBLND_PEER_HASH_SIZE;
-	kiblnd_data.kib_peers = kvmalloc_array(kiblnd_data.kib_peer_hash_size,
-					       sizeof(struct list_head),
-					       GFP_KERNEL);
-	if (!kiblnd_data.kib_peers)
-		goto failed;
-	for (i = 0; i < kiblnd_data.kib_peer_hash_size; i++)
-		INIT_LIST_HEAD(&kiblnd_data.kib_peers[i]);
+	hash_init(kiblnd_data.kib_peers);
 
 	spin_lock_init(&kiblnd_data.kib_connd_lock);
 	INIT_LIST_HEAD(&kiblnd_data.kib_connd_conns);
