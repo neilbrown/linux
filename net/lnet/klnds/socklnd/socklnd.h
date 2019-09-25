@@ -58,20 +58,7 @@
 #define SOCKNAL_INSANITY_RECONN	5000  /* connd is trying on reconn infinitely */
 #define SOCKNAL_ENOMEM_RETRY	1     /* seconds between retries */
 
-#define SOCKNAL_SINGLE_FRAG_TX	0     /* disable multi-fragment sends */
-#define SOCKNAL_SINGLE_FRAG_RX	0     /* disable multi-fragment receives */
-
 #define SOCKNAL_VERSION_DEBUG	0     /* enable protocol version debugging */
-
-/*
- * risk kmap deadlock on multi-frag I/O (backs off to single-frag if disabled).
- * no risk if we're not running on a CONFIG_HIGHMEM platform.
- */
-#ifdef CONFIG_HIGHMEM
-# define SOCKNAL_RISK_KMAP_DEADLOCK	0
-#else
-# define SOCKNAL_RISK_KMAP_DEADLOCK	1
-#endif
 
 struct ksock_sched_info;
 
