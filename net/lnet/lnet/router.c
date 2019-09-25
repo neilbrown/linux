@@ -70,9 +70,6 @@ lnet_peer_buffer_credits(struct lnet_net *net)
 	return net->net_tunables.lct_peer_tx_credits;
 }
 
-/* forward ref's */
-static int lnet_router_checker(void *);
-
 static int check_routers_before_use;
 module_param(check_routers_before_use, int, 0444);
 MODULE_PARM_DESC(check_routers_before_use, "Assume routers are down and ping them before use");
@@ -423,8 +420,8 @@ lnet_add_route(u32 net, u32 hops, lnet_nid_t gateway,
 	if (rnet != rnet2)
 		kfree(rnet);
 
-	/* indicate to startup the router checker if configured */
-	wake_up(&the_lnet.ln_rc_waitq);
+	/* kick start the monitor thread to handle the added route */
+	wake_up(&the_lnet.ln_mt_waitq);
 
 	return rc;
 }
@@ -809,7 +806,7 @@ lnet_wait_known_routerstate(void)
 	struct lnet_peer_ni *rtr;
 	int all_known;
 
-	LASSERT(the_lnet.ln_rc_state == LNET_RC_STATE_RUNNING);
+	LASSERT(the_lnet.ln_mt_state == LNET_MT_STATE_RUNNING);
 
 	for (;;) {
 		int cpt = lnet_net_lock_current();
@@ -1036,7 +1033,7 @@ lnet_ping_router_locked(struct lnet_peer_ni *rtr)
 	lnet_ni_notify_locked(ni, rtr);
 
 	if (!lnet_isrouter(rtr) ||
-	    the_lnet.ln_rc_state != LNET_RC_STATE_RUNNING)
+	    the_lnet.ln_mt_state != LNET_MT_STATE_RUNNING)
 		/* router table changed or router checker is shutting down */
 		return;
 
@@ -1088,34 +1085,19 @@ lnet_ping_router_locked(struct lnet_peer_ni *rtr)
 	}
 }
 
-int
-lnet_router_checker_start(void)
+int lnet_router_pre_mt_start(void)
 {
-	struct task_struct *task;
-	int rc;
-
-	LASSERT(the_lnet.ln_rc_state == LNET_RC_STATE_SHUTDOWN);
-
 	if (check_routers_before_use &&
 	    dead_router_check_interval <= 0) {
-		LCONSOLE_ERROR_MSG(0x10a, "'dead_router_check_interval' must be set if 'check_routers_before_use' is set\n");
 		return -EINVAL;
 	}
 
-	init_completion(&the_lnet.ln_rc_signal);
-
 	the_lnet.ln_rc_eq = lnet_router_checker_event;
-	the_lnet.ln_rc_state = LNET_RC_STATE_RUNNING;
-	task = kthread_run(lnet_router_checker, NULL, "router_checker");
-	if (IS_ERR(task)) {
-		rc = PTR_ERR(task);
-		CERROR("Can't start router checker thread: %d\n", rc);
-		/* block until event callback signals exit */
-		wait_for_completion(&the_lnet.ln_rc_signal);
-		the_lnet.ln_rc_state = LNET_RC_STATE_SHUTDOWN;
-		return -ENOMEM;
-	}
+	return 0;
+}
 
+void lnet_router_post_mt_start(void)
+{
 	if (check_routers_before_use) {
 		/*
 		 * Note that a helpful side-effect of pinging all known routers
@@ -1124,27 +1106,14 @@ lnet_router_checker_start(void)
 		 */
 		lnet_wait_known_routerstate();
 	}
-
-	return 0;
 }
 
 void
-lnet_router_checker_stop(void)
+lnet_router_cleanup(void)
 {
-	if (the_lnet.ln_rc_state == LNET_RC_STATE_SHUTDOWN)
-		return;
-
-	LASSERT(the_lnet.ln_rc_state == LNET_RC_STATE_RUNNING);
-	the_lnet.ln_rc_state = LNET_RC_STATE_STOPPING;
-	/* wakeup the RC thread if it's sleeping */
-	wake_up(&the_lnet.ln_rc_waitq);
-
-	/* block until event callback signals exit */
-	wait_for_completion(&the_lnet.ln_rc_signal);
-	LASSERT(the_lnet.ln_rc_state == LNET_RC_STATE_SHUTDOWN);
 }
 
-static void
+void
 lnet_prune_rc_data(int wait_unlink)
 {
 	struct lnet_rc_data *rcd;
@@ -1153,7 +1122,7 @@ lnet_prune_rc_data(int wait_unlink)
 	struct list_head head;
 	int i = 2;
 
-	if (likely(the_lnet.ln_rc_state == LNET_RC_STATE_RUNNING &&
+	if (likely(the_lnet.ln_mt_state == LNET_MT_STATE_RUNNING &&
 		   list_empty(&the_lnet.ln_rcd_deathrow) &&
 		   list_empty(&the_lnet.ln_rcd_zombie)))
 		return;
@@ -1162,7 +1131,7 @@ lnet_prune_rc_data(int wait_unlink)
 
 	lnet_net_lock(LNET_LOCK_EX);
 
-	if (the_lnet.ln_rc_state != LNET_RC_STATE_RUNNING) {
+	if (the_lnet.ln_mt_state != LNET_MT_STATE_RUNNING) {
 		/* router checker is stopping, prune all */
 		list_for_each_entry(lp, &the_lnet.ln_routers,
 				    lpni_rtr_list) {
@@ -1225,18 +1194,12 @@ lnet_prune_rc_data(int wait_unlink)
 }
 
 /*
- * This function is called to check if the RC should block indefinitely.
- * It's called from lnet_router_checker() as well as being passed to
- * wait_event_interruptible() to avoid the lost wake_up problem.
- *
- * When it's called from wait_event_interruptible() it is necessary to
- * also not sleep if the rc state is not running to avoid a deadlock
- * when the system is shutting down
+ * This function is called from the monitor thread to check if there are
+ * any active routers that need to be checked.
  */
-static inline bool
-lnet_router_checker_active(void)
+bool lnet_router_checker_active(void)
 {
-	if (the_lnet.ln_rc_state != LNET_RC_STATE_RUNNING)
+	if (the_lnet.ln_mt_state != LNET_MT_STATE_RUNNING)
 		return true;
 
 	/*
@@ -1246,70 +1209,54 @@ lnet_router_checker_active(void)
 	if (the_lnet.ln_routing)
 		return true;
 
+	/* if there are routers that need to be cleaned up then do so */
+	if (!list_empty(&the_lnet.ln_rcd_deathrow) ||
+	    !list_empty(&the_lnet.ln_rcd_zombie))
+		return true;
+
 	return !list_empty(&the_lnet.ln_routers) &&
 		(live_router_check_interval > 0 ||
 		 dead_router_check_interval > 0);
 }
 
-static int
-lnet_router_checker(void *arg)
+void
+lnet_check_routers(void)
 {
 	struct lnet_peer_ni *rtr;
+	u64 version;
+	int cpt;
+	int cpt2;
 
-	while (the_lnet.ln_rc_state == LNET_RC_STATE_RUNNING) {
-		u64 version;
-		int cpt;
-		int cpt2;
-
-		cpt = lnet_net_lock_current();
+	cpt = lnet_net_lock_current();
 rescan:
-		version = the_lnet.ln_routers_version;
+	version = the_lnet.ln_routers_version;
 
-		list_for_each_entry(rtr, &the_lnet.ln_routers, lpni_rtr_list) {
-			cpt2 = rtr->lpni_cpt;
-			if (cpt != cpt2) {
-				lnet_net_unlock(cpt);
-				cpt = cpt2;
-				lnet_net_lock(cpt);
-				/* the routers list has changed */
-				if (version != the_lnet.ln_routers_version)
-					goto rescan;
-			}
-
-			lnet_ping_router_locked(rtr);
-
-			/* NB dropped lock */
-			if (version != the_lnet.ln_routers_version) {
-				/* the routers list has changed */
+	list_for_each_entry(rtr, &the_lnet.ln_routers, lpni_rtr_list) {
+		cpt2 = rtr->lpni_cpt;
+		if (cpt != cpt2) {
+			lnet_net_unlock(cpt);
+			cpt = cpt2;
+			lnet_net_lock(cpt);
+			/* the routers list has changed */
+			if (version != the_lnet.ln_routers_version)
 				goto rescan;
-			}
 		}
 
-		if (the_lnet.ln_routing)
-			lnet_update_ni_status_locked();
+		lnet_ping_router_locked(rtr);
 
-		lnet_net_unlock(cpt);
-
-		lnet_prune_rc_data(0); /* don't wait for UNLINK */
-
-		/*
-		 * if there are any routes then wakeup every second.  If
-		 * there are no routes then sleep indefinitely until woken
-		 * up by a user adding a route
-		 */
-		if (!lnet_router_checker_active())
-			wait_event_idle(the_lnet.ln_rc_waitq,
-					lnet_router_checker_active());
-		else
-			schedule_timeout_idle(HZ);
+		/* NB dropped lock */
+		if (version != the_lnet.ln_routers_version) {
+			/* the routers list has changed */
+			goto rescan;
+		}
 	}
 
-	lnet_prune_rc_data(1); /* wait for UNLINK */
+	if (the_lnet.ln_routing)
+		lnet_update_ni_status_locked();
 
-	the_lnet.ln_rc_state = LNET_RC_STATE_SHUTDOWN;
-	complete(&the_lnet.ln_rc_signal);
-	/* The unlink event callback will signal final completion */
-	return 0;
+	lnet_net_unlock(cpt);
+
+	lnet_prune_rc_data(0); /* don't wait for UNLINK */
 }
 
 void
