@@ -3191,12 +3191,19 @@ out:
 	case LL_IOC_LOV_GETSTRIPE:
 	case LL_IOC_LOV_GETSTRIPE_NEW:
 		return ll_file_getstripe(inode, (void __user *)arg, 0);
-	case FSFILT_IOC_GETFLAGS:
-	case FSFILT_IOC_SETFLAGS:
+	case FS_IOC_GETFLAGS:
+	case FS_IOC_SETFLAGS:
 		return ll_iocontrol(inode, file, cmd, arg);
-	case FSFILT_IOC_GETVERSION_OLD:
 	case FSFILT_IOC_GETVERSION:
+	case FS_IOC_GETVERSION:
 		return put_user(inode->i_generation, (int __user *)arg);
+	/* We need to special case any other ioctls we want to handle,
+	 * to send them to the MDS/OST as appropriate and to properly
+	 * network encode the arg field.
+	 */
+	case FS_IOC_SETVERSION:
+		return -ENOTSUPP;
+
 	case LL_IOC_GROUP_LOCK:
 		return ll_get_grouplock(inode, file, arg);
 	case LL_IOC_GROUP_UNLOCK:
@@ -3204,12 +3211,6 @@ out:
 	case IOC_OBD_STATFS:
 		return ll_obd_statfs(inode, (void __user *)arg);
 
-	/* We need to special case any other ioctls we want to handle,
-	 * to send them to the MDS/OST as appropriate and to properly
-	 * network encode the arg field.
-	case FSFILT_IOC_SETVERSION_OLD:
-	case FSFILT_IOC_SETVERSION:
-	*/
 	case LL_IOC_FLUSHCTX:
 		return ll_flush_ctx(inode);
 	case LL_IOC_PATH2FID: {
