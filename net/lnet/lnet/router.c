@@ -968,7 +968,7 @@ lnet_update_rc_data_locked(struct lnet_peer_ni *gateway)
 	md.eq_handle = the_lnet.ln_rc_eqh;
 
 	LASSERT(!LNetEQHandleIsInvalid(the_lnet.ln_rc_eqh));
-	rc = LNetMDBind(md, LNET_UNLINK, &rcd->rcd_mdh);
+	rc = LNetMDBind(&md, LNET_UNLINK, &rcd->rcd_mdh);
 	if (rc < 0) {
 		CERROR("Can't bind MD: %d\n", rc);
 		goto out_ping_buffer_decref;
