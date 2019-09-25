@@ -85,15 +85,6 @@ lnet_md_unlink(struct lnet_libmd *md)
 	lnet_md_free(md);
 }
 
-struct page *lnet_kvaddr_to_page(unsigned long vaddr)
-{
-	if (is_vmalloc_addr((void *)vaddr))
-		return vmalloc_to_page((void *)vaddr);
-
-	return kmap_to_page((void *)vaddr);
-}
-EXPORT_SYMBOL(lnet_kvaddr_to_page);
-
 int lnet_cpt_of_md(struct lnet_libmd *md, unsigned int offset)
 {
 	int cpt = CFS_CPT_ANY;
