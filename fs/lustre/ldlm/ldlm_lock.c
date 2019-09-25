@@ -190,7 +190,7 @@ void ldlm_lock_put(struct ldlm_lock *lock)
 			lock->l_export = NULL;
 		}
 
-		kfree(lock->l_lvb_data);
+		kvfree(lock->l_lvb_data);
 
 		lu_ref_fini(&lock->l_reference);
 		call_rcu(&lock->l_handle.h_rcu, lock_handle_free);
@@ -1532,7 +1532,7 @@ struct ldlm_lock *ldlm_lock_create(struct ldlm_namespace *ns,
 
 	if (lvb_len) {
 		lock->l_lvb_len = lvb_len;
-		lock->l_lvb_data = kzalloc(lvb_len, GFP_NOFS);
+		lock->l_lvb_data = kvzalloc(lvb_len, GFP_NOFS);
 		if (!lock->l_lvb_data) {
 			rc = -ENOMEM;
 			goto out;
