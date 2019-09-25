@@ -171,12 +171,42 @@ out:
 	return cpt;
 }
 
-static int
-lnet_md_build(struct lnet_libmd *lmd, struct lnet_md *umd, int unlink)
+static struct lnet_libmd *
+lnet_md_build(struct lnet_md *umd, int unlink)
 {
 	int i;
 	unsigned int niov;
 	int total_length = 0;
+	struct lnet_libmd *lmd;
+	unsigned int size;
+
+	if (umd->options & LNET_MD_KIOV) {
+		niov = umd->length;
+		size = offsetof(struct lnet_libmd, md_iov.kiov[niov]);
+	} else {
+		niov = 1;
+		size = offsetof(struct lnet_libmd, md_iov.iov[niov]);
+	}
+
+	if (size <= LNET_SMALL_MD_SIZE) {
+		lmd = kmem_cache_alloc(lnet_small_mds_cachep,
+				      GFP_NOFS | __GFP_ZERO);
+		if (lmd) {
+			CDEBUG(D_MALLOC,
+			       "slab-alloced 'md' of size %u at %p.\n",
+			       size, lmd);
+		} else {
+			CDEBUG(D_MALLOC, "failed to allocate 'md' of size %u\n",
+			       size);
+		}
+	} else {
+		lmd = kzalloc(size, GFP_NOFS);
+	}
+	if (!lmd)
+		return ERR_PTR(-ENOMEM);
+
+	lmd->md_niov = niov;
+	INIT_LIST_HEAD(&lmd->md_list);
 
 	lmd->md_me = NULL;
 	lmd->md_start = umd->start;
@@ -199,8 +229,10 @@ lnet_md_build(struct lnet_libmd *lmd, struct lnet_md *umd, int unlink)
 		for (i = 0; i < (int)niov; i++) {
 			/* We take the page pointer on trust */
 			if (lmd->md_iov.kiov[i].bv_offset +
-			    lmd->md_iov.kiov[i].bv_len > PAGE_SIZE)
-				return -EINVAL; /* invalid length */
+			    lmd->md_iov.kiov[i].bv_len > PAGE_SIZE) {
+				lnet_md_free(lmd);
+				return ERR_PTR(-EINVAL); /* invalid length */
+			}
 
 			total_length += lmd->md_iov.kiov[i].bv_len;
 		}
@@ -209,8 +241,10 @@ lnet_md_build(struct lnet_libmd *lmd, struct lnet_md *umd, int unlink)
 
 		if ((umd->options & LNET_MD_MAX_SIZE) && /* max size used */
 		    (umd->max_size < 0 ||
-		     umd->max_size > total_length)) /* illegal max_size */
-			return -EINVAL;
+		     umd->max_size > total_length)) { /* illegal max_size */
+			lnet_md_free(lmd);
+			return ERR_PTR(-EINVAL);
+		}
 	} else {   /* contiguous */
 		lmd->md_length = umd->length;
 		niov = 1;
@@ -220,11 +254,13 @@ lnet_md_build(struct lnet_libmd *lmd, struct lnet_md *umd, int unlink)
 
 		if ((umd->options & LNET_MD_MAX_SIZE) && /* max size used */
 		    (umd->max_size < 0 ||
-		     umd->max_size > (int)umd->length)) /* illegal max_size */
-			return -EINVAL;
+		     umd->max_size > (int)umd->length)) { /* illegal max_size */
+			lnet_md_free(lmd);
+			return ERR_PTR(-EINVAL);
+		}
 	}
 
-	return 0;
+	return lmd;
 }
 
 /* must be called with resource lock held */
@@ -341,13 +377,9 @@ LNetMDAttach(struct lnet_handle_me meh, struct lnet_md umd,
 		return -EINVAL;
 	}
 
-	md = lnet_md_alloc(&umd);
-	if (!md)
-		return -ENOMEM;
-
-	rc = lnet_md_build(md, &umd, unlink);
-	if (rc)
-		goto out_free;
+	md = lnet_md_build(&umd, unlink);
+	if (IS_ERR(md))
+		return PTR_ERR(md);
 
 	cpt = lnet_cpt_of_cookie(meh.cookie);
 
@@ -381,8 +413,7 @@ LNetMDAttach(struct lnet_handle_me meh, struct lnet_md umd,
 
 out_unlock:
 	lnet_res_unlock(cpt);
-out_free:
-	kfree(md);
+	lnet_md_free(md);
 	return rc;
 }
 EXPORT_SYMBOL(LNetMDAttach);
@@ -421,13 +452,9 @@ LNetMDBind(struct lnet_md umd, enum lnet_unlink unlink,
 		return -EINVAL;
 	}
 
-	md = lnet_md_alloc(&umd);
-	if (!md)
-		return -ENOMEM;
-
-	rc = lnet_md_build(md, &umd, unlink);
-	if (rc)
-		goto out_free;
+	md = lnet_md_build(&umd, unlink);
+	if (IS_ERR(md))
+		return PTR_ERR(md);
 
 	cpt = lnet_res_lock_current();
 
@@ -442,8 +469,7 @@ LNetMDBind(struct lnet_md umd, enum lnet_unlink unlink,
 
 out_unlock:
 	lnet_res_unlock(cpt);
-out_free:
-	kfree(md);
+	lnet_md_free(md);
 
 	return rc;
 }
