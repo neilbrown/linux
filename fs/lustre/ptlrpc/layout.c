@@ -693,6 +693,7 @@ static struct req_format *req_formats[] = {
 	&RQF_MDS_GET_INFO,
 	&RQF_MDS_GET_ROOT,
 	&RQF_MDS_STATFS,
+	&RQF_MDS_STATFS_NEW,
 	&RQF_MDS_GETATTR,
 	&RQF_MDS_GETATTR_NAME,
 	&RQF_MDS_GETXATTR,
@@ -1267,8 +1268,12 @@ struct req_format RQF_MDS_GET_ROOT =
 EXPORT_SYMBOL(RQF_MDS_GET_ROOT);
 
 struct req_format RQF_MDS_STATFS =
-	DEFINE_REQ_FMT0("MDS_STATFS", mdt_body_only, obd_statfs_server);
+	DEFINE_REQ_FMT0("MDS_STATFS", empty, obd_statfs_server);
 EXPORT_SYMBOL(RQF_MDS_STATFS);
+
+struct req_format RQF_MDS_STATFS_NEW =
+	DEFINE_REQ_FMT0("MDS_STATFS_NEW", mdt_body_only, obd_statfs_server);
+EXPORT_SYMBOL(RQF_MDS_STATFS_NEW);
 
 struct req_format RQF_MDS_SYNC =
 	DEFINE_REQ_FMT0("MDS_SYNC", mdt_body_capa, mdt_body_only);
@@ -2160,6 +2165,7 @@ u32 req_capsule_fmt_size(u32 magic, const struct req_format *fmt,
 			size += cfs_size_round(fmt->rf_fields[loc].d[i]->rmf_size);
 	return size;
 }
+EXPORT_SYMBOL(req_capsule_fmt_size);
 
 /**
  * Changes the format of an RPC.
