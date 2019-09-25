@@ -985,6 +985,7 @@ static int osc_extent_truncate(struct osc_extent *ext, pgoff_t trunc_index,
 	struct client_obd *cli = osc_cli(obj);
 	struct osc_async_page *oap;
 	struct osc_async_page *tmp;
+	struct pagevec        *pvec;
 	int pages_in_chunk = 0;
 	int ppc_bits = cli->cl_chunkbits - PAGE_SHIFT;
 	u64 trunc_chunk = trunc_index >> ppc_bits;
@@ -1008,6 +1009,8 @@ static int osc_extent_truncate(struct osc_extent *ext, pgoff_t trunc_index,
 	io  = osc_env_thread_io(env);
 	io->ci_obj = cl_object_top(osc2cl(obj));
 	io->ci_ignore_layout = 1;
+	pvec = &osc_env_info(env)->oti_pagevec;
+	pagevec_init(pvec);
 	rc = cl_io_init(env, io, CIT_MISC, io->ci_obj);
 	if (rc < 0)
 		goto out;
@@ -1046,11 +1049,13 @@ static int osc_extent_truncate(struct osc_extent *ext, pgoff_t trunc_index,
 		}
 
 		lu_ref_del(&page->cp_reference, "truncate", current);
-		cl_page_put(env, page);
+		cl_pagevec_put(env, page, pvec);
 
 		--ext->oe_nr_pages;
 		++nr_pages;
 	}
+	pagevec_release(pvec);
+
 	EASSERTF(ergo(ext->oe_start >= trunc_index + !!partial,
 		      ext->oe_nr_pages == 0),
 		ext, "trunc_index %lu, partial %d\n", trunc_index, partial);
@@ -3031,6 +3036,7 @@ bool osc_page_gang_lookup(const struct lu_env *env, struct cl_io *io,
 			  osc_page_gang_cbt cb, void *cbdata)
 {
 	struct osc_page *ops;
+	struct pagevec	*pagevec;
 	void **pvec;
 	pgoff_t idx;
 	unsigned int nr;
@@ -3041,6 +3047,8 @@ bool osc_page_gang_lookup(const struct lu_env *env, struct cl_io *io,
 
 	idx = start;
 	pvec = osc_env_info(env)->oti_pvec;
+	pagevec = &osc_env_info(env)->oti_pagevec;
+	pagevec_init(pagevec);
 	spin_lock(&osc->oo_tree_lock);
 	while ((nr = radix_tree_gang_lookup(&osc->oo_tree, pvec,
 					    idx, OTI_PVEC_SIZE)) > 0) {
@@ -3087,8 +3095,10 @@ bool osc_page_gang_lookup(const struct lu_env *env, struct cl_io *io,
 
 			page = ops->ops_cl.cpl_page;
 			lu_ref_del(&page->cp_reference, "gang_lookup", current);
-			cl_page_put(env, page);
+			cl_pagevec_put(env, page, pagevec);
 		}
+		pagevec_release(pagevec);
+
 		if (nr < OTI_PVEC_SIZE || end_of_region)
 			break;
 

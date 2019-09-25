@@ -90,7 +90,8 @@ cl_page_at_trusted(const struct cl_page *page,
 	return NULL;
 }
 
-static void cl_page_free(const struct lu_env *env, struct cl_page *page)
+static void cl_page_free(const struct lu_env *env, struct cl_page *page,
+			 struct pagevec *pvec)
 {
 	struct cl_object *obj = page->cp_obj;
 	struct cl_page_slice *slice;
@@ -104,7 +105,7 @@ static void cl_page_free(const struct lu_env *env, struct cl_page *page)
 						 cpl_linkage)) != NULL) {
 		list_del_init(page->cp_layers.next);
 		if (unlikely(slice->cpl_ops->cpo_fini))
-			slice->cpl_ops->cpo_fini(env, slice);
+			slice->cpl_ops->cpo_fini(env, slice, pvec);
 	}
 	lu_object_ref_del_at(&obj->co_lu, &page->cp_obj_ref, "cl_page", page);
 	cl_object_put(env, obj);
@@ -152,7 +153,7 @@ struct cl_page *cl_page_alloc(const struct lu_env *env,
 								   page, ind);
 				if (result != 0) {
 					__cl_page_delete(env, page);
-					cl_page_free(env, page);
+					cl_page_free(env, page, NULL);
 					page = ERR_PTR(result);
 					break;
 				}
@@ -299,15 +300,13 @@ void cl_page_get(struct cl_page *page)
 EXPORT_SYMBOL(cl_page_get);
 
 /**
- * Releases a reference to a page.
+ * Releases a reference to a page, use the pagevec to release the pages
+ * in batch if provided.
  *
- * When last reference is released, page is returned to the cache, unless it
- * is in cl_page_state::CPS_FREEING state, in which case it is immediately
- * destroyed.
- *
- * \see cl_object_put(), cl_lock_put().
+ * Users need to do a final pagevec_release() to release any trailing pages.
  */
-void cl_page_put(const struct lu_env *env, struct cl_page *page)
+void cl_pagevec_put(const struct lu_env *env, struct cl_page *page,
+		  struct pagevec *pvec)
 {
 	CL_PAGE_HEADER(D_TRACE, env, page, "%d\n",
 		       refcount_read(&page->cp_ref));
@@ -322,8 +321,23 @@ void cl_page_put(const struct lu_env *env, struct cl_page *page)
 		 * Page is no longer reachable by other threads. Tear
 		 * it down.
 		 */
-		cl_page_free(env, page);
+		cl_page_free(env, page, pvec);
 	}
+}
+EXPORT_SYMBOL(cl_pagevec_put);
+
+/**
+ * Releases a reference to a page, wrapper to cl_pagevec_put
+ *
+ * When last reference is released, page is returned to the cache, unless it
+ * is in cl_page_state::CPS_FREEING state, in which case it is immediately
+ * destroyed.
+ *
+ * \see cl_object_put(), cl_lock_put().
+ */
+void cl_page_put(const struct lu_env *env, struct cl_page *page)
+{
+	cl_pagevec_put(env, page, NULL);
 }
 EXPORT_SYMBOL(cl_page_put);
 
