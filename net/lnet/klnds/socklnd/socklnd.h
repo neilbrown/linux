@@ -54,7 +54,7 @@
 #define SOCKNAL_NSCHEDS		3
 #define SOCKNAL_NSCHEDS_HIGH	(SOCKNAL_NSCHEDS << 1)
 
-#define SOCKNAL_PEER_HASH_SIZE	101   /* # peer_ni lists */
+#define SOCKNAL_PEER_HASH_BITS	7   /* # log2 of # of peer_ni lists */
 #define SOCKNAL_RESCHED		100   /* # scheduler loops before reschedule */
 #define SOCKNAL_INSANITY_RECONN	5000  /* connd is trying on reconn infinitely */
 #define SOCKNAL_ENOMEM_RETRY	1     /* seconds between retries */
@@ -191,10 +191,10 @@ struct ksock_nal_data {
 	rwlock_t		ksnd_global_lock;	/* stabilize
 							 * peer_ni/conn ops
 							 */
-	struct list_head	*ksnd_peers;		/* hash table of all my
+	DECLARE_HASHTABLE(ksnd_peers, SOCKNAL_PEER_HASH_BITS);
+							/* hash table of all my
 							 * known peers
 							 */
-	int			ksnd_peer_hash_size;	/* size of ksnd_peers */
 
 	int			ksnd_nthreads;		/* # live threads */
 	int			ksnd_shuttingdown;	/* tell threads to exit
@@ -406,7 +406,7 @@ struct ksock_route {
 #define SOCKNAL_KEEPALIVE_PING	1	/* cookie for keepalive ping */
 
 struct ksock_peer {
-	struct list_head	ksnp_list;		/* stash on global peer_ni list */
+	struct hlist_node	ksnp_list;		/* on global peer_nis hash table */
 	time64_t		ksnp_last_alive;	/* when (in seconds) I was last
 							 * alive
 							 */
@@ -513,14 +513,6 @@ ksocknal_route_mask(void)
 	return ((1 << SOCKLND_CONN_CONTROL) |
 		(1 << SOCKLND_CONN_BULK_IN) |
 		(1 << SOCKLND_CONN_BULK_OUT));
-}
-
-static inline struct list_head *
-ksocknal_nid2peerlist(lnet_nid_t nid)
-{
-	unsigned int hash = ((unsigned int)nid) % ksocknal_data.ksnd_peer_hash_size;
-
-	return &ksocknal_data.ksnd_peers[hash];
 }
 
 static inline void
