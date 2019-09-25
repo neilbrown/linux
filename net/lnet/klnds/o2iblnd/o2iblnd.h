@@ -134,9 +134,7 @@ extern struct kib_tunables  kiblnd_tunables;
 /* WRs and CQEs (per connection) */
 #define IBLND_RECV_WRS(c)	IBLND_RX_MSGS(c)
 
-#define IBLND_CQ_ENTRIES(c)	\
-	(IBLND_RECV_WRS(c) + 2 * kiblnd_concurrent_sends(c->ibc_version, \
-							 c->ibc_peer->ibp_ni))
+#define IBLND_CQ_ENTRIES(c) (IBLND_RECV_WRS(c) + kiblnd_send_wrs(c))
 
 struct kib_hca_dev;
 
