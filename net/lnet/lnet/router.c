@@ -197,7 +197,7 @@ lnet_ni_notify_locked(struct lnet_ni *ni, struct lnet_peer_ni *lp)
 static void
 lnet_rtr_addref_locked(struct lnet_peer_ni *lp)
 {
-	LASSERT(atomic_read(&lp->lpni_refcount) > 0);
+	LASSERT(kref_read(&lp->lpni_kref) > 0);
 	LASSERT(lp->lpni_rtr_refcount >= 0);
 
 	/* lnet_net_lock must be exclusively locked */
@@ -225,7 +225,7 @@ lnet_rtr_addref_locked(struct lnet_peer_ni *lp)
 static void
 lnet_rtr_decref_locked(struct lnet_peer_ni *lp)
 {
-	LASSERT(atomic_read(&lp->lpni_refcount) > 0);
+	LASSERT(kref_read(&lp->lpni_kref) > 0);
 	LASSERT(lp->lpni_rtr_refcount > 0);
 
 	/* lnet_net_lock must be exclusively locked */

@@ -319,7 +319,7 @@ static int proc_lnet_routers(struct ctl_table *table, int write,
 			lnet_nid_t nid = peer->lpni_nid;
 			time64_t now = ktime_get_seconds();
 			time64_t deadline = peer->lpni_ping_deadline;
-			int nrefs = atomic_read(&peer->lpni_refcount);
+			int nrefs = kref_read(&peer->lpni_kref);
 			int nrtrrefs = peer->lpni_rtr_refcount;
 			int alive_cnt = peer->lpni_alive_count;
 			int alive = peer->lpni_alive;
@@ -513,7 +513,7 @@ again:
 
 		if (peer) {
 			lnet_nid_t nid = peer->lpni_nid;
-			int nrefs = atomic_read(&peer->lpni_refcount);
+			int nrefs = kref_read(&peer->lpni_kref);
 			time64_t lastalive = -1;
 			char *aliveness = "NA";
 			int maxcr = peer->lpni_net ?
