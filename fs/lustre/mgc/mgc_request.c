@@ -462,29 +462,24 @@ int lprocfs_mgc_rd_ir_state(struct seq_file *m, void *data)
 	struct config_llog_data *cld;
 	int rc;
 
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, obd, imp) {
+		ocd = &imp->imp_connect_data;
 
-	imp = obd->u.cli.cl_import;
-	ocd = &imp->imp_connect_data;
+		seq_printf(m, "imperative_recovery: %s\n",
+			   OCD_HAS_FLAG(ocd, IMP_RECOV) ? "ENABLED" : "DISABLED");
+		seq_puts(m, "client_state:\n");
 
-	seq_printf(m, "imperative_recovery: %s\n",
-		   OCD_HAS_FLAG(ocd, IMP_RECOV) ? "ENABLED" : "DISABLED");
-	seq_puts(m, "client_state:\n");
-
-	spin_lock(&config_list_lock);
-	list_for_each_entry(cld, &config_llog_list, cld_list_chain) {
-		if (!cld->cld_recover)
-			continue;
-		seq_printf(m, "    - { client: %s, nidtbl_version: %u }\n",
-			   cld->cld_logname,
-			   cld->cld_recover->cld_cfg.cfg_last_idx);
+		spin_lock(&config_list_lock);
+		list_for_each_entry(cld, &config_llog_list, cld_list_chain) {
+			if (!cld->cld_recover)
+				continue;
+			seq_printf(m, "    - { client: %s, nidtbl_version: %u }\n",
+				   cld->cld_logname,
+				   cld->cld_recover->cld_cfg.cfg_last_idx);
+		}
+		spin_unlock(&config_list_lock);
 	}
-	spin_unlock(&config_list_lock);
-
-	up_read(&obd->u.cli.cl_sem);
-	return 0;
+	return rc;
 }
 
 /* reenqueue any lost locks */

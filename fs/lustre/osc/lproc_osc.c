@@ -601,14 +601,11 @@ static ssize_t idle_timeout_show(struct kobject *kobj, struct attribute *attr,
 {
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &obd->u.cli;
+	struct obd_import *imp;
 	int ret;
 
-	ret = lprocfs_climp_check(obd);
-	if (ret)
-		return ret;
-	ret = sprintf(buf, "%u\n", cli->cl_import->imp_idle_timeout);
-	up_read(&obd->u.cli.cl_sem);
+	with_obd_cl_sem(ret, obd, imp)
+		ret = sprintf(buf, "%u\n", imp->imp_idle_timeout);
 
 	return ret;
 }
@@ -618,7 +615,7 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 {
 	struct obd_device *dev = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_import *imp;
 	struct ptlrpc_request *req;
 	unsigned int idle_debug = 0;
 	unsigned int val;
@@ -645,22 +642,22 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 			return -ERANGE;
 	}
 
-	rc = lprocfs_climp_check(dev);
-	if (rc)
-		return rc;
-	if (idle_debug) {
-		cli->cl_import->imp_idle_debug = idle_debug;
-	} else {
-		if (!val) {
-			/* initiate the connection if it's in IDLE state */
-			req = ptlrpc_request_alloc(cli->cl_import,
-						   &RQF_OST_STATFS);
-			if (req)
-				ptlrpc_req_finished(req);
+	with_obd_cl_sem(count, dev, imp) {
+		if (idle_debug) {
+			imp->imp_idle_debug = idle_debug;
+		} else {
+			if (!val) {
+				/* initiate the connection if it's in
+				 * IDLE state
+				 */
+				req = ptlrpc_request_alloc(imp,
+							   &RQF_OST_STATFS);
+				if (req)
+					ptlrpc_req_finished(req);
+			}
+			imp->imp_idle_timeout = val;
 		}
-		cli->cl_import->imp_idle_timeout = val;
 	}
-	up_read(&dev->u.cli.cl_sem);
 
 	return count;
 }
@@ -671,19 +668,16 @@ static ssize_t idle_connect_store(struct kobject *kobj, struct attribute *attr,
 {
 	struct obd_device *dev = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_import *imp;
 	struct ptlrpc_request *req;
-	int rc;
 
-	rc = lprocfs_climp_check(dev);
-	if (rc)
-		return rc;
-	/* to initiate the connection if it's in IDLE state */
-	req = ptlrpc_request_alloc(cli->cl_import, &RQF_OST_STATFS);
-	if (req)
-		ptlrpc_req_finished(req);
-	ptlrpc_pinger_force(cli->cl_import);
-	up_read(&dev->u.cli.cl_sem);
+	with_obd_cl_sem(count, dev, imp) {
+		/* to initiate the connection if it's in IDLE state */
+		req = ptlrpc_request_alloc(imp, &RQF_OST_STATFS);
+		if (req)
+			ptlrpc_req_finished(req);
+		ptlrpc_pinger_force(imp);
+	}
 
 	return count;
 }
@@ -694,18 +688,16 @@ static ssize_t grant_shrink_show(struct kobject *kobj, struct attribute *attr,
 {
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &obd->u.cli;
+	struct obd_import *imp;
 	struct obd_connect_data *ocd;
 	ssize_t len;
 
-	len = lprocfs_climp_check(obd);
-	if (len)
-		return len;
-	ocd = &cli->cl_import->imp_connect_data;
+	with_obd_cl_sem(len, obd, imp) {
+		ocd = &imp->imp_connect_data;
 
-	len = snprintf(buf, PAGE_SIZE, "%d\n",
-		       !!OCD_HAS_FLAG(ocd, GRANT_SHRINK));
-	up_read(&obd->u.cli.cl_sem);
+		len = snprintf(buf, PAGE_SIZE, "%d\n",
+			       !!OCD_HAS_FLAG(ocd, GRANT_SHRINK));
+	}
 
 	return len;
 }
@@ -715,7 +707,7 @@ static ssize_t grant_shrink_store(struct kobject *kobj, struct attribute *attr,
 {
 	struct obd_device *dev = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_import *imp;
 	struct obd_connect_data *ocd;
 	bool val;
 	int rc;
@@ -727,27 +719,26 @@ static ssize_t grant_shrink_store(struct kobject *kobj, struct attribute *attr,
 	if (rc)
 		return rc;
 
-	rc = lprocfs_climp_check(dev);
-	if (rc)
-		return rc;
-	ocd = &cli->cl_import->imp_connect_data;
+	with_obd_cl_sem(count, dev, imp) {
+		ocd = &imp->imp_connect_data;
 
-	if (!val) {
-		if (OCD_HAS_FLAG(ocd, GRANT_SHRINK))
-			ocd->ocd_connect_flags &= ~OBD_CONNECT_GRANT_SHRINK;
-	} else {
-		/**
-		 * server replied obd_connect_data is always bigger, so
-		 * client's imp_connect_flags_orig are always supported
-		 * by the server
-		 */
-		if (!OCD_HAS_FLAG(ocd, GRANT_SHRINK) &&
-		    cli->cl_import->imp_connect_flags_orig &
-		    OBD_CONNECT_GRANT_SHRINK)
-			ocd->ocd_connect_flags |= OBD_CONNECT_GRANT_SHRINK;
+		if (!val) {
+			if (OCD_HAS_FLAG(ocd, GRANT_SHRINK))
+				ocd->ocd_connect_flags &=
+					~OBD_CONNECT_GRANT_SHRINK;
+		} else {
+			/**
+			 * server replied obd_connect_data is always
+			 * bigger, so client's imp_connect_flags_orig
+			 * are always supported by the server
+			 */
+			if (!OCD_HAS_FLAG(ocd, GRANT_SHRINK) &&
+			    imp->imp_connect_flags_orig &
+			    OBD_CONNECT_GRANT_SHRINK)
+				ocd->ocd_connect_flags |=
+					OBD_CONNECT_GRANT_SHRINK;
+		}
 	}
-
-	up_read(&dev->u.cli.cl_sem);
 
 	return count;
 }

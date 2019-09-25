@@ -1242,16 +1242,16 @@ int lprocfs_wr_ping(struct file *file, const char __user *buffer,
 	struct seq_file *m = file->private_data;
 	struct obd_device *obd = m->private;
 	struct ptlrpc_request *req;
+	struct obd_import *imp;
 	int rc;
 
-	rc = lprocfs_climp_check(obd);
+	with_obd_cl_sem(rc, obd, imp) {
+		req = ptlrpc_prep_ping(imp);
+		if (!req)
+			rc = -ENOMEM;
+	}
 	if (rc)
 		return rc;
-
-	req = ptlrpc_prep_ping(obd->u.cli.cl_import);
-	up_read(&obd->u.cli.cl_sem);
-	if (!req)
-		return -ENOMEM;
 
 	req->rq_send_state = LUSTRE_IMP_FULL;
 
@@ -1338,17 +1338,13 @@ EXPORT_SYMBOL(lprocfs_wr_import);
 int lprocfs_rd_pinger_recov(struct seq_file *m, void *n)
 {
 	struct obd_device *obd = m->private;
-	struct obd_import *imp = obd->u.cli.cl_import;
+	struct obd_import *imp;
 	int rc;
 
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, obd, imp)
+		seq_printf(m, "%d\n", !imp->imp_no_pinger_recover);
 
-	seq_printf(m, "%d\n", !imp->imp_no_pinger_recover);
-	up_read(&obd->u.cli.cl_sem);
-
-	return 0;
+	return rc;
 }
 EXPORT_SYMBOL(lprocfs_rd_pinger_recov);
 
@@ -1357,8 +1353,7 @@ int lprocfs_wr_pinger_recov(struct file *file, const char __user *buffer,
 {
 	struct seq_file *m = file->private_data;
 	struct obd_device *obd = m->private;
-	struct client_obd *cli = &obd->u.cli;
-	struct obd_import *imp = cli->cl_import;
+	struct obd_import *imp;
 	int rc, val;
 
 	rc = lprocfs_write_helper(buffer, count, &val);
@@ -1368,15 +1363,12 @@ int lprocfs_wr_pinger_recov(struct file *file, const char __user *buffer,
 	if (val != 0 && val != 1)
 		return -ERANGE;
 
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
+	with_obd_cl_sem(rc, obd, imp) {
+		spin_lock(&imp->imp_lock);
+		imp->imp_no_pinger_recover = !val;
+		spin_unlock(&imp->imp_lock);
+	}
 
-	spin_lock(&imp->imp_lock);
-	imp->imp_no_pinger_recover = !val;
-	spin_unlock(&imp->imp_lock);
-	up_read(&obd->u.cli.cl_sem);
-
-	return count;
+	return rc ?: count;
 }
 EXPORT_SYMBOL(lprocfs_wr_pinger_recov);
