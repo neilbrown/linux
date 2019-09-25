@@ -180,14 +180,13 @@ lnet_md_build(struct lnet_md *umd, int unlink)
 	struct lnet_libmd *lmd;
 	unsigned int size;
 
-	if (umd->options & LNET_MD_KIOV) {
+	if (umd->options & LNET_MD_KIOV)
 		niov = umd->length;
-		size = offsetof(struct lnet_libmd, md_iov.kiov[niov]);
-	} else {
-		niov = 1;
-		size = offsetof(struct lnet_libmd, md_iov.iov[niov]);
-	}
+	else
+		niov = DIV_ROUND_UP(offset_in_page(umd->start) + umd->length,
+				    PAGE_SIZE);
 
+	size = offsetof(struct lnet_libmd, md_iov.kiov[niov]);
 	if (size <= LNET_SMALL_MD_SIZE) {
 		lmd = kmem_cache_alloc(lnet_small_mds_cachep,
 				      GFP_NOFS | __GFP_ZERO);
@@ -221,8 +220,6 @@ lnet_md_build(struct lnet_md *umd, int unlink)
 	lmd->md_bulk_handle = umd->bulk_handle;
 
 	if (umd->options & LNET_MD_KIOV) {
-		niov = umd->length;
-		lmd->md_niov = umd->length;
 		memcpy(lmd->md_iov.kiov, umd->start,
 		       niov * sizeof(lmd->md_iov.kiov[0]));
 
@@ -245,12 +242,29 @@ lnet_md_build(struct lnet_md *umd, int unlink)
 			lnet_md_free(lmd);
 			return ERR_PTR(-EINVAL);
 		}
-	} else {   /* contiguous */
-		lmd->md_length = umd->length;
-		niov = 1;
-		lmd->md_niov = 1;
-		lmd->md_iov.iov[0].iov_base = umd->start;
-		lmd->md_iov.iov[0].iov_len = umd->length;
+	} else {   /* contiguous - split into pages */
+		void *pa = umd->start;
+		int len = umd->length;
+
+		lmd->md_length = len;
+		i = 0;
+		while (len) {
+			struct page *p;
+			int plen;
+
+			if (is_vmalloc_addr(pa))
+				p = vmalloc_to_page(pa);
+			else
+				p = virt_to_page(pa);
+			plen = min_t(int, len, PAGE_SIZE - offset_in_page(pa));
+
+			lmd->md_iov.kiov[i].bv_page = p;
+			lmd->md_iov.kiov[i].bv_offset = offset_in_page(pa);
+			lmd->md_iov.kiov[i].bv_len = plen;
+			len -= plen;
+			pa += plen;
+			i += 1;
+		}
 
 		if ((umd->options & LNET_MD_MAX_SIZE) && /* max size used */
 		    (umd->max_size < 0 ||
@@ -258,6 +272,7 @@ lnet_md_build(struct lnet_md *umd, int unlink)
 			lnet_md_free(lmd);
 			return ERR_PTR(-EINVAL);
 		}
+		lmd->md_options |= LNET_MD_KIOV;
 	}
 
 	return lmd;
