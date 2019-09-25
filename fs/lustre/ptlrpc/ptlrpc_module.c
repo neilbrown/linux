@@ -49,8 +49,6 @@ int ptlrpc_inc_ref(void)
 
 	mutex_lock(&ptlrpc_startup);
 	if (ptlrpc_active++ == 0) {
-		ptlrpc_put_connection_superhack = ptlrpc_connection_put;
-
 		rc = ptlrpc_init_portals();
 		if (!rc) {
 			rc = ptlrpc_start_pinger();
