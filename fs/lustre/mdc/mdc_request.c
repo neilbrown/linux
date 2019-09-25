@@ -1829,7 +1829,6 @@ static int mdc_quotactl(struct obd_device *unused, struct obd_export *exp,
 
 	ptlrpc_request_set_replen(req);
 	ptlrpc_at_set_req_timeout(req);
-	req->rq_no_resend = 1;
 
 	rc = ptlrpc_queue_wait(req);
 	if (rc)
