@@ -238,6 +238,7 @@ static int libcfs_ioctl(unsigned long cmd, void __user *uparam)
 
 	case IOC_LIBCFS_MARK_DEBUG:
 		if (!data || !data->ioc_inlbuf1 ||
+		    data->ioc_inllen1 == 0 ||
 		    data->ioc_inlbuf1[data->ioc_inllen1 - 1] != '\0') {
 			err = -EINVAL;
 			goto out;
