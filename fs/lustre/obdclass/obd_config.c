@@ -762,11 +762,6 @@ void class_del_profiles(void)
 }
 EXPORT_SYMBOL(class_del_profiles);
 
-/* We can't call lquota_process_config directly because
- * it lives in a module that must be loaded after this one.
- */
-static int (*quota_process_config)(struct lustre_cfg *lcfg);
-
 static int process_param2_config(struct lustre_cfg *lcfg)
 {
 	char *param = lustre_cfg_string(lcfg, 1);
@@ -944,11 +939,6 @@ int class_process_config(struct lustre_cfg *lcfg)
 				CWARN("Ignoring unknown param %s\n", tmp);
 
 			err = 0;
-			goto out;
-		} else if ((class_match_param(lustre_cfg_string(lcfg, 1),
-					      PARAM_QUOTA, &tmp) == 0) &&
-			   quota_process_config) {
-			err = (*quota_process_config)(lcfg);
 			goto out;
 		}
 
