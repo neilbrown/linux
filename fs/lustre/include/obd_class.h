@@ -1679,7 +1679,6 @@ int class_check_uuid(struct obd_uuid *uuid, u64 nid);
 extern char obd_jobid_name[];
 int class_procfs_init(void);
 int class_procfs_clean(void);
-
 /* prng.c */
 #define ll_generate_random_uuid(uuid_out) \
 	get_random_bytes(uuid_out, sizeof(class_uuid_t))

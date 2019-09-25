@@ -318,6 +318,9 @@ EXPORT_SYMBOL(cfs_crypto_hash_final);
  * The speed is stored internally in the cfs_crypto_hash_speeds[] array, and
  * is available through the cfs_crypto_hash_speed() function.
  *
+ * This function needs to stay the same as obd_t10_performance_test() so that
+ * the speeds are comparable.
+ *
  * @hash_alg	hash algorithm id (CFS_HASH_ALG_*)
  * @buf		data buffer on which to compute the hash
  * @buf_len	length of @buf on which to compute hash
