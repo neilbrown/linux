@@ -680,6 +680,7 @@ out:
 	return -ENOMEM;
 }
 
+static struct portals_handle_ops export_handle_ops;
 /* map connection to client */
 struct obd_export *class_conn2export(struct lustre_handle *conn)
 {
@@ -696,7 +697,7 @@ struct obd_export *class_conn2export(struct lustre_handle *conn)
 	}
 
 	CDEBUG(D_INFO, "looking for export cookie %#llx\n", conn->cookie);
-	export = class_handle2object(conn->cookie, NULL);
+	export = class_handle2object(conn->cookie, &export_handle_ops);
 	return export;
 }
 EXPORT_SYMBOL(class_conn2export);
