@@ -473,9 +473,7 @@ ksocknal_process_transmit(struct ksock_conn *conn, struct ksock_tx *tx)
 		LASSERT(conn->ksnc_tx_scheduled);
 		list_add_tail(&conn->ksnc_tx_list,
 			      &ksocknal_data.ksnd_enomem_conns);
-		if (jiffies + SOCKNAL_ENOMEM_RETRY * HZ <
-		    ksocknal_data.ksnd_reaper_waketime)
-			wake_up(&ksocknal_data.ksnd_reaper_waitq);
+		wake_up(&ksocknal_data.ksnd_reaper_waitq);
 
 		spin_unlock_bh(&ksocknal_data.ksnd_reaper_lock);
 		return rc;
@@ -2399,11 +2397,11 @@ ksocknal_reaper(void *arg)
 	struct ksock_conn *conn;
 	struct ksock_sched *sched;
 	struct list_head enomem_conns;
-	int nenomem_conns;
 	long timeout;
 	int i;
 	int peer_index = 0;
 	unsigned long deadline = jiffies;
+	unsigned long enomem_retry = 0;
 
 	INIT_LIST_HEAD(&enomem_conns);
 	init_wait(&wait);
@@ -2438,17 +2436,19 @@ ksocknal_reaper(void *arg)
 			continue;
 		}
 
+		now = jiffies;
+
 		if (!list_empty(&ksocknal_data.ksnd_enomem_conns)) {
-			list_add(&enomem_conns,
-				 &ksocknal_data.ksnd_enomem_conns);
-			list_del_init(&ksocknal_data.ksnd_enomem_conns);
+			list_splice_init(&ksocknal_data.ksnd_enomem_conns,
+					 &enomem_conns);
+			enomem_retry = now + SOCKNAL_ENOMEM_RETRY * HZ;
 		}
 
 		spin_unlock_bh(&ksocknal_data.ksnd_reaper_lock);
 
 		/* reschedule all the connections that stalled with ENOMEM... */
-		nenomem_conns = 0;
-		while ((conn = list_first_entry_or_null(&enomem_conns,
+		while (time_after_eq(now, enomem_retry) &&
+		       (conn = list_first_entry_or_null(&enomem_conns,
 							struct ksock_conn,
 							ksnc_tx_list)) != NULL) {
 			list_del(&conn->ksnc_tx_list);
@@ -2464,10 +2464,7 @@ ksocknal_reaper(void *arg)
 			wake_up(&sched->kss_waitq);
 
 			spin_unlock_bh(&sched->kss_lock);
-			nenomem_conns++;
 		}
-
-		now = jiffies;
 
 		while (time_before_eq(deadline, now)) {
 			const int n = 4;
@@ -2496,24 +2493,18 @@ ksocknal_reaper(void *arg)
 
 			deadline += p * HZ;
 		}
-
 		timeout = deadline - now;
 
-		if (nenomem_conns) {
-			/*
-			 * Reduce my timeout if I rescheduled ENOMEM conns.
-			 * This also prevents me getting woken immediately
-			 * if any go back on my enomem list.
-			 */
-			timeout = SOCKNAL_ENOMEM_RETRY * HZ;
-		}
-		ksocknal_data.ksnd_reaper_waketime = jiffies + timeout;
+		if (!list_empty(&enomem_conns) &&
+		    deadline > enomem_retry)
+			timeout = enomem_retry - now;
 
 		set_current_state(TASK_IDLE);
 		add_wait_queue(&ksocknal_data.ksnd_reaper_waitq, &wait);
 
 		if (!ksocknal_data.ksnd_shuttingdown &&
 		    list_empty(&ksocknal_data.ksnd_deathrow_conns) &&
+		    list_empty(&ksocknal_data.ksnd_enomem_conns) &&
 		    list_empty(&ksocknal_data.ksnd_zombie_conns))
 			schedule_timeout(timeout);
 
