@@ -55,9 +55,6 @@ static struct workqueue_struct *zombie_wq;
 static void obd_zombie_export_add(struct obd_export *exp);
 static void obd_zombie_import_add(struct obd_import *imp);
 
-int (*ptlrpc_put_connection_superhack)(struct ptlrpc_connection *c);
-EXPORT_SYMBOL(ptlrpc_put_connection_superhack);
-
 /*
  * support functions: we could use inter-module communication, but this
  * is more portable to other OS's
@@ -732,9 +729,7 @@ static void class_export_destroy(struct obd_export *exp)
 	CDEBUG(D_IOCTL, "destroying export %p/%s for %s\n", exp,
 	       exp->exp_client_uuid.uuid, obd->obd_name);
 
-	/* "Local" exports (lctl, LOV->{mdc,osc}) have no connection. */
-	if (exp->exp_connection)
-		ptlrpc_put_connection_superhack(exp->exp_connection);
+	ptlrpc_connection_put(exp->exp_connection);
 
 	LASSERT(list_empty(&exp->exp_outstanding_replies));
 	LASSERT(list_empty(&exp->exp_uncommitted_replies));
@@ -922,13 +917,13 @@ static void class_import_destroy(struct obd_import *imp)
 
 	LASSERT(refcount_read(&imp->imp_handle.h_ref) == 0);
 
-	ptlrpc_put_connection_superhack(imp->imp_connection);
+	ptlrpc_connection_put(imp->imp_connection);
 
 	while ((imp_conn = list_first_entry_or_null(&imp->imp_conn_list,
 						    struct obd_import_conn,
 						    oic_item)) != NULL) {
 		list_del_init(&imp_conn->oic_item);
-		ptlrpc_put_connection_superhack(imp_conn->oic_conn);
+		ptlrpc_connection_put(imp_conn->oic_conn);
 		kfree(imp_conn);
 	}
 
