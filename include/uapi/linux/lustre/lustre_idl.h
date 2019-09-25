@@ -1251,6 +1251,8 @@ struct hsm_state_set {
 				      * it to sync quickly
 				      */
 
+#define OBD_MAX_GRANT 0x7fffffffUL /* Max grant allowed to one client: 2 GiB */
+
 #define OBD_OBJECT_EOF	LUSTRE_EOF
 
 #define OST_MIN_PRECREATE 32
