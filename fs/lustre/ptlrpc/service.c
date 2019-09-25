@@ -34,7 +34,6 @@
 #define DEBUG_SUBSYSTEM S_RPC
 
 #include <linux/kthread.h>
-#include <linux/fs_struct.h>
 #include <obd_support.h>
 #include <obd_class.h>
 #include <lustre_net.h>
@@ -2037,7 +2036,6 @@ static int ptlrpc_main(void *arg)
 	int counter = 0, rc = 0;
 
 	thread->t_pid = current->pid;
-	unshare_fs_struct();
 
 	/* NB: we will call cfs_cpt_bind() for all threads, because we
 	 * might want to run lustre server only on a subset of system CPUs,
@@ -2237,8 +2235,6 @@ static int ptlrpc_hr_main(void *arg)
 	struct ptlrpc_hr_partition *hrp = hrt->hrt_partition;
 	LIST_HEAD(replies);
 	int rc;
-
-	unshare_fs_struct();
 
 	rc = cfs_cpt_bind(ptlrpc_hr.hr_cpt_table, hrp->hrp_cpt);
 	if (rc != 0) {
