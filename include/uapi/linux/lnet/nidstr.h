@@ -53,6 +53,8 @@ enum {
 	/*MXLND		= 12, removed v2_7_50_0-34-g8be9e41	*/
 	GNILND		= 13,
 	GNIIPLND	= 14,
+
+	NUM_LNDS
 };
 
 struct list_head;
