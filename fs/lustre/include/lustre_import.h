@@ -154,8 +154,6 @@ struct import_state_hist {
 struct obd_import {
 	/** Local handle (== id) for this import. */
 	struct portals_handle		imp_handle;
-	/** Reference counter */
-	atomic_t			imp_refcount;
 	struct lustre_handle		imp_dlm_handle; /* client's ldlm export */
 	/** Currently active connection */
 	struct ptlrpc_connection       *imp_connection;
