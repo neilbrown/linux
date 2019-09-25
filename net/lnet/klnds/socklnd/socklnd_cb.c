@@ -503,7 +503,7 @@ ksocknal_process_transmit(struct ksock_conn *conn, struct ksock_tx *tx)
 		LASSERT(conn->ksnc_tx_scheduled);
 		list_add_tail(&conn->ksnc_tx_list,
 			      &ksocknal_data.ksnd_enomem_conns);
-		if (ktime_get_seconds() + SOCKNAL_ENOMEM_RETRY <
+		if (jiffies + SOCKNAL_ENOMEM_RETRY * HZ <
 		    ksocknal_data.ksnd_reaper_waketime)
 			wake_up(&ksocknal_data.ksnd_reaper_waitq);
 
@@ -2457,14 +2457,16 @@ ksocknal_reaper(void *arg)
 	struct ksock_sched *sched;
 	LIST_HEAD(enomem_conns);
 	int nenomem_conns;
-	time64_t timeout;
+	long timeout;
 	int i;
 	int peer_index = 0;
-	time64_t deadline = ktime_get_seconds();
+	unsigned long deadline = jiffies;
 
 	init_wait(&wait);
 
 	while (!ksocknal_data.ksnd_shuttingdown) {
+		unsigned long now;
+
 		spin_lock_bh(&ksocknal_data.ksnd_reaper_lock);
 
 		conn = list_first_entry_or_null(&ksocknal_data.ksnd_deathrow_conns,
@@ -2521,8 +2523,9 @@ ksocknal_reaper(void *arg)
 			nenomem_conns++;
 		}
 
-		/* careful with the jiffy wrap... */
-		while ((timeout = deadline - ktime_get_seconds()) <= 0) {
+		now = jiffies;
+
+		while (time_before_eq(deadline, now)) {
 			const int n = 4;
 			const int p = 1;
 			int chunk = HASH_SIZE(ksocknal_data.ksnd_peers);
@@ -2549,8 +2552,10 @@ ksocknal_reaper(void *arg)
 					     HASH_SIZE(ksocknal_data.ksnd_peers);
 			}
 
-			deadline += p;
+			deadline += p * HZ;
 		}
+
+		timeout = deadline - now;
 
 		if (nenomem_conns) {
 			/*
@@ -2558,10 +2563,9 @@ ksocknal_reaper(void *arg)
 			 * This also prevents me getting woken immediately
 			 * if any go back on my enomem list.
 			 */
-			timeout = SOCKNAL_ENOMEM_RETRY;
+			timeout = SOCKNAL_ENOMEM_RETRY * HZ;
 		}
-		ksocknal_data.ksnd_reaper_waketime = ktime_get_seconds() +
-						     timeout;
+		ksocknal_data.ksnd_reaper_waketime = jiffies + timeout;
 
 		set_current_state(TASK_IDLE);
 		add_wait_queue(&ksocknal_data.ksnd_reaper_waitq, &wait);
@@ -2569,7 +2573,7 @@ ksocknal_reaper(void *arg)
 		if (!ksocknal_data.ksnd_shuttingdown &&
 		    list_empty(&ksocknal_data.ksnd_deathrow_conns) &&
 		    list_empty(&ksocknal_data.ksnd_zombie_conns))
-			schedule_timeout(timeout * HZ);
+			schedule_timeout(timeout);
 
 		set_current_state(TASK_RUNNING);
 		remove_wait_queue(&ksocknal_data.ksnd_reaper_waitq, &wait);
