@@ -329,7 +329,7 @@ struct ksock_conn {
 	unsigned int		ksnc_closing:1;		/* being shut down */
 	unsigned int		ksnc_flip:1;		/* flip or not, only for V2.x */
 	unsigned int		ksnc_zc_capable:1;	/* enable to ZC */
-	struct ksock_proto     *ksnc_proto;		/* protocol for the connection */
+	const struct ksock_proto *ksnc_proto;		/* protocol for the connection */
 
 	/* reader */
 	struct list_head	ksnc_rx_list;		/* where I enq waiting input or a
@@ -420,7 +420,7 @@ struct ksock_peer {
 	u64			ksnp_incarnation;	/* latest known peer_ni
 							 * incarnation
 							 */
-	struct ksock_proto     *ksnp_proto;		/* latest known peer_ni
+	const struct ksock_proto *ksnp_proto;		/* latest known peer_ni
 							 * protocol
 							 */
 	struct list_head	ksnp_conns;		/* all active connections */
@@ -491,9 +491,9 @@ struct ksock_proto {
 	int	(*pro_match_tx)(struct ksock_conn *, struct ksock_tx *, int);
 };
 
-extern struct ksock_proto ksocknal_protocol_v1x;
-extern struct ksock_proto ksocknal_protocol_v2x;
-extern struct ksock_proto ksocknal_protocol_v3x;
+extern const struct ksock_proto ksocknal_protocol_v1x;
+extern const struct ksock_proto ksocknal_protocol_v2x;
+extern const struct ksock_proto ksocknal_protocol_v3x;
 
 #define KSOCK_PROTO_V1_MAJOR	LNET_PROTO_TCP_VERSION_MAJOR
 #define KSOCK_PROTO_V1_MINOR	LNET_PROTO_TCP_VERSION_MINOR
