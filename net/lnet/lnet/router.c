@@ -1109,7 +1109,7 @@ lnet_router_checker_start(void)
 
 	init_completion(&the_lnet.ln_rc_signal);
 
-	the_lnet.ln_rc_eq = LNetEQAlloc(0, lnet_router_checker_event);
+	the_lnet.ln_rc_eq = LNetEQAlloc(lnet_router_checker_event);
 	if (IS_ERR(the_lnet.ln_rc_eq)) {
 		rc = PTR_ERR(the_lnet.ln_rc_eq);
 		CERROR("Can't allocate EQ(%d): %d\n", eqsz, rc);
