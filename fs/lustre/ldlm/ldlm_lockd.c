@@ -118,6 +118,24 @@ void ldlm_handle_bl_callback(struct ldlm_namespace *ns,
 	LDLM_DEBUG(lock, "client blocking AST callback handler");
 
 	lock_res_and_lock(lock);
+
+	/* set bits to cancel for this lock for possible lock convert */
+	if (lock->l_resource->lr_type == LDLM_IBITS) {
+		/* Lock description contains policy of blocking lock,
+		 * and its cancel_bits is used to pass conflicting bits.
+		 * NOTE: ld can be NULL or can be not NULL but zeroed if
+		 * passed from ldlm_bl_thread_blwi(), check below used bits
+		 * in ld to make sure it is valid description.
+		 */
+		if (ld && ld->l_policy_data.l_inodebits.bits)
+			lock->l_policy_data.l_inodebits.cancel_bits =
+				ld->l_policy_data.l_inodebits.cancel_bits;
+		/* if there is no valid ld and lock is cbpending already
+		 * then cancel_bits should be kept, otherwise it is zeroed.
+		 */
+		else if (!ldlm_is_cbpending(lock))
+			lock->l_policy_data.l_inodebits.cancel_bits = 0;
+	}
 	ldlm_set_cbpending(lock);
 
 	if (ldlm_is_cancel_on_block(lock))

@@ -544,6 +544,7 @@ enum ldlm_cancel_flags {
 	LCF_BL_AST     = 0x4, /* Cancel locks marked as LDLM_FL_BL_AST
 			       * in the same RPC
 			       */
+	LCF_CONVERT    = 0x8, /* Try to convert IBITS lock before cancel */
 };
 
 struct ldlm_flock {
@@ -1295,6 +1296,7 @@ int ldlm_cli_enqueue_fini(struct obd_export *exp, struct ptlrpc_request *req,
 			  enum ldlm_mode mode,
 			  u64 *flags, void *lvb, u32 lvb_len,
 			  const struct lustre_handle *lockh, int rc);
+int ldlm_cli_convert(struct ldlm_lock *lock, u32 *flags);
 int ldlm_cli_update_pool(struct ptlrpc_request *req);
 int ldlm_cli_cancel(const struct lustre_handle *lockh,
 		    enum ldlm_cancel_flags cancel_flags);
@@ -1318,6 +1320,10 @@ int ldlm_cli_cancel_list(struct list_head *head, int count,
 			 struct ptlrpc_request *req,
 			 enum ldlm_cancel_flags flags);
 /** @} ldlm_cli_api */
+
+int ldlm_inodebits_drop(struct ldlm_lock *lock, u64 to_drop);
+int ldlm_cli_dropbits(struct ldlm_lock *lock, u64 drop_bits);
+int ldlm_cli_dropbits_list(struct list_head *converts, u64 drop_bits);
 
 /* mds/handler.c */
 /* This has to be here because recursive inclusion sucks. */
