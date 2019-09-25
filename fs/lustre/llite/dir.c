@@ -1107,18 +1107,19 @@ static long ll_dir_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_IOCTL, 1);
 	switch (cmd) {
-	case FSFILT_IOC_GETFLAGS:
-	case FSFILT_IOC_SETFLAGS:
+	case FS_IOC_GETFLAGS:
+	case FS_IOC_SETFLAGS:
 		return ll_iocontrol(inode, file, cmd, arg);
-	case FSFILT_IOC_GETVERSION_OLD:
 	case FSFILT_IOC_GETVERSION:
+	case FS_IOC_GETVERSION:
 		return put_user(inode->i_generation, (int __user *)arg);
 	/* We need to special case any other ioctls we want to handle,
 	 * to send them to the MDS/OST as appropriate and to properly
 	 * network encode the arg field.
-	case FSFILT_IOC_SETVERSION_OLD:
-	case FSFILT_IOC_SETVERSION:
-	*/
+	 */
+	case FS_IOC_SETVERSION:
+		return -ENOTSUPP;
+
 	case LL_IOC_GET_MDTIDX: {
 		int mdtidx;
 
@@ -1132,7 +1133,7 @@ static long ll_dir_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		return 0;
 	}
 	case IOC_MDC_LOOKUP: {
-		int namelen, len = 0;
+				     int namelen, len = 0;
 		char *filename;
 
 		rc = obd_ioctl_getdata(&data, &len, (void __user *)arg);
