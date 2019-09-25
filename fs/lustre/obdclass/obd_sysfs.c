@@ -216,16 +216,25 @@ static ssize_t jobid_var_store(struct kobject *kobj, struct attribute *attr,
 			       const char *buffer,
 			       size_t count)
 {
+	static char *valid[] = {
+		JOBSTATS_DISABLE,
+		JOBSTATS_PROCNAME_UID,
+		JOBSTATS_NODELOCAL,
+		NULL
+	};
+	int i;
+
 	if (!count || count > JOBSTATS_JOBID_VAR_MAX_LEN)
 		return -EINVAL;
 
+	for (i = 0; valid[i]; i++)
+		if (sysfs_streq(buffer, valid[i]))
+			break;
+	if (!valid[i])
+		return -EINVAL;
+
 	memset(obd_jobid_var, 0, JOBSTATS_JOBID_VAR_MAX_LEN + 1);
-
-	memcpy(obd_jobid_var, buffer, count);
-
-	/* Trim the trailing '\n' if any */
-	if (obd_jobid_var[count - 1] == '\n')
-		obd_jobid_var[count - 1] = 0;
+	strcpy(obd_jobid_var, valid[i]);
 
 	return count;
 }
