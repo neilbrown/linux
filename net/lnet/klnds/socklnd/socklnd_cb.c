@@ -2393,7 +2393,6 @@ again:
 int
 ksocknal_reaper(void *arg)
 {
-	wait_queue_entry_t wait;
 	struct ksock_conn *conn;
 	struct ksock_sched *sched;
 	struct list_head enomem_conns;
@@ -2404,8 +2403,6 @@ ksocknal_reaper(void *arg)
 	unsigned long enomem_retry = 0;
 
 	INIT_LIST_HEAD(&enomem_conns);
-	init_wait(&wait);
-
 	while (!ksocknal_data.ksnd_shuttingdown) {
 		unsigned long now;
 
@@ -2499,17 +2496,13 @@ ksocknal_reaper(void *arg)
 		    deadline > enomem_retry)
 			timeout = enomem_retry - now;
 
-		set_current_state(TASK_IDLE);
-		add_wait_queue(&ksocknal_data.ksnd_reaper_waitq, &wait);
-
-		if (!ksocknal_data.ksnd_shuttingdown &&
-		    list_empty(&ksocknal_data.ksnd_deathrow_conns) &&
-		    list_empty(&ksocknal_data.ksnd_enomem_conns) &&
-		    list_empty(&ksocknal_data.ksnd_zombie_conns))
-			schedule_timeout(timeout);
-
-		set_current_state(TASK_RUNNING);
-		remove_wait_queue(&ksocknal_data.ksnd_reaper_waitq, &wait);
+		wait_event_idle_timeout(
+			ksocknal_data.ksnd_reaper_waitq,
+			ksocknal_data.ksnd_shuttingdown ||
+			!list_empty(&ksocknal_data.ksnd_deathrow_conns) ||
+			!list_empty(&ksocknal_data.ksnd_enomem_conns) ||
+			!list_empty(&ksocknal_data.ksnd_zombie_conns),
+			timeout);
 	}
 
 	ksocknal_thread_fini();
