@@ -343,8 +343,6 @@ struct kib_data {
 	rwlock_t		kib_global_lock;
 	/* hash table of all my known peers */
 	DECLARE_HASHTABLE(kib_peers, IBLND_PEER_HASH_BITS);
-	/* the connd task (serialisation assertions) */
-	void		       *kib_connd;
 	/* connections to setup/teardown */
 	struct list_head	kib_connd_conns;
 	/* connections with zero refcount */

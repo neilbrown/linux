@@ -3225,19 +3225,6 @@ kiblnd_check_conns(int idx)
 	}
 }
 
-static void
-kiblnd_disconnect_conn(struct kib_conn *conn)
-{
-	LASSERT(!in_interrupt());
-	LASSERT(current == kiblnd_data.kib_connd);
-	LASSERT(conn->ibc_state == IBLND_CONN_CLOSING);
-
-	rdma_disconnect(conn->ibc_cmid);
-	kiblnd_finalise_conn(conn);
-
-	kiblnd_peer_notify(conn->ibc_peer);
-}
-
 /**
  * High-water for reconnection to the same peer_ni, reconnection attempt should
  * be delayed after trying more than KIB_RECONN_HIGH_RACE.
@@ -3263,7 +3250,6 @@ kiblnd_connd(void *arg)
 	unsigned long deadline = jiffies;
 
 	init_waitqueue_entry(&wait, current);
-	kiblnd_data.kib_connd = current;
 
 	spin_lock_irqsave(lock, flags);
 
@@ -3312,7 +3298,13 @@ kiblnd_connd(void *arg)
 			spin_unlock_irqrestore(lock, flags);
 			dropped_lock = true;
 
-			kiblnd_disconnect_conn(conn);
+			LASSERT(conn->ibc_state == IBLND_CONN_CLOSING);
+
+			rdma_disconnect(conn->ibc_cmid);
+			kiblnd_finalise_conn(conn);
+
+			kiblnd_peer_notify(conn->ibc_peer);
+
 			kiblnd_conn_decref(conn);
 
 			spin_lock_irqsave(lock, flags);
