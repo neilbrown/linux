@@ -1317,7 +1317,8 @@ lmv_out_free:
 			goto finish_req;
 		}
 
-		lum_size = lmv_user_md_size(stripe_count, LMV_MAGIC_V1);
+		lum_size = lmv_user_md_size(stripe_count,
+					    LMV_USER_MAGIC_SPECIFIC);
 		tmp = kzalloc(lum_size, GFP_NOFS);
 		if (!tmp) {
 			rc = -ENOMEM;
@@ -1650,14 +1651,14 @@ out_quotactl:
 		return rc;
 	}
 	case LL_IOC_MIGRATE: {
-		const char *filename;
+		struct lmv_user_md *lum;
+		char *filename;
 		int namelen = 0;
 		int len;
 		int rc;
-		int mdtidx;
 
 		rc = obd_ioctl_getdata(&data, &len, (void __user *)arg);
-		if (rc < 0)
+		if (rc)
 			return rc;
 
 		if (!data->ioc_inlbuf1 || !data->ioc_inlbuf2 ||
@@ -1669,17 +1670,21 @@ out_quotactl:
 		filename = data->ioc_inlbuf1;
 		namelen = data->ioc_inllen1;
 		if (namelen < 1 || namelen != strlen(filename) + 1) {
+			CDEBUG(D_INFO, "IOC_MDC_LOOKUP missing filename\n");
 			rc = -EINVAL;
 			goto migrate_free;
 		}
 
-		if (data->ioc_inllen2 != sizeof(mdtidx)) {
+		lum = (struct lmv_user_md *)data->ioc_inlbuf2;
+		if (lum->lum_magic != LMV_USER_MAGIC &&
+		    lum->lum_magic != LMV_USER_MAGIC_SPECIFIC) {
 			rc = -EINVAL;
+			CERROR("%s: wrong lum magic %x: rc = %d\n",
+			       filename, lum->lum_magic, rc);
 			goto migrate_free;
 		}
-		mdtidx = *(int *)data->ioc_inlbuf2;
 
-		rc = ll_migrate(inode, file, mdtidx, filename, namelen - 1);
+		rc = ll_migrate(inode, file, lum, filename);
 migrate_free:
 		kvfree(data);
 

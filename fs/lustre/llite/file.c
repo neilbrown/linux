@@ -3649,8 +3649,8 @@ out_req:
 	return rc;
 }
 
-int ll_migrate(struct inode *parent, struct file *file, int mdtidx,
-	       const char *name, int namelen)
+int ll_migrate(struct inode *parent, struct file *file, struct lmv_user_md *lum,
+	       const char *name)
 {
 	struct ptlrpc_request *request = NULL;
 	struct obd_client_handle *och = NULL;
@@ -3659,16 +3659,18 @@ int ll_migrate(struct inode *parent, struct file *file, int mdtidx,
 	struct md_op_data *op_data;
 	struct mdt_body *body;
 	u64 data_version = 0;
+	size_t namelen = strlen(name);
+	int lumlen = lmv_user_md_size(lum->lum_stripe_count, lum->lum_magic);
 	struct qstr qstr;
 	int rc;
 
-	CDEBUG(D_VFSTRACE, "migrate %s under " DFID " to MDT%d\n",
-	       name, PFID(ll_inode2fid(parent)), mdtidx);
+	CDEBUG(D_VFSTRACE, "migrate " DFID "/%s to MDT%d stripe count %d\n",
+	       PFID(ll_inode2fid(parent)), name,
+	       lum->lum_stripe_offset, lum->lum_stripe_count);
 
-	op_data = ll_prep_md_op_data(NULL, parent, NULL, name, namelen,
-				     0, LUSTRE_OPC_ANY, NULL);
-	if (IS_ERR(op_data))
-		return PTR_ERR(op_data);
+	if (lum->lum_magic != cpu_to_le32(LMV_USER_MAGIC) &&
+	    lum->lum_magic != cpu_to_le32(LMV_USER_MAGIC_SPECIFIC))
+		lustre_swab_lmv_user_md(lum);
 
 	/* Get child FID first */
 	qstr.hash = full_name_hash(file_dentry(file), name, namelen);
@@ -3682,16 +3684,14 @@ int ll_migrate(struct inode *parent, struct file *file, int mdtidx,
 	}
 
 	if (!child_inode) {
-		rc = ll_get_fid_by_name(parent, name, namelen,
-					&op_data->op_fid3, &child_inode);
+		rc = ll_get_fid_by_name(parent, name, namelen, NULL,
+					&child_inode);
 		if (rc)
-			goto out_free;
+			return rc;
 	}
 
-	if (!child_inode) {
-		rc = -EINVAL;
-		goto out_free;
-	}
+	if (!child_inode)
+		return -ENOENT;
 
 	/*
 	 * lfs migrate command needs to be blocked on the client
@@ -3700,6 +3700,13 @@ int ll_migrate(struct inode *parent, struct file *file, int mdtidx,
 	 */
 	if (child_inode == parent->i_sb->s_root->d_inode) {
 		rc = -EINVAL;
+		goto out_iput;
+	}
+
+	op_data = ll_prep_md_op_data(NULL, parent, NULL, name, namelen,
+				     child_inode->i_mode, LUSTRE_OPC_ANY, NULL);
+	if (IS_ERR(op_data)) {
+		rc = PTR_ERR(op_data);
 		goto out_iput;
 	}
 
@@ -3713,16 +3720,10 @@ int ll_migrate(struct inode *parent, struct file *file, int mdtidx,
 		goto out_unlock;
 	}
 
-	rc = ll_get_mdt_idx_by_fid(ll_i2sbi(parent), &op_data->op_fid3);
-	if (rc < 0)
-		goto out_unlock;
+	op_data->op_cli_flags |= CLI_MIGRATE | CLI_SET_MEA;
+	op_data->op_data = lum;
+	op_data->op_data_size = lumlen;
 
-	if (rc == mdtidx) {
-		CDEBUG(D_INFO, "%s: " DFID " is already on MDT%d.\n", name,
-		       PFID(&op_data->op_fid3), mdtidx);
-		rc = 0;
-		goto out_unlock;
-	}
 again:
 	if (S_ISREG(child_inode->i_mode)) {
 		och = ll_lease_open(child_inode, NULL, FMODE_WRITE, 0);
@@ -3738,16 +3739,17 @@ again:
 			goto out_close;
 
 		op_data->op_handle = och->och_fh;
-		op_data->op_data = och->och_mod;
 		op_data->op_data_version = data_version;
 		op_data->op_lease_handle = och->och_lease_handle;
-		op_data->op_bias |= MDS_RENAME_MIGRATE;
+		op_data->op_bias |= MDS_CLOSE_MIGRATE;
+
+		spin_lock(&och->och_mod->mod_open_req->rq_lock);
+		och->och_mod->mod_open_req->rq_replay = 0;
+		spin_unlock(&och->och_mod->mod_open_req->rq_lock);
 	}
 
-	op_data->op_mds = mdtidx;
-	op_data->op_cli_flags = CLI_MIGRATE;
-	rc = md_rename(ll_i2sbi(parent)->ll_md_exp, op_data, name,
-		       namelen, name, namelen, &request);
+	rc = md_rename(ll_i2sbi(parent)->ll_md_exp, op_data, name, namelen,
+		       name, namelen, &request);
 	if (!rc) {
 		LASSERT(request);
 		ll_update_times(request, parent);
@@ -3779,16 +3781,15 @@ again:
 		goto again;
 
 out_close:
-	if (och) /* close the file */
+	if (och)
 		ll_lease_close(och, child_inode, NULL);
 	if (!rc)
 		clear_nlink(child_inode);
 out_unlock:
 	inode_unlock(child_inode);
+	ll_finish_md_op_data(op_data);
 out_iput:
 	iput(child_inode);
-out_free:
-	ll_finish_md_op_data(op_data);
 	return rc;
 }
 
