@@ -224,10 +224,8 @@ struct config_llog_data *do_config_log_add(struct obd_device *obd,
 	/* Keep the mgc around until we are done */
 	cld->cld_mgcexp = class_export_get(obd->obd_self_export);
 
-	if (cld_is_sptlrpc(cld)) {
+	if (cld_is_sptlrpc(cld))
 		sptlrpc_conf_log_start(logname);
-		cld->cld_cfg.cfg_obdname = obd->obd_name;
-	}
 
 	spin_lock(&config_list_lock);
 	list_add(&cld->cld_list_chain, &config_llog_list);
@@ -272,9 +270,6 @@ config_log_find_or_add(struct obd_device *obd, char *logname,
 	struct config_llog_data	*cld;
 
 	lcfg.cfg_instance = sb ? (void *)sb : (void *)obd;
-
-	if (type == CONFIG_T_SPTLRPC)
-		lcfg.cfg_instance = NULL;
 
 	cld = config_log_find(logname, &lcfg);
 	if (unlikely(cld))

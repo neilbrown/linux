@@ -1346,6 +1346,7 @@ int class_config_llog_handler(const struct lu_env *env,
 		lustre_cfg_bufs_init(&bufs, lcfg);
 
 		if (clli && clli->cfg_instance &&
+		    lcfg->lcfg_command != LCFG_SPTLRPC_CONF &&
 		    LUSTRE_CFG_BUFLEN(lcfg, 0) > 0) {
 			inst_len = LUSTRE_CFG_BUFLEN(lcfg, 0) +
 				   sizeof(clli->cfg_instance) * 2 + 4;
@@ -1378,12 +1379,14 @@ int class_config_llog_handler(const struct lu_env *env,
 		 */
 		if (clli && !clli->cfg_instance &&
 		    lcfg->lcfg_command == LCFG_SPTLRPC_CONF) {
+			struct obd_device *obd = clli->cfg_instance;
+
 			lustre_cfg_bufs_set(&bufs, 2, bufs.lcfg_buf[1],
 					    bufs.lcfg_buflen[1]);
 			lustre_cfg_bufs_set(&bufs, 1, bufs.lcfg_buf[0],
 					    bufs.lcfg_buflen[0]);
 			lustre_cfg_bufs_set_string(&bufs, 0,
-						   clli->cfg_obdname);
+						   obd->obd_name);
 		}
 
 		/* Add net info to setup command
