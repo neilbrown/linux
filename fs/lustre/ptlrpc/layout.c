@@ -420,7 +420,8 @@ static const struct req_msg_field *ldlm_intent_open_server[] = {
 	&RMF_MDT_MD,
 	&RMF_ACL,
 	&RMF_CAPA1,
-	&RMF_CAPA2
+	&RMF_CAPA2,
+	&RMF_NIOBUF_INLINE,
 };
 
 static const struct req_msg_field *ldlm_intent_getattr_client[] = {
@@ -1079,8 +1080,14 @@ struct req_msg_field RMF_NIOBUF_REMOTE =
 		    dump_rniobuf);
 EXPORT_SYMBOL(RMF_NIOBUF_REMOTE);
 
+struct req_msg_field RMF_NIOBUF_INLINE =
+	DEFINE_MSGF("niobuf_inline", RMF_F_NO_SIZE_CHECK,
+		    sizeof(struct niobuf_remote), lustre_swab_niobuf_remote,
+		    dump_rniobuf);
+EXPORT_SYMBOL(RMF_NIOBUF_INLINE);
+
 struct req_msg_field RMF_RCS =
-	DEFINE_MSGF("niobuf_remote", RMF_F_STRUCT_ARRAY, sizeof(u32),
+	DEFINE_MSGF("niobuf_rcs", RMF_F_STRUCT_ARRAY, sizeof(u32),
 		    lustre_swab_generic_32s, dump_rcs);
 EXPORT_SYMBOL(RMF_RCS);
 
