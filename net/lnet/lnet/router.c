@@ -1027,8 +1027,6 @@ lnet_ping_router_locked(struct lnet_peer_ni *rtr)
 	time64_t secs;
 	struct lnet_ni *ni;
 
-	lnet_peer_ni_addref_locked(rtr);
-
 	if (rtr->lpni_ping_deadline && /* ping timed out? */
 	    now > rtr->lpni_ping_deadline)
 		lnet_notify_locked(rtr, 1, 0, now);
@@ -1038,11 +1036,9 @@ lnet_ping_router_locked(struct lnet_peer_ni *rtr)
 	lnet_ni_notify_locked(ni, rtr);
 
 	if (!lnet_isrouter(rtr) ||
-	    the_lnet.ln_rc_state != LNET_RC_STATE_RUNNING) {
+	    the_lnet.ln_rc_state != LNET_RC_STATE_RUNNING)
 		/* router table changed or router checker is shutting down */
-		lnet_peer_ni_decref_locked(rtr);
 		return;
-	}
 
 	rcd = rtr->lpni_rcd;
 	if (!rcd || rcd->rcd_nnis > rcd->rcd_pingbuffer->pb_nnis)
@@ -1079,17 +1075,17 @@ lnet_ping_router_locked(struct lnet_peer_ni *rtr)
 						  router_ping_timeout;
 		}
 
+		lnet_peer_ni_addref_locked(rtr);
 		lnet_net_unlock(rtr->lpni_cpt);
 
 		rc = LNetGet(LNET_NID_ANY, mdh, id, LNET_RESERVED_PORTAL,
 			     LNET_PROTO_PING_MATCHBITS, 0);
 
 		lnet_net_lock(rtr->lpni_cpt);
+		lnet_peer_ni_decref_locked(rtr);
 		if (rc)
 			rtr->lpni_ping_notsent = 0; /* no event pending */
 	}
-
-	lnet_peer_ni_decref_locked(rtr);
 }
 
 int
