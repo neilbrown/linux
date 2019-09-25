@@ -1770,7 +1770,7 @@ void lustre_swab_mdt_body(struct mdt_body *b)
 void lustre_swab_mdt_ioepoch(struct mdt_ioepoch *b)
 {
 	/* handle is opaque */
-	/* mio_handle is opaque */
+	/* mio_open_handle is opaque */
 	BUILD_BUG_ON(!offsetof(typeof(*b), mio_unused1));
 	BUILD_BUG_ON(!offsetof(typeof(*b), mio_unused2));
 	BUILD_BUG_ON(!offsetof(typeof(*b), mio_padding));
