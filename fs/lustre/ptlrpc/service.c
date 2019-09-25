@@ -302,11 +302,10 @@ ptlrpc_server_post_idle_rqbds(struct ptlrpc_service_part *svcpt)
 		rqbd = list_first_entry(&svcpt->scp_rqbd_idle,
 					struct ptlrpc_request_buffer_desc,
 					rqbd_list);
-		list_del(&rqbd->rqbd_list);
 
 		/* assume we will post successfully */
 		svcpt->scp_nrqbds_posted++;
-		list_add(&rqbd->rqbd_list, &svcpt->scp_rqbd_posted);
+		list_move(&rqbd->rqbd_list, &svcpt->scp_rqbd_posted);
 
 		spin_unlock(&svcpt->scp_lock);
 
@@ -320,8 +319,7 @@ ptlrpc_server_post_idle_rqbds(struct ptlrpc_service_part *svcpt)
 	spin_lock(&svcpt->scp_lock);
 
 	svcpt->scp_nrqbds_posted--;
-	list_del(&rqbd->rqbd_list);
-	list_add_tail(&rqbd->rqbd_list, &svcpt->scp_rqbd_idle);
+	list_move_tail(&rqbd->rqbd_list, &svcpt->scp_rqbd_idle);
 
 	/* Don't complain if no request buffers are posted right now; LNET
 	 * won't drop requests because we set the portal lazy!
@@ -761,9 +759,7 @@ static void ptlrpc_server_drop_request(struct ptlrpc_request *req)
 	refcount = --(rqbd->rqbd_refcount);
 	if (refcount == 0) {
 		/* request buffer is now idle: add to history */
-		list_del(&rqbd->rqbd_list);
-
-		list_add_tail(&rqbd->rqbd_list, &svcpt->scp_hist_rqbds);
+		list_move_tail(&rqbd->rqbd_list, &svcpt->scp_hist_rqbds);
 		svcpt->scp_hist_nrqbds++;
 
 		/* cull some history?
@@ -2358,8 +2354,7 @@ static void ptlrpc_svcpt_stop_threads(struct ptlrpc_service_part *svcpt)
 						  struct ptlrpc_thread,
 						  t_link)) != NULL) {
 		if (thread_is_stopped(thread)) {
-			list_del(&thread->t_link);
-			list_add(&thread->t_link, &zombie);
+			list_move(&thread->t_link, &zombie);
 			continue;
 		}
 		spin_unlock(&svcpt->scp_lock);

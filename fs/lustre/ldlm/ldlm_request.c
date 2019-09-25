@@ -1100,8 +1100,7 @@ int ldlm_cli_cancel_list_local(struct list_head *cancels, int count,
 		 */
 		if (!(flags & LCF_BL_AST) && (rc == LDLM_FL_BL_AST)) {
 			LDLM_DEBUG(lock, "Cancel lock separately");
-			list_del_init(&lock->l_bl_ast);
-			list_add(&lock->l_bl_ast, &head);
+			list_move(&lock->l_bl_ast, &head);
 			bl_ast++;
 			continue;
 		}
