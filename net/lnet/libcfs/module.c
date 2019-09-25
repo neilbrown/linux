@@ -598,9 +598,11 @@ static ssize_t lnet_debugfs_read(struct file *filp, char __user *buf,
 {
 	struct ctl_table *table = filp->private_data;
 	loff_t old_pos = *ppos;
-	ssize_t rc;
+	ssize_t rc = -EINVAL;
 
-	rc = table->proc_handler(table, 0, (void __user *)buf, &count, ppos);
+	if (table)
+		rc = table->proc_handler(table, 0, (void __user *)buf,
+					 &count, ppos);
 	/*
 	 * On success, the length read is either in error or in count.
 	 * If ppos changed, then use count, else use error
@@ -618,9 +620,11 @@ static ssize_t lnet_debugfs_write(struct file *filp, const char __user *buf,
 {
 	struct ctl_table *table = filp->private_data;
 	loff_t old_pos = *ppos;
-	ssize_t rc;
+	ssize_t rc = -EINVAL;
 
-	rc = table->proc_handler(table, 1, (void __user *)buf, &count, ppos);
+	if (table)
+		rc = table->proc_handler(table, 1, (void __user *)buf, &count,
+					 ppos);
 	if (rc)
 		return rc;
 
