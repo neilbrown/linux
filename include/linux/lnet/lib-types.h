@@ -315,7 +315,7 @@ struct lnet_net {
 	 */
 	bool			net_tunables_set;
 	/* procedural interface */
-	struct lnet_lnd		*net_lnd;
+	const struct lnet_lnd	*net_lnd;
 	/* list of NIs on this net */
 	struct list_head	net_ni_list;
 

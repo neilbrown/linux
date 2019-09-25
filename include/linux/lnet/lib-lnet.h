@@ -422,7 +422,7 @@ lnet_net2rnethash(u32 net)
 		((1U << the_lnet.ln_remote_nets_hbits) - 1)];
 }
 
-extern struct lnet_lnd the_lolnd;
+extern const struct lnet_lnd the_lolnd;
 extern int avoid_asym_router_failure;
 
 unsigned int lnet_nid_cpt_hash(lnet_nid_t nid, unsigned int number);
@@ -628,8 +628,8 @@ void lnet_md_unlink(struct lnet_libmd *md);
 void lnet_md_deconstruct(struct lnet_libmd *lmd, struct lnet_event *ev);
 int lnet_cpt_of_md(struct lnet_libmd *md, unsigned int offset);
 
-void lnet_register_lnd(struct lnet_lnd *lnd);
-void lnet_unregister_lnd(struct lnet_lnd *lnd);
+void lnet_register_lnd(const struct lnet_lnd *lnd);
+void lnet_unregister_lnd(const struct lnet_lnd *lnd);
 
 int lnet_connect(struct socket **sockp, lnet_nid_t peer_nid,
 		 u32 local_ip, u32 peer_ip, int peer_port);
