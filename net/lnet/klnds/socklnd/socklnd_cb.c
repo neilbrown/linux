@@ -1345,7 +1345,7 @@ int ksocknal_scheduler(void *arg)
 	spin_lock_bh(&sched->kss_lock);
 
 	while (!ksocknal_data.ksnd_shuttingdown) {
-		int did_something = 0;
+		bool did_something = false;
 
 		/* Ensure I progress everything semi-fairly */
 
@@ -1395,7 +1395,7 @@ int ksocknal_scheduler(void *arg)
 				ksocknal_conn_decref(conn);
 			}
 
-			did_something = 1;
+			did_something = true;
 		}
 
 		if (!list_empty(&sched->kss_tx_conns)) {
@@ -1474,7 +1474,7 @@ int ksocknal_scheduler(void *arg)
 				ksocknal_conn_decref(conn);
 			}
 
-			did_something = 1;
+			did_something = true;
 		}
 		if (!did_something ||		/* nothing to do */
 		    need_resched()) {		/* hogging CPU? */
@@ -2096,7 +2096,7 @@ ksocknal_connd(void *arg)
 		struct ksock_route *route = NULL;
 		time64_t sec = ktime_get_real_seconds();
 		long timeout = MAX_SCHEDULE_TIMEOUT;
-		int dropped_lock = 0;
+		bool dropped_lock = false;
 
 		if (ksocknal_connd_check_stop(sec, &timeout)) {
 			/* wakeup another one to check stop */
@@ -2106,7 +2106,7 @@ ksocknal_connd(void *arg)
 
 		if (ksocknal_connd_check_start(sec, &timeout)) {
 			/* created new thread */
-			dropped_lock = 1;
+			dropped_lock = true;
 		}
 
 		cr = list_first_entry_or_null(&ksocknal_data.ksnd_connd_connreqs,
@@ -2116,7 +2116,7 @@ ksocknal_connd(void *arg)
 
 			list_del(&cr->ksncr_list);
 			spin_unlock_bh(connd_lock);
-			dropped_lock = 1;
+			dropped_lock = true;
 
 			ksocknal_create_conn(cr->ksncr_ni, NULL,
 					     cr->ksncr_sock, SOCKLND_CONN_NONE);
@@ -2139,7 +2139,7 @@ ksocknal_connd(void *arg)
 			list_del(&route->ksnr_connd_list);
 			ksocknal_data.ksnd_connd_connecting++;
 			spin_unlock_bh(connd_lock);
-			dropped_lock = 1;
+			dropped_lock = true;
 
 			if (ksocknal_connect(route)) {
 				/* consecutive retry */
