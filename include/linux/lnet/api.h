@@ -94,15 +94,15 @@ lnet_nid_t LNetPrimaryNID(lnet_nid_t nid);
  * and removed from its list by LNetMEUnlink().
  * @{
  */
-int LNetMEAttach(unsigned int portal,
-		 struct lnet_process_id match_id_in,
-		 u64 match_bits_in,
-		 u64 ignore_bits_in,
-		 enum lnet_unlink unlink_in,
-		 enum lnet_ins_pos pos_in,
-		 struct lnet_handle_me *handle_out);
+struct lnet_me *
+LNetMEAttach(unsigned int portal,
+	     struct lnet_process_id match_id_in,
+	     u64 match_bits_in,
+	     u64 ignore_bits_in,
+	     enum lnet_unlink unlink_in,
+	     enum lnet_ins_pos pos_in);
 
-int LNetMEUnlink(struct lnet_handle_me current_in);
+void LNetMEUnlink(struct lnet_me *current_in);
 /** @} lnet_me */
 
 /** \defgroup lnet_md Memory descriptors
@@ -118,7 +118,7 @@ int LNetMEUnlink(struct lnet_handle_me current_in);
  * associated with a MD: LNetMDUnlink().
  * @{
  */
-int LNetMDAttach(struct lnet_handle_me current_in,
+int LNetMDAttach(struct lnet_me *current_in,
 		 const struct lnet_md *md_in,
 		 enum lnet_unlink unlink_in,
 		 struct lnet_handle_md *md_handle_out);
