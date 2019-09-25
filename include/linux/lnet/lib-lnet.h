@@ -189,32 +189,6 @@ lnet_net_lock_current(void)
 
 #define MAX_PORTALS		64
 
-static inline struct lnet_libmd *
-lnet_md_alloc(struct lnet_md *umd)
-{
-	struct lnet_libmd *md;
-	unsigned int size;
-	unsigned int niov;
-
-	if (umd->options & LNET_MD_KIOV) {
-		niov = umd->length;
-		size = offsetof(struct lnet_libmd, md_iov.kiov[niov]);
-	} else {
-		niov = 1;
-		size = offsetof(struct lnet_libmd, md_iov.iov[niov]);
-	}
-
-	md = kzalloc(size, GFP_NOFS);
-	if (md) {
-		/* Set here in case of early free */
-		md->md_options = umd->options;
-		md->md_niov = niov;
-		INIT_LIST_HEAD(&md->md_list);
-	}
-
-	return md;
-}
-
 struct lnet_libhandle *lnet_res_lh_lookup(struct lnet_res_container *rec,
 					  u64 cookie);
 void lnet_res_lh_initialize(struct lnet_res_container *rec,
