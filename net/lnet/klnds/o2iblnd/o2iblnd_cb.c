@@ -853,7 +853,11 @@ kiblnd_post_tx_locked(struct kib_conn *conn, struct kib_tx *tx, int credit)
 			 bad->wr_id, bad->opcode, bad->send_flags,
 			 libcfs_nid2str(conn->ibc_peer->ibp_nid));
 		bad = NULL;
-		rc = ib_post_send(conn->ibc_cmid->qp, wrq, &bad);
+		if (lnet_send_error_simulation(tx->tx_lntmsg[0],
+					       &tx->tx_hstatus))
+			rc = -EINVAL;
+		else
+			rc = ib_post_send(conn->ibc_cmid->qp, wrq, &bad);
 	}
 
 	conn->ibc_last_send = ktime_get();
