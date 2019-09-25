@@ -2240,12 +2240,9 @@ static void dump_obdo(struct obdo *oa)
 	else if (valid & OBD_MD_FLCKSUM)
 		CDEBUG(D_RPCTRACE, "obdo: o_checksum (o_nlink) = %u\n",
 		       oa->o_nlink);
-	if (valid & OBD_MD_FLGENER)
+	if (valid & OBD_MD_FLPARENT)
 		CDEBUG(D_RPCTRACE, "obdo: o_parent_oid = %x\n",
 		       oa->o_parent_oid);
-	if (valid & OBD_MD_FLEPOCH)
-		CDEBUG(D_RPCTRACE, "obdo: o_ioepoch = %lld\n",
-		       oa->o_ioepoch);
 	if (valid & OBD_MD_FLFID) {
 		CDEBUG(D_RPCTRACE, "obdo: o_stripe_idx = %u\n",
 		       oa->o_stripe_idx);
