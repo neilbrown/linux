@@ -125,6 +125,7 @@ lnet_peer_ni_alloc(lnet_nid_t nid)
 	INIT_LIST_HEAD(&lpni->lpni_hashlist);
 	INIT_LIST_HEAD(&lpni->lpni_peer_nis);
 	INIT_LIST_HEAD(&lpni->lpni_on_remote_peer_ni_list);
+	atomic_set(&lpni->lpni_refcount, 1);
 
 	spin_lock_init(&lpni->lpni_lock);
 
@@ -150,7 +151,7 @@ lnet_peer_ni_alloc(lnet_nid_t nid)
 		 * list so it can be easily found and revisited.
 		 */
 		/* FIXME: per-net implementation instead? */
-		atomic_inc(&lpni->lpni_refcount);
+		lnet_peer_ni_addref_locked(lpni);
 		list_add_tail(&lpni->lpni_on_remote_peer_ni_list,
 			      &the_lnet.ln_remote_peer_ni_list);
 	}
@@ -1130,8 +1131,6 @@ lnet_peer_attach_peer_ni(struct lnet_peer *lp,
 		list_add_tail(&lpni->lpni_hashlist, &ptable->pt_hash[hash]);
 		ptable->pt_version++;
 		atomic_inc(&ptable->pt_number);
-		/* This is the 1st refcount on lpni. */
-		atomic_inc(&lpni->lpni_refcount);
 	}
 
 	/* Detach the peer_ni from an existing peer, if necessary. */
