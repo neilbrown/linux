@@ -60,8 +60,6 @@
 
 #define SOCKNAL_VERSION_DEBUG	0     /* enable protocol version debugging */
 
-struct ksock_sched_info;
-
 struct ksock_sched {				/* per scheduler state */
 	spinlock_t		kss_lock;	/* serialise */
 	struct list_head	kss_rx_conns;	/* conn waiting to be read */
@@ -71,15 +69,14 @@ struct ksock_sched {				/* per scheduler state */
 	int			kss_nconns;	/* # connections assigned to
 						 * this scheduler
 						 */
-	struct ksock_sched_info	*kss_info;	/* owner of it */
+	/* max allowed threads */
+	int			kss_nthreads_max;
+	/* number of threads */
+	int			kss_nthreads;
+	/* CPT id */
+	int			kss_cpt;
 };
 
-struct ksock_sched_info {
-	int			ksi_nthreads_max; /* max allowed threads */
-	int			ksi_nthreads;	  /* number of threads */
-	int			ksi_cpt;	  /* CPT id */
-	struct ksock_sched	*ksi_scheds;	  /* array of schedulers */
-};
 
 #define KSOCK_CPT_SHIFT			16
 #define KSOCK_THREAD_ID(cpt, sid)	(((cpt) << KSOCK_CPT_SHIFT) | (sid))
@@ -185,7 +182,7 @@ struct ksock_nal_data {
 	atomic_t		ksnd_nthreads;		/* # live threads */
 	int			ksnd_shuttingdown;	/* tell threads to exit
 							 */
-	struct ksock_sched_info	**ksnd_sched_info;	/* schedulers info */
+	struct ksock_sched	**ksnd_schedulers;	/* schedulers info */
 
 	atomic_t		ksnd_nactive_txs;	/* #active txs */
 
