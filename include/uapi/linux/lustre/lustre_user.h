@@ -104,6 +104,7 @@ enum obd_statfs_state {
 	OS_STATE_RDONLY_1	= 0x00000004, /**< obsolete 1.6, was EROFS=30 */
 	OS_STATE_RDONLY_2	= 0x00000008, /**< obsolete 1.6, was EROFS=30 */
 	OS_STATE_RDONLY_3	= 0x00000010, /**< obsolete 1.6, was EROFS=30 */
+	OS_STATE_SUM		= 0x00000100, /**< aggregated for all tagrets */
 };
 
 struct obd_statfs {
@@ -121,9 +122,9 @@ struct obd_statfs {
 	__u32	os_fprecreated;	/* objs available now to the caller
 				 * used in QoS code to find preferred OSTs
 				 */
-	__u32	os_spare2;	/* Unused padding fields.  Remember */
-	__u32	os_spare3;	/* to fix lustre_swab_obd_statfs() */
-	__u32	os_spare4;
+	__u32	os_granted;	/* space granted for MDS */
+	__u32		os_spare3;	/* Unused padding fields.  Remember */
+	__u32	os_spare4;	/* to fix lustre_swab_obd_statfs() */
 	__u32	os_spare5;
 	__u32	os_spare6;
 	__u32	os_spare7;

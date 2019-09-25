@@ -47,6 +47,8 @@
 #define OBD_STATFS_FROM_CACHE   0x0002
 /* the statfs is only for retrieving information from MDT0 */
 #define OBD_STATFS_FOR_MDT0	0x0004
+/* get aggregated statfs from MDT */
+#define OBD_STATFS_SUM		0x0008
 
 /* OBD Device Declarations */
 extern rwlock_t obd_dev_lock;
@@ -947,7 +949,10 @@ static inline int obd_statfs(const struct lu_env *env, struct obd_export *exp,
 
 	CDEBUG(D_SUPER, "osfs %lld, max_age %lld\n",
 	       obd->obd_osfs_age, max_age);
-	if (obd->obd_osfs_age < max_age) {
+	/* ignore cache if aggregated isn't expected */
+	if (obd->obd_osfs_age < max_age ||
+	    ((obd->obd_osfs.os_state & OS_STATE_SUM) &&
+	     !(flags & OBD_STATFS_SUM))) {
 		rc = OBP(obd, statfs)(env, exp, osfs, max_age, flags);
 		if (rc == 0) {
 			spin_lock(&obd->obd_osfs_lock);

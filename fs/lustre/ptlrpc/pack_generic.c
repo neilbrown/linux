@@ -1645,7 +1645,7 @@ void lustre_swab_obd_statfs(struct obd_statfs *os)
 	__swab32s(&os->os_state);
 	__swab32s(&os->os_fprecreated);
 	BUILD_BUG_ON(offsetof(typeof(*os), os_fprecreated) == 0);
-	BUILD_BUG_ON(offsetof(typeof(*os), os_spare2) == 0);
+	__swab32s(&os->os_granted);
 	BUILD_BUG_ON(offsetof(typeof(*os), os_spare3) == 0);
 	BUILD_BUG_ON(offsetof(typeof(*os), os_spare4) == 0);
 	BUILD_BUG_ON(offsetof(typeof(*os), os_spare5) == 0);
