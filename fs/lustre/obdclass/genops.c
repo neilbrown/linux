@@ -903,14 +903,14 @@ void class_unlink_export(struct obd_export *exp)
 }
 
 /* Import management functions */
-static void class_import_destroy(struct obd_import *imp)
+static void obd_zombie_import_free(struct obd_import *imp)
 {
 	struct obd_import_conn *imp_conn;
 
 	CDEBUG(D_IOCTL, "destroying import %p for %s\n", imp,
 	       imp->imp_obd->obd_name);
 
-	LASSERT(refcount_read(&imp->imp_handle.h_ref) == 0);
+	LASSERT(refcount_read(&imp->imp_refcount) == 0);
 
 	ptlrpc_connection_put(imp->imp_connection);
 
@@ -924,16 +924,16 @@ static void class_import_destroy(struct obd_import *imp)
 
 	LASSERT(!imp->imp_sec);
 	class_decref(imp->imp_obd, "import", imp);
-	kfree_rcu(imp, imp_handle.h_rcu);
+	kfree(imp);
 }
 
 static const char import_handle_owner[] = "import";
 
 struct obd_import *class_import_get(struct obd_import *import)
 {
-	refcount_inc(&import->imp_handle.h_ref);
+	refcount_inc(&import->imp_refcount);
 	CDEBUG(D_INFO, "GET import %p refcount=%d obd=%s\n", import,
-	       refcount_read(&import->imp_handle.h_ref),
+	       refcount_read(&import->imp_refcount),
 	       import->imp_obd->obd_name);
 	return import;
 }
@@ -941,19 +941,19 @@ EXPORT_SYMBOL(class_import_get);
 
 void class_import_put(struct obd_import *imp)
 {
-	LASSERT(refcount_read(&imp->imp_handle.h_ref) > 0);
+	LASSERT(refcount_read(&imp->imp_refcount) > 0);
 
 	CDEBUG(D_INFO, "import %p refcount=%d obd=%s\n", imp,
-	       refcount_read(&imp->imp_handle.h_ref) - 1,
+	       refcount_read(&imp->imp_refcount) - 1,
 	       imp->imp_obd->obd_name);
 
-	if (refcount_dec_and_test(&imp->imp_handle.h_ref)) {
+	if (refcount_dec_and_test(&imp->imp_refcount)) {
 		CDEBUG(D_INFO, "final put import %p\n", imp);
 		obd_zombie_import_add(imp);
 	}
 
 	/* catch possible import put race */
-	LASSERT(refcount_read(&imp->imp_handle.h_ref) >= 0);
+	LASSERT(refcount_read(&imp->imp_refcount) >= 0);
 }
 EXPORT_SYMBOL(class_import_put);
 
@@ -977,7 +977,7 @@ static void obd_zombie_imp_cull(struct work_struct *ws)
 	struct obd_import *import = container_of(ws, struct obd_import,
 						 imp_zombie_work);
 
-	class_import_destroy(import);
+	obd_zombie_import_free(import);
 }
 
 struct obd_import *class_new_import(struct obd_device *obd)
@@ -1004,14 +1004,12 @@ struct obd_import *class_new_import(struct obd_device *obd)
 	init_waitqueue_head(&imp->imp_recovery_waitq);
 	INIT_WORK(&imp->imp_zombie_work, obd_zombie_imp_cull);
 
-	refcount_set(&imp->imp_handle.h_ref, 2);
+	refcount_set(&imp->imp_refcount, 2);
 	atomic_set(&imp->imp_unregistering, 0);
 	atomic_set(&imp->imp_inflight, 0);
 	atomic_set(&imp->imp_replay_inflight, 0);
 	atomic_set(&imp->imp_inval_count, 0);
 	INIT_LIST_HEAD(&imp->imp_conn_list);
-	INIT_HLIST_NODE(&imp->imp_handle.h_link);
-	class_handle_hash(&imp->imp_handle, import_handle_owner);
 	init_imp_at(&imp->imp_at);
 
 	/* the default magic is V2, will be used in connect RPC, and
@@ -1027,8 +1025,6 @@ void class_destroy_import(struct obd_import *import)
 {
 	LASSERT(import);
 	LASSERT(import != LP_POISON);
-
-	class_handle_unhash(&import->imp_handle);
 
 	spin_lock(&import->imp_lock);
 	import->imp_generation++;
