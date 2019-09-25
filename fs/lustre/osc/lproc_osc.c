@@ -602,8 +602,15 @@ static ssize_t idle_timeout_show(struct kobject *kobj, struct attribute *attr,
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct client_obd *cli = &obd->u.cli;
+	int ret;
 
-	return sprintf(buf, "%u\n", cli->cl_import->imp_idle_timeout);
+	ret = lprocfs_climp_check(obd);
+	if (ret)
+		return ret;
+	ret = sprintf(buf, "%u\n", cli->cl_import->imp_idle_timeout);
+	up_read(&obd->u.cli.cl_sem);
+
+	return ret;
 }
 
 static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
@@ -631,6 +638,9 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 	if (val > CONNECTION_SWITCH_MAX)
 		return -ERANGE;
 
+	rc = lprocfs_climp_check(dev);
+	if (rc)
+		return rc;
 	cli->cl_import->imp_idle_timeout = val;
 
 	/* to initiate the connection if it's in IDLE state */
@@ -639,6 +649,7 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 		if (req)
 			ptlrpc_req_finished(req);
 	}
+	up_read(&dev->u.cli.cl_sem);
 
 	return count;
 }
@@ -651,12 +662,17 @@ static ssize_t idle_connect_store(struct kobject *kobj, struct attribute *attr,
 					      obd_kset.kobj);
 	struct client_obd *cli = &dev->u.cli;
 	struct ptlrpc_request *req;
+	int rc;
 
+	rc = lprocfs_climp_check(dev);
+	if (rc)
+		return rc;
 	/* to initiate the connection if it's in IDLE state */
 	req = ptlrpc_request_alloc(cli->cl_import, &RQF_OST_STATFS);
 	if (req)
 		ptlrpc_req_finished(req);
 	ptlrpc_pinger_force(cli->cl_import);
+	up_read(&dev->u.cli.cl_sem);
 
 	return count;
 }
