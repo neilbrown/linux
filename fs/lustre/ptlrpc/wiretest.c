@@ -1372,8 +1372,6 @@ void lustre_assert_wire_constants(void)
 		 OBD_MD_FLXATTRRM);
 	LASSERTF(OBD_MD_FLACL == (0x0000008000000000ULL), "found 0x%.16llxULL\n",
 		 OBD_MD_FLACL);
-	LASSERTF(OBD_MD_FLCKSPLIT == (0x0000080000000000ULL), "found 0x%.16llxULL\n",
-		 OBD_MD_FLCKSPLIT);
 	LASSERTF(OBD_MD_FLCROSSREF == (0x0000100000000000ULL), "found 0x%.16llxULL\n",
 		 OBD_MD_FLCROSSREF);
 	LASSERTF(OBD_MD_FLGETATTRLOCK == (0x0000200000000000ULL), "found 0x%.16llxULL\n",
@@ -1920,8 +1918,6 @@ void lustre_assert_wire_constants(void)
 	LASSERTF((int)sizeof(((struct ll_fid *)0)->f_type) == 4, "found %lld\n",
 		 (long long)(int)sizeof(((struct ll_fid *)0)->f_type));
 
-	LASSERTF(MDS_CHECK_SPLIT == 0x00000001UL, "found 0x%.8xUL\n",
-		(unsigned int)MDS_CHECK_SPLIT);
 	LASSERTF(MDS_CROSS_REF == 0x00000002UL, "found 0x%.8xUL\n",
 		(unsigned int)MDS_CROSS_REF);
 	LASSERTF(MDS_PERM_BYPASS == 0x00000008UL, "found 0x%.8xUL\n",
