@@ -96,6 +96,23 @@ module_param(lnet_health_sensitivity, health_sensitivity, 0644);
 MODULE_PARM_DESC(lnet_health_sensitivity,
 		 "Value to decrement the health value by on error");
 
+/*
+ * lnet_recovery_interval determines how often we should perform recovery
+ * on unhealthy interfaces.
+ */
+unsigned int lnet_recovery_interval = 1;
+static int recovery_interval_set(const char *val, const struct kernel_param *kp);
+static struct kernel_param_ops param_ops_recovery_interval = {
+	.set = recovery_interval_set,
+	.get = param_get_int,
+};
+
+#define param_check_recovery_interval(name, p) \
+		__param_check(name, p, int)
+module_param(lnet_recovery_interval, recovery_interval, 0644);
+MODULE_PARM_DESC(lnet_recovery_interval,
+		 "Interval to recover unhealthy interfaces in seconds");
+
 static int lnet_interfaces_max = LNET_INTERFACES_MAX_DEFAULT;
 static int intf_max_set(const char *val, const struct kernel_param *kp);
 module_param_call(lnet_interfaces_max, intf_max_set, param_get_int,
@@ -179,6 +196,42 @@ sensitivity_set(const char *val, const struct kernel_param *kp)
 	}
 
 	*sensitivity = value;
+
+	mutex_unlock(&the_lnet.ln_api_mutex);
+
+	return 0;
+}
+
+static int
+recovery_interval_set(const char *val, const struct kernel_param *kp)
+{
+	int rc;
+	unsigned int *interval = (unsigned int *)kp->arg;
+	unsigned long value;
+
+	rc = kstrtoul(val, 0, &value);
+	if (rc) {
+		CERROR("Invalid module parameter value for 'lnet_recovery_interval'\n");
+		return rc;
+	}
+
+	if (value < 1) {
+		CERROR("lnet_recovery_interval must be at least 1 second\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * The purpose of locking the api_mutex here is to ensure that
+	 * the correct value ends up stored properly.
+	 */
+	mutex_lock(&the_lnet.ln_api_mutex);
+
+	if (the_lnet.ln_state != LNET_STATE_RUNNING) {
+		mutex_unlock(&the_lnet.ln_api_mutex);
+		return 0;
+	}
+
+	*interval = value;
 
 	mutex_unlock(&the_lnet.ln_api_mutex);
 
