@@ -127,6 +127,20 @@ module_param_call(lnet_peer_discovery_disabled, discovery_set, param_get_int,
 MODULE_PARM_DESC(lnet_peer_discovery_disabled,
 		 "Set to 1 to disable peer discovery on this node.");
 
+unsigned int lnet_drop_asym_route;
+static int drop_asym_route_set(const char *val, const struct kernel_param *kp);
+
+static struct kernel_param_ops param_ops_drop_asym_route = {
+	.set = drop_asym_route_set,
+	.get = param_get_int,
+};
+
+#define param_check_drop_asym_route(name, p)	\
+	__param_check(name, p, int)
+module_param(lnet_drop_asym_route, drop_asym_route, 0644);
+MODULE_PARM_DESC(lnet_drop_asym_route,
+		 "Set to 1 to drop asymmetrical route messages.");
+
 unsigned int lnet_transaction_timeout = 50;
 static int transaction_to_set(const char *val, const struct kernel_param *kp);
 module_param_call(lnet_transaction_timeout, transaction_to_set, param_get_int,
@@ -282,6 +296,37 @@ discovery_set(const char *val, const struct kernel_param *kp)
 	lnet_net_unlock(LNET_LOCK_EX);
 
 	lnet_push_update_to_peers(1);
+
+	mutex_unlock(&the_lnet.ln_api_mutex);
+
+	return 0;
+}
+
+static int
+drop_asym_route_set(const char *val, const struct kernel_param *kp)
+{
+	int rc;
+	unsigned int *drop_asym_route = (unsigned int *)kp->arg;
+	unsigned long value;
+
+	rc = kstrtoul(val, 0, &value);
+	if (rc) {
+		CERROR("Invalid module parameter value for 'lnet_drop_asym_route'\n");
+		return rc;
+	}
+
+	/*
+	 * The purpose of locking the api_mutex here is to ensure that
+	 * the correct value ends up stored properly.
+	 */
+	mutex_lock(&the_lnet.ln_api_mutex);
+
+	if (value == *drop_asym_route) {
+		mutex_unlock(&the_lnet.ln_api_mutex);
+		return 0;
+	}
+
+	*drop_asym_route = value;
 
 	mutex_unlock(&the_lnet.ln_api_mutex);
 
