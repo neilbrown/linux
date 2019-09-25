@@ -571,8 +571,6 @@ struct ll_sb_info {
 	/* st_blksize returned by stat(2), when non-zero */
 	unsigned int		 ll_stat_blksize;
 
-	__kernel_fsid_t		 ll_fsid;
-
 	struct kset		ll_kset;	/* sysfs object */
 	struct completion	 ll_kobj_unregister;
 };
@@ -978,7 +976,6 @@ static inline ssize_t ll_lov_user_md_size(const struct lov_user_md *lum)
 /* llite/llite_nfs.c */
 extern const struct export_operations lustre_export_operations;
 u32 get_uuid2int(const char *name, int len);
-void get_uuid2fsid(const char *name, int len, __kernel_fsid_t *fsid);
 struct inode *search_inode_for_lustre(struct super_block *sb,
 				      const struct lu_fid *fid);
 int ll_dir_get_parent_fid(struct inode *dir, struct lu_fid *parent_fid);
