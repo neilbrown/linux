@@ -1237,7 +1237,7 @@ static struct kib_hca_dev *kiblnd_current_hdev(struct kib_dev *dev)
 		if (!(i++ % 50))
 			CDEBUG(D_NET, "%s: Wait for failover\n",
 			       dev->ibd_ifname);
-		schedule_timeout_interruptible(HZ / 100);
+		schedule_timeout_idle(HZ / 100);
 
 		read_lock_irqsave(&kiblnd_data.kib_global_lock, flags);
 	}
@@ -1953,7 +1953,7 @@ again:
 		CDEBUG(D_NET, "Another thread is allocating new %s pool, waiting %d HZs for her to complete. trips = %d\n",
 		       ps->ps_name, interval, trips);
 
-		schedule_timeout_interruptible(interval);
+		schedule_timeout_idle(interval);
 		if (interval < HZ)
 			interval *= 2;
 
