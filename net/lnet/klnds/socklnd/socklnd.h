@@ -199,7 +199,7 @@ struct ksock_nal_data {
 							 * reaper_lock
 							 */
 	wait_queue_head_t	ksnd_reaper_waitq;	/* reaper sleeps here */
-	time64_t		ksnd_reaper_waketime;	/* when reaper will wake
+	long			ksnd_reaper_waketime;	/* when reaper will wake
 							 */
 	spinlock_t		ksnd_reaper_lock;	/* serialise */
 
