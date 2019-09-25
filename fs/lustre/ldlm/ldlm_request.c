@@ -1818,9 +1818,10 @@ int ldlm_cancel_resource_local(struct ldlm_resource *res,
 			continue;
 
 		/* If somebody is already doing CANCEL, or blocking AST came,
-		 * skip this lock.
+		 * or lock is being converted then skip this lock.
 		 */
-		if (ldlm_is_bl_ast(lock) || ldlm_is_canceling(lock))
+		if (ldlm_is_bl_ast(lock) || ldlm_is_canceling(lock) ||
+		    ldlm_is_converting(lock))
 			continue;
 
 		if (lockmode_compat(lock->l_granted_mode, mode))
@@ -1828,10 +1829,11 @@ int ldlm_cancel_resource_local(struct ldlm_resource *res,
 
 		/* If policy is given and this is IBITS lock, add to list only
 		 * those locks that match by policy.
+		 * Skip locks with DoM bit always to don't flush data.
 		 */
 		if (policy && (lock->l_resource->lr_type == LDLM_IBITS) &&
-		    !(lock->l_policy_data.l_inodebits.bits &
-		      policy->l_inodebits.bits))
+		    (!(lock->l_policy_data.l_inodebits.bits &
+		      policy->l_inodebits.bits) || ldlm_has_dom(lock)))
 			continue;
 
 		/* See CBPENDING comment in ldlm_cancel_lru */
