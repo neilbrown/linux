@@ -76,6 +76,17 @@ enum lnet_msg_hstatus {
 	LNET_MSG_STATUS_NETWORK_TIMEOUT
 };
 
+struct lnet_rsp_tracker {
+	/* chain on the waiting list */
+	struct list_head rspt_on_list;
+	/* cpt to lock */
+	int rspt_cpt;
+	/* deadline of the REPLY/ACK */
+	ktime_t rspt_deadline;
+	/* parent MD */
+	struct lnet_handle_md rspt_mdh;
+};
+
 struct lnet_msg {
 	struct list_head	msg_activelist;
 	struct list_head	msg_list;	/* Q for credits/MD */
@@ -190,6 +201,7 @@ struct lnet_libmd {
 	unsigned int		 md_flags;
 	unsigned int		 md_niov;	/* # frags at end of struct */
 	void			*md_user_ptr;
+	struct lnet_rsp_tracker	*md_rspt_ptr;
 	lnet_eq_handler_t	 md_eq;
 	struct lnet_handle_md	 md_bulk_handle;
 	struct bio_vec		 md_kiov[LNET_MAX_IOV];
@@ -1082,6 +1094,14 @@ struct lnet {
 	struct list_head		ln_mt_localNIRecovq;
 	/* local NIs to recover */
 	struct list_head		ln_mt_peerNIRecovq;
+	/*
+	 * An array of queues for GET/PUT waiting for REPLY/ACK respectively.
+	 * There are CPT number of queues. Since response trackers will be
+	 * added on the fast path we can't afford to grab the exclusive
+	 * net lock to protect these queues. The CPT will be calculated
+	 * based on the mdh cookie.
+	 */
+	struct list_head		**ln_mt_rstq;
 	/* recovery eq handler */
 	lnet_eq_handler_t		ln_mt_eqh;
 
