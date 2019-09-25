@@ -1145,7 +1145,7 @@ kiblnd_queue_tx_locked(struct kib_tx *tx, struct kib_conn *conn)
 	LASSERT(!tx->tx_queued);	/* not queued for sending already */
 	LASSERT(conn->ibc_state >= IBLND_CONN_ESTABLISHED);
 
-	timeout_ns = *kiblnd_tunables.kib_timeout * NSEC_PER_SEC;
+	timeout_ns = lnet_get_lnd_timeout() * NSEC_PER_SEC;
 	tx->tx_queued = 1;
 	tx->tx_deadline = ktime_add_ns(ktime_get(), timeout_ns);
 
@@ -1273,14 +1273,14 @@ kiblnd_connect_peer(struct kib_peer_ni *peer_ni)
 
 	if (*kiblnd_tunables.kib_use_priv_port) {
 		rc = kiblnd_resolve_addr(cmid, &srcaddr, &dstaddr,
-					 *kiblnd_tunables.kib_timeout * 1000);
+					 lnet_get_lnd_timeout() * 1000);
 	} else {
 		rc = rdma_resolve_addr(cmid,
 				       (struct sockaddr *)&srcaddr,
 				       (struct sockaddr *)&dstaddr,
-				       *kiblnd_tunables.kib_timeout * 1000);
+				       lnet_get_lnd_timeout() * 1000);
 	}
-	if (rc) {
+	if (rc != 0) {
 		/* Can't initiate address resolution:  */
 		CERROR("Can't resolve addr for %s: %d\n",
 		       libcfs_nid2str(peer_ni->ibp_nid), rc);
@@ -3008,7 +3008,7 @@ kiblnd_cm_callback(struct rdma_cm_id *cmid, struct rdma_cm_event *event)
 			rc = event->status;
 		} else {
 			rc = rdma_resolve_route(
-				cmid, *kiblnd_tunables.kib_timeout * 1000);
+				cmid, lnet_get_lnd_timeout() * 1000);
 			if (!rc) {
 				struct kib_net *net = peer_ni->ibp_ni->ni_data;
 				struct kib_dev *dev = net->ibn_dev;
@@ -3405,6 +3405,7 @@ kiblnd_connd(void *arg)
 			const int n = 4;
 			const int p = 1;
 			int chunk = HASH_SIZE(kiblnd_data.kib_peers);
+			unsigned int lnd_timeout;
 
 
 			/*
@@ -3416,9 +3417,10 @@ kiblnd_connd(void *arg)
 			 * connection within (n+1)/n times the timeout
 			 * interval.
 			 */
-			if (*kiblnd_tunables.kib_timeout > n * p)
-				chunk = (chunk * n * p) /
-					*kiblnd_tunables.kib_timeout;
+
+			lnd_timeout = lnet_get_lnd_timeout();
+			if (lnd_timeout > n * p)
+				chunk = (chunk * n * p) / lnd_timeout;
 			if (!chunk)
 				chunk = 1;
 

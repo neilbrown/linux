@@ -219,7 +219,7 @@ ksocknal_transmit(struct ksock_conn *conn, struct ksock_tx *tx)
 			 * something got ACKed
 			 */
 			conn->ksnc_tx_deadline = ktime_get_seconds() +
-						 *ksocknal_tunables.ksnd_timeout;
+						 lnet_get_lnd_timeout();
 			conn->ksnc_peer->ksnp_last_alive = ktime_get_seconds();
 			conn->ksnc_tx_bufnob = bufnob;
 			mb();
@@ -265,7 +265,7 @@ ksocknal_recv_iter(struct ksock_conn *conn)
 
 	conn->ksnc_peer->ksnp_last_alive = ktime_get_seconds();
 	conn->ksnc_rx_deadline = ktime_get_seconds() +
-				 *ksocknal_tunables.ksnd_timeout;
+				 lnet_get_lnd_timeout();
 	mb();		/* order with setting rx_started */
 	conn->ksnc_rx_started = 1;
 
@@ -422,7 +422,7 @@ ksocknal_check_zc_req(struct ksock_tx *tx)
 
 	/* ZC_REQ is going to be pinned to the peer_ni */
 	tx->tx_deadline = ktime_get_seconds() +
-			  *ksocknal_tunables.ksnd_timeout;
+			  lnet_get_lnd_timeout();
 
 	LASSERT(!tx->tx_msg.ksm_zc_cookies[0]);
 
@@ -700,7 +700,7 @@ ksocknal_queue_tx_locked(struct ksock_tx *tx, struct ksock_conn *conn)
 	if (list_empty(&conn->ksnc_tx_queue) && !bufnob) {
 		/* First packet starts the timeout */
 		conn->ksnc_tx_deadline = ktime_get_seconds() +
-					 *ksocknal_tunables.ksnd_timeout;
+					 lnet_get_lnd_timeout();
 		if (conn->ksnc_tx_bufnob > 0) /* something got ACKed */
 			conn->ksnc_peer->ksnp_last_alive = ktime_get_seconds();
 		conn->ksnc_tx_bufnob = 0;
@@ -876,7 +876,7 @@ ksocknal_launch_packet(struct lnet_ni *ni, struct ksock_tx *tx,
 	    ksocknal_find_connecting_route_locked(peer_ni)) {
 		/* the message is going to be pinned to the peer_ni */
 		tx->tx_deadline = ktime_get_seconds() +
-				  *ksocknal_tunables.ksnd_timeout;
+				  lnet_get_lnd_timeout();
 
 		/* Queue the message until a connection is established */
 		list_add_tail(&tx->tx_list, &peer_ni->ksnp_tx_queue);
@@ -1633,7 +1633,7 @@ ksocknal_recv_hello(struct lnet_ni *ni, struct ksock_conn *conn,
 	/* socket type set on active connections - not set on passive */
 	LASSERT(!active == !(conn->ksnc_type != SOCKLND_CONN_NONE));
 
-	timeout = active ? *ksocknal_tunables.ksnd_timeout :
+	timeout = active ? lnet_get_lnd_timeout() :
 			    lnet_acceptor_timeout();
 
 	rc = lnet_sock_read(sock, &hello->kshm_magic,
@@ -1771,7 +1771,7 @@ ksocknal_connect(struct ksock_route *route)
 	int retry_later = 0;
 	int rc = 0;
 
-	deadline = ktime_get_seconds() + *ksocknal_tunables.ksnd_timeout;
+	deadline = ktime_get_seconds() + lnet_get_lnd_timeout();
 
 	write_lock_bh(&ksocknal_data.ksnd_global_lock);
 
@@ -2514,6 +2514,7 @@ ksocknal_reaper(void *arg)
 			const int n = 4;
 			const int p = 1;
 			int chunk = HASH_SIZE(ksocknal_data.ksnd_peers);
+			unsigned int lnd_timeout;
 
 			/*
 			 * Time to check for timeouts on a few more peers: I do
@@ -2523,9 +2524,10 @@ ksocknal_reaper(void *arg)
 			 * timeout on any connection within (n+1)/n times the
 			 * timeout interval.
 			 */
-			if (*ksocknal_tunables.ksnd_timeout > n * p)
-				chunk = (chunk * n * p) /
-					*ksocknal_tunables.ksnd_timeout;
+
+			lnd_timeout = lnet_get_lnd_timeout();
+			if (lnd_timeout > n * p)
+				chunk = (chunk * n * p) / lnd_timeout;
 			if (!chunk)
 				chunk = 1;
 
