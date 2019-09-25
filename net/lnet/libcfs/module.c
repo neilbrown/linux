@@ -692,12 +692,18 @@ static void lnet_insert_debugfs_links(
 				       symlinks->target);
 }
 
-static void lnet_remove_debugfs(void)
+void lnet_remove_debugfs(struct ctl_table *table)
 {
-	debugfs_remove_recursive(lnet_debugfs_root);
+	for (; table && table->procname; table++) {
+		struct qstr dname = QSTR_INIT(table->procname,
+					      strlen(table->procname));
+		struct dentry *dentry;
 
-	lnet_debugfs_root = NULL;
+		dentry = d_hash_and_lookup(lnet_debugfs_root, &dname);
+		debugfs_remove(dentry);
+	}
 }
+EXPORT_SYMBOL_GPL(lnet_remove_debugfs);
 
 static DEFINE_MUTEX(libcfs_startup);
 static int libcfs_active;
@@ -772,7 +778,9 @@ static void libcfs_exit(void)
 {
 	int rc;
 
-	lnet_remove_debugfs();
+	/* Remove everthing */
+	debugfs_remove_recursive(lnet_debugfs_root);
+	lnet_debugfs_root = NULL;
 
 	if (cfs_rehash_wq)
 		destroy_workqueue(cfs_rehash_wq);
