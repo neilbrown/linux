@@ -1306,9 +1306,9 @@ static int ptlrpc_server_hpreq_init(struct ptlrpc_service_part *svcpt,
 			LASSERT(rc <= 1);
 		}
 
-		spin_lock_bh(&req->rq_export->exp_rpc_lock);
+		spin_lock(&req->rq_export->exp_rpc_lock);
 		list_add(&req->rq_exp_list, &req->rq_export->exp_hp_rpcs);
-		spin_unlock_bh(&req->rq_export->exp_rpc_lock);
+		spin_unlock(&req->rq_export->exp_rpc_lock);
 	}
 
 	ptlrpc_nrs_req_initialize(svcpt, req, rc);
@@ -1326,9 +1326,9 @@ static void ptlrpc_server_hpreq_fini(struct ptlrpc_request *req)
 		if (req->rq_ops->hpreq_fini)
 			req->rq_ops->hpreq_fini(req);
 
-		spin_lock_bh(&req->rq_export->exp_rpc_lock);
+		spin_lock(&req->rq_export->exp_rpc_lock);
 		list_del_init(&req->rq_exp_list);
-		spin_unlock_bh(&req->rq_export->exp_rpc_lock);
+		spin_unlock(&req->rq_export->exp_rpc_lock);
 	}
 }
 
