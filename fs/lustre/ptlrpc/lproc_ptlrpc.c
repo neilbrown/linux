@@ -1273,7 +1273,7 @@ int lprocfs_wr_import(struct file *file, const char __user *buffer,
 {
 	struct seq_file *m = file->private_data;
 	struct obd_device *obd = m->private;
-	struct obd_import *imp = obd->u.cli.cl_import;
+	struct obd_import *imp;
 	char *kbuf = NULL;
 	char *uuid;
 	char *ptr;
@@ -1311,23 +1311,27 @@ int lprocfs_wr_import(struct file *file, const char __user *buffer,
 		do_reconn = 0;
 		ptr += strlen("::");
 		inst = simple_strtoul(ptr, &endptr, 10);
-		if (*endptr) {
-			CERROR("config: wrong instance # %s\n", ptr);
-		} else if (inst != imp->imp_connect_data.ocd_instance) {
-			CDEBUG(D_INFO,
-			       "IR: %s is connecting to an obsoleted target(%u/%u), reconnecting...\n",
-			       imp->imp_obd->obd_name,
-			       imp->imp_connect_data.ocd_instance, inst);
-			do_reconn = 1;
-		} else {
-			CDEBUG(D_INFO,
-			       "IR: %s has already been connecting to new target(%u)\n",
-			       imp->imp_obd->obd_name, inst);
+		with_obd_cl_sem(count, obd, imp) {
+			if (*endptr) {
+				CERROR("config: wrong instance # %s\n", ptr);
+			} else if (inst != imp->imp_connect_data.ocd_instance) {
+				CDEBUG(D_INFO,
+				       "IR: %s is connecting to an obsoleted target(%u/%u), reconnecting...\n",
+				       imp->imp_obd->obd_name,
+				       imp->imp_connect_data.ocd_instance,
+				       inst);
+				do_reconn = 1;
+			} else {
+				CDEBUG(D_INFO,
+				       "IR: %s has already been connecting to new target(%u)\n",
+				       imp->imp_obd->obd_name, inst);
+			}
 		}
 	}
 
 	if (do_reconn)
-		ptlrpc_recover_import(imp, uuid, 1);
+		with_obd_cl_sem(count, obd, imp)
+			ptlrpc_recover_import(imp, uuid, 1);
 
 out:
 	kfree(kbuf);
