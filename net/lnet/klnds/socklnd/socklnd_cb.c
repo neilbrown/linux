@@ -78,7 +78,7 @@ ksocknal_alloc_tx_noop(u64 cookie, int nonblk)
 	tx->tx_lnetmsg = NULL;
 	tx->tx_kiov = NULL;
 	tx->tx_nkiov = 0;
-	tx->tx_iov = tx->tx_frags.virt.iov;
+	tx->tx_iov = &tx->tx_hdr;
 	tx->tx_niov = 1;
 	tx->tx_nonblk = nonblk;
 
@@ -886,7 +886,7 @@ ksocknal_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 	LASSERT(!in_interrupt());
 
 	desc_size = offsetof(struct ksock_tx,
-			     tx_frags.paged.kiov[payload_niov]);
+			     tx_payload[payload_niov]);
 
 	if (lntmsg->msg_vmflush)
 		mpflag = memalloc_noreclaim_save();
@@ -903,8 +903,8 @@ ksocknal_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 	tx->tx_lnetmsg = lntmsg;
 
 	tx->tx_niov = 1;
-	tx->tx_iov = &tx->tx_frags.paged.iov;
-	tx->tx_kiov = tx->tx_frags.paged.kiov;
+	tx->tx_iov = &tx->tx_hdr;
+	tx->tx_kiov = tx->tx_payload;
 	tx->tx_nkiov = lnet_extract_kiov(payload_niov, tx->tx_kiov,
 					 payload_niov, payload_kiov,
 					 payload_offset, payload_nob);
