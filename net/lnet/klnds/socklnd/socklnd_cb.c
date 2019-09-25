@@ -2308,7 +2308,7 @@ ksocknal_send_keepalive_locked(struct ksock_peer *peer_ni)
 static void
 ksocknal_check_peer_timeouts(int idx)
 {
-	struct list_head *peers = &ksocknal_data.ksnd_peers[idx];
+	struct hlist_head *peers = &ksocknal_data.ksnd_peers[idx];
 	struct ksock_peer *peer_ni;
 	struct ksock_conn *conn;
 	struct ksock_tx *tx;
@@ -2321,7 +2321,7 @@ again:
 	 */
 	read_lock(&ksocknal_data.ksnd_global_lock);
 
-	list_for_each_entry(peer_ni, peers, ksnp_list) {
+	hlist_for_each_entry(peer_ni, peers, ksnp_list) {
 		struct ksock_tx *tx_stale;
 		time64_t deadline = 0;
 		int resid = 0;
@@ -2486,7 +2486,7 @@ ksocknal_reaper(void *arg)
 		while ((timeout = deadline - ktime_get_seconds()) <= 0) {
 			const int n = 4;
 			const int p = 1;
-			int chunk = ksocknal_data.ksnd_peer_hash_size;
+			int chunk = HASH_SIZE(ksocknal_data.ksnd_peers);
 
 			/*
 			 * Time to check for timeouts on a few more peers: I do
@@ -2505,7 +2505,7 @@ ksocknal_reaper(void *arg)
 			for (i = 0; i < chunk; i++) {
 				ksocknal_check_peer_timeouts(peer_index);
 				peer_index = (peer_index + 1) %
-					     ksocknal_data.ksnd_peer_hash_size;
+					HASH_SIZE(ksocknal_data.ksnd_peers);
 			}
 
 			deadline += p;
