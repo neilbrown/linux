@@ -678,6 +678,7 @@ kiblnd_setup_rd_kiov(struct lnet_ni *ni, struct kib_tx *tx,
 	struct kib_net *net = ni->ni_data;
 	struct scatterlist *sg;
 	int fragnob;
+	int max_nkiov;
 
 	CDEBUG(D_NET, "niov %d offset %d nob %d\n", nkiov, offset, nob);
 
@@ -692,16 +693,24 @@ kiblnd_setup_rd_kiov(struct lnet_ni *ni, struct kib_tx *tx,
 		LASSERT(nkiov > 0);
 	}
 
+	max_nkiov = nkiov;
+
 	sg = tx->tx_frags;
 	do {
 		LASSERT(nkiov > 0);
 
 		fragnob = min((int)(kiov->bv_len - offset), nob);
 
-		if ((fragnob < (int)(kiov->bv_len - offset)) && nkiov > 1) {
+		/* We're allowed to start at a non-aligned page offset in
+		 * the first fragment and end at a non-aligned page offset
+		 * in the last fragment.
+		 */
+		if ((fragnob < (int)(kiov->bv_len - offset)) &&
+		    nkiov < max_nkiov && nob > fragnob) {
 			CDEBUG(D_NET,
-			       "fragnob %d < available page %d: with remaining %d kiovs\n",
-			       fragnob, (int)(kiov->bv_len - offset), nkiov);
+			       "fragnob %d < available page %d: with remaining %d kiovs with %d nob left\n",
+			       fragnob, (int)(kiov->bv_len - offset),
+			       nkiov, nob);
 			tx->tx_gaps = true;
 		}
 
