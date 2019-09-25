@@ -496,7 +496,9 @@ lnet_peer_del_nid(struct lnet_peer *lp, lnet_nid_t nid, unsigned int flags)
 	}
 
 	lnet_net_lock(LNET_LOCK_EX);
-	lnet_peer_ni_del_locked(lpni);
+
+	rc = lnet_peer_ni_del_locked(lpni);
+
 	lnet_net_unlock(LNET_LOCK_EX);
 
 out:
