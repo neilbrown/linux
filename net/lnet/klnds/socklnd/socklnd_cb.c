@@ -936,7 +936,8 @@ ksocknal_thread_start(int (*fn)(void *arg), void *arg, char *name)
 void
 ksocknal_thread_fini(void)
 {
-	atomic_dec(&ksocknal_data.ksnd_nthreads);
+	if (atomic_dec_and_test(&ksocknal_data.ksnd_nthreads))
+		wake_up_var(&ksocknal_data.ksnd_nthreads);
 }
 
 int
