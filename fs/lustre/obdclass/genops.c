@@ -1566,8 +1566,9 @@ u16 obd_get_mod_rpc_slot(struct client_obd *cli, u32 opc,
 		CDEBUG(D_RPCTRACE, "%s: sleeping for a modify RPC slot opc %u, max %hu\n",
 		       cli->cl_import->imp_obd->obd_name, opc, max);
 
-		wait_event_idle(cli->cl_mod_rpcs_waitq,
-				obd_mod_rpc_slot_avail(cli, close_req));
+		wait_event_idle_exclusive(cli->cl_mod_rpcs_waitq,
+					  obd_mod_rpc_slot_avail(cli,
+								 close_req));
 	} while (true);
 }
 EXPORT_SYMBOL(obd_get_mod_rpc_slot);
