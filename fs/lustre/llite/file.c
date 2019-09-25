@@ -495,6 +495,13 @@ void ll_dom_finish_open(struct inode *inode, struct ptlrpc_request *req,
 			break;
 		}
 		lock_page(vmpage);
+		if (!vmpage->mapping) {
+			unlock_page(vmpage);
+			put_page(vmpage);
+			/* page was truncated */
+			rc = -ENODATA;
+			goto out_io;
+		}
 		clp = cl_page_find(env, obj, vmpage->index, vmpage,
 				   CPT_CACHEABLE);
 		if (IS_ERR(clp)) {
