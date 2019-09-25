@@ -1253,7 +1253,6 @@ int class_config_llog_handler(const struct lu_env *env,
 		struct lustre_cfg *lcfg, *lcfg_new;
 		struct lustre_cfg_bufs bufs;
 		char *inst_name = NULL;
-		int inst_len = 0;
 		size_t lcfg_len;
 		int swab = 0;
 
@@ -1300,7 +1299,7 @@ int class_config_llog_handler(const struct lu_env *env,
 		if (!(clli->cfg_flags & CFG_F_COMPAT146) &&
 		    !(clli->cfg_flags & CFG_F_MARKER) &&
 		    (lcfg->lcfg_command != LCFG_MARKER)) {
-			CWARN("Config not inside markers, ignoring! (inst: %p, uuid: %s, flags: %#x)\n",
+			CWARN("Skip config outside markers, (inst: %016lx, uuid: %s, flags: %#x)\n",
 			      clli->cfg_instance,
 			      clli->cfg_uuid.uuid, clli->cfg_flags);
 			clli->cfg_flags |= CFG_F_SKIP;
@@ -1348,9 +1347,7 @@ int class_config_llog_handler(const struct lu_env *env,
 		if (clli && clli->cfg_instance &&
 		    lcfg->lcfg_command != LCFG_SPTLRPC_CONF &&
 		    LUSTRE_CFG_BUFLEN(lcfg, 0) > 0) {
-			inst_len = LUSTRE_CFG_BUFLEN(lcfg, 0) +
-				   sizeof(clli->cfg_instance) * 2 + 4;
-			inst_name = kasprintf(GFP_NOFS, "%s-%px",
+			inst_name = kasprintf(GFP_NOFS, "%s-%016lx",
 					      lustre_cfg_string(lcfg, 0),
 					      clli->cfg_instance);
 			if (!inst_name) {
@@ -1362,14 +1359,10 @@ int class_config_llog_handler(const struct lu_env *env,
 			       lcfg->lcfg_command, inst_name);
 		}
 
-		/* we override the llog's uuid for clients, to insure they
-		 * are unique
-		 */
-		if (clli && clli->cfg_instance &&
-		    lcfg->lcfg_command == LCFG_ATTACH) {
+		/* override llog UUID for clients, to insure they are unique */
+		if (clli->cfg_instance && lcfg->lcfg_command == LCFG_ATTACH)
 			lustre_cfg_bufs_set_string(&bufs, 2,
 						   clli->cfg_uuid.uuid);
-		}
 		/*
 		 * sptlrpc config record, we expect 2 data segments:
 		 *  [0]: fs_name/target_name,
@@ -1379,7 +1372,9 @@ int class_config_llog_handler(const struct lu_env *env,
 		 */
 		if (clli && !clli->cfg_instance &&
 		    lcfg->lcfg_command == LCFG_SPTLRPC_CONF) {
-			struct obd_device *obd = clli->cfg_instance;
+			/* After ASLR changes cfg_instance this needs fixing */
+			/* "obd" is set in config_log_find_or_add() */
+			struct obd_device *obd = (void *)clli->cfg_instance;
 
 			lustre_cfg_bufs_set(&bufs, 2, bufs.lcfg_buf[1],
 					    bufs.lcfg_buflen[1]);

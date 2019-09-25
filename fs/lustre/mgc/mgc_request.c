@@ -164,15 +164,15 @@ struct config_llog_data *config_log_find(char *logname,
 {
 	struct config_llog_data *cld;
 	struct config_llog_data *found = NULL;
-	void *instance;
+	unsigned long cfg_instance;
 
 	LASSERT(logname);
 
-	instance = cfg ? cfg->cfg_instance : NULL;
+	cfg_instance = cfg ? cfg->cfg_instance : 0;
 	spin_lock(&config_list_lock);
 	list_for_each_entry(cld, &config_llog_list, cld_list_chain) {
-		/* check if instance equals */
-		if (instance != cld->cld_cfg.cfg_instance)
+		/* check if cfg_instance is the one we want */
+		if (cfg_instance != cld->cld_cfg.cfg_instance)
 			continue;
 
 		/* instance may be NULL, should check name */
@@ -196,8 +196,8 @@ struct config_llog_data *do_config_log_add(struct obd_device *obd,
 	struct config_llog_data *cld;
 	int rc;
 
-	CDEBUG(D_MGC, "do adding config log %s:%p\n", logname,
-	       cfg ? cfg->cfg_instance : NULL);
+	CDEBUG(D_MGC, "do adding config log %s-%016lx\n", logname,
+	       cfg ? cfg->cfg_instance : 0);
 
 	cld = kzalloc(sizeof(*cld) + strlen(logname) + 1, GFP_NOFS);
 	if (!cld)
@@ -241,7 +241,8 @@ struct config_llog_data *do_config_log_add(struct obd_device *obd,
 }
 
 static struct config_llog_data *
-config_recover_log_add(struct obd_device *obd, char *fsname,
+config_recover_log_add(struct obd_device *obd,
+		       char *fsname,
 		       struct config_llog_instance *cfg,
 		       struct super_block *sb)
 {
@@ -249,13 +250,13 @@ config_recover_log_add(struct obd_device *obd, char *fsname,
 	struct config_llog_data *cld;
 	char logname[32];
 
-	/* we have to use different llog for clients and mdts for cmd
-	 * where only clients are notified if one of cmd server restarts
+	/* We have to use different llog for clients and MDTs for DNE,
+	 * where only clients are notified if one of DNE server restarts.
 	 */
 	LASSERT(strlen(fsname) < sizeof(logname) / 2);
-	strcpy(logname, fsname);
+	strlcpy(logname, fsname, sizeof(logname));
 	LASSERT(lcfg.cfg_instance);
-	strcat(logname, "-cliir");
+	strlcat(logname, "-cliir", sizeof(logname));
 
 	cld = do_config_log_add(obd, logname, CONFIG_T_RECOVER, &lcfg, sb);
 	return cld;
@@ -267,9 +268,10 @@ config_log_find_or_add(struct obd_device *obd, char *logname,
 		       struct config_llog_instance *cfg)
 {
 	struct config_llog_instance lcfg = *cfg;
-	struct config_llog_data	*cld;
+	struct config_llog_data *cld;
 
-	lcfg.cfg_instance = sb ? (void *)sb : (void *)obd;
+	/* Note class_config_llog_handler() depends on getting "obd" back */
+	lcfg.cfg_instance = sb ? ll_get_cfg_instance(sb) : (unsigned long)obd;
 
 	cld = config_log_find(logname, &lcfg);
 	if (unlikely(cld))
@@ -296,7 +298,8 @@ config_log_add(struct obd_device *obd, char *logname,
 	char *ptr;
 	int rc;
 
-	CDEBUG(D_MGC, "adding config log %s:%p\n", logname, cfg->cfg_instance);
+	CDEBUG(D_MGC, "add config log %s-%016lx\n", logname,
+	       cfg->cfg_instance);
 
 	/*
 	 * for each regular log, the depended sptlrpc log name is
@@ -1182,13 +1185,13 @@ static int mgc_apply_recover_logs(struct obd_device *mgc,
 	int off = 0;
 
 	LASSERT(cfg->cfg_instance);
-	LASSERT(cfg->cfg_sb == cfg->cfg_instance);
+	LASSERT(ll_get_cfg_instance(cfg->cfg_sb) == cfg->cfg_instance);
 
 	inst = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!inst)
 		return -ENOMEM;
 
-	pos = snprintf(inst, PAGE_SIZE, "%px", cfg->cfg_instance);
+	pos = snprintf(inst, PAGE_SIZE, "%016lx", cfg->cfg_instance);
 	if (pos >= PAGE_SIZE) {
 		kfree(inst);
 		return -E2BIG;
@@ -1654,7 +1657,7 @@ restart:
 
 	OBD_FAIL_TIMEOUT(OBD_FAIL_MGC_PAUSE_PROCESS_LOG, 20);
 
-	CDEBUG(D_MGC, "Process log %s:%p from %d\n", cld->cld_logname,
+	CDEBUG(D_MGC, "Process log %s-%016lx from %d\n", cld->cld_logname,
 	       cld->cld_cfg.cfg_instance, cld->cld_cfg.cfg_last_idx + 1);
 
 	/* Get the cfg lock on the llog */
