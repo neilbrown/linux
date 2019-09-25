@@ -45,7 +45,6 @@
  */
 
 #include <linux/libcfs/libcfs.h>
-#include <lustre_handles.h>
 #include <uapi/linux/lustre/lustre_idl.h>
 
 /**
@@ -154,8 +153,7 @@ struct import_state_hist {
  * Imports are representing client-side view to remote target.
  */
 struct obd_import {
-	/** Local handle (== id) for this import. */
-	struct portals_handle		imp_handle;
+	refcount_t			imp_refcount;
 	struct lustre_handle		imp_dlm_handle; /* client's ldlm export */
 	/** Currently active connection */
 	struct ptlrpc_connection       *imp_connection;
