@@ -1855,6 +1855,9 @@ int ll_statfs_internal(struct ll_sb_info *sbi, struct obd_statfs *osfs,
 
 	max_age = ktime_get_seconds() - sbi->ll_statfs_max_age;
 
+	if (sbi->ll_flags & LL_SBI_LAZYSTATFS)
+		flags |= OBD_STATFS_NODELAY;
+
 	rc = obd_statfs(NULL, sbi->ll_md_exp, osfs, max_age, flags);
 	if (rc)
 		return rc;
@@ -1867,9 +1870,6 @@ int ll_statfs_internal(struct ll_sb_info *sbi, struct obd_statfs *osfs,
 
 	if (osfs->os_state & OS_STATE_SUM)
 		goto out;
-
-	if (sbi->ll_flags & LL_SBI_LAZYSTATFS)
-		flags |= OBD_STATFS_NODELAY;
 
 	rc = obd_statfs(NULL, sbi->ll_dt_exp, &obd_osfs, max_age, flags);
 	if (rc) {
