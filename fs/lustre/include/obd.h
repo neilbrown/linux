@@ -705,6 +705,7 @@ enum md_cli_flags {
 	CLI_HASH64		= BIT(2),
 	CLI_API32		= BIT(3),
 	CLI_MIGRATE		= BIT(4),
+	CLI_DIRTY_DATA		= BIT(5),
 };
 
 enum md_op_code {
