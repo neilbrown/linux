@@ -37,6 +37,7 @@
 #include <linux/pagemap.h>
 #include <linux/init.h>
 #include <linux/utsname.h>
+#include <linux/delay.h>
 #include <linux/file.h>
 #include <linux/kthread.h>
 #include <linux/prefetch.h>
@@ -988,13 +989,11 @@ static int mdc_getpage(struct obd_export *exp, const struct lu_fid *fid,
 {
 	struct ptlrpc_bulk_desc *desc;
 	struct ptlrpc_request *req;
-	wait_queue_head_t waitq;
 	int resends = 0;
 	int rc;
 	int i;
 
 	*request = NULL;
-	init_waitqueue_head(&waitq);
 
 restart_bulk:
 	req = ptlrpc_request_alloc(class_exp2cliimp(exp), &RQF_MDS_READPAGE);
@@ -1038,7 +1037,7 @@ restart_bulk:
 			       exp->exp_obd->obd_name, -EIO);
 			return -EIO;
 		}
-		wait_event_idle_timeout(waitq, 0, resends * HZ);
+		ssleep(resends);
 
 		goto restart_bulk;
 	}
