@@ -723,6 +723,8 @@ cleanup_bulk:
 	 * the chance to have long unlink to sluggish net is smaller here.
 	 */
 	ptlrpc_unregister_bulk(request, 0);
+	if (request->rq_bulk)
+		request->rq_bulk->bd_registered = 0;
 out:
 	if (rc == -ENOMEM) {
 		/*
