@@ -812,12 +812,12 @@ static int ll_options(char *options, struct ll_sb_info *sbi)
 		}
 		tmp = ll_set_opt("flock", s1, LL_SBI_FLOCK);
 		if (tmp) {
-			*flags |= tmp;
+			*flags = (*flags & ~LL_SBI_LOCALFLOCK) | tmp;
 			goto next;
 		}
 		tmp = ll_set_opt("localflock", s1, LL_SBI_LOCALFLOCK);
 		if (tmp) {
-			*flags |= tmp;
+			*flags = (*flags & ~LL_SBI_FLOCK) | tmp;
 			goto next;
 		}
 		tmp = ll_set_opt("noflock", s1,
@@ -2647,11 +2647,16 @@ int ll_show_options(struct seq_file *seq, struct dentry *dentry)
 	if (sbi->ll_flags & LL_SBI_NOLCK)
 		seq_puts(seq, ",nolock");
 
+	/* "flock" is the default since 2.13, but it wasn't for many years,
+	 * so it is still useful to print this to show it is enabled.
+	 * Start to print "noflock" so it is now clear when flock is disabled.
+	 */
 	if (sbi->ll_flags & LL_SBI_FLOCK)
 		seq_puts(seq, ",flock");
-
-	if (sbi->ll_flags & LL_SBI_LOCALFLOCK)
+	else if (sbi->ll_flags & LL_SBI_LOCALFLOCK)
 		seq_puts(seq, ",localflock");
+	else
+		seq_puts(seq, ",noflock");
 
 	if (sbi->ll_flags & LL_SBI_USER_XATTR)
 		seq_puts(seq, ",user_xattr");
