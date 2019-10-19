@@ -391,6 +391,13 @@ static inline int lu_device_is_md(const struct lu_device *d)
  * Common object attributes.
  */
 struct lu_attr {
+	/**
+	 * valid bits
+	 *
+	 * \see enum la_valid
+	 */
+	u64	  la_valid;
+
 	/** size in bytes */
 	u64	  la_size;
 	/** modification time in seconds since Epoch */
@@ -399,6 +406,8 @@ struct lu_attr {
 	s64	  la_atime;
 	/** change time in seconds since Epoch */
 	s64	  la_ctime;
+	/** create time in seconds since Epoch */
+	s64	  la_btime;
 	/** 512-byte blocks allocated to object */
 	u64	  la_blocks;
 	/** permission bits and file type */
@@ -417,12 +426,6 @@ struct lu_attr {
 	u32	  la_blksize;
 	/** real device */
 	u32	  la_rdev;
-	/**
-	 * valid bits
-	 *
-	 * \see enum la_valid
-	 */
-	u64	  la_valid;
 };
 
 /**

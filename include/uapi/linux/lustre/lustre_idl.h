@@ -1211,6 +1211,8 @@ lov_mds_md_max_stripe_count(size_t buf_size, __u32 lmm_magic)
 #define OBD_MD_FLLAZYSIZE    (0x0400000000000000ULL) /* Lazy size */
 #define OBD_MD_FLLAZYBLOCKS  (0x0800000000000000ULL) /* Lazy blocks */
 
+#define OBD_MD_FLBTIME       (0x1000000000000000ULL) /* birth time */
+
 #define OBD_MD_FLALLQUOTA (OBD_MD_FLUSRQUOTA | \
 			   OBD_MD_FLGRPQUOTA | \
 			   OBD_MD_FLPRJQUOTA)
@@ -1220,7 +1222,7 @@ lov_mds_md_max_stripe_count(size_t buf_size, __u32 lmm_magic)
 			  OBD_MD_FLMODE  | OBD_MD_FLTYPE  | OBD_MD_FLUID   | \
 			  OBD_MD_FLGID   | OBD_MD_FLFLAGS | OBD_MD_FLNLINK | \
 			  OBD_MD_FLPARENT | OBD_MD_FLRDEV  | OBD_MD_FLGROUP | \
-			  OBD_MD_FLPROJID)
+			  OBD_MD_FLPROJID | OBD_MD_FLBTIME)
 
 #define OBD_MD_FLXATTRALL (OBD_MD_FLXATTR | OBD_MD_FLXATTRLS)
 
@@ -1587,8 +1589,8 @@ struct mdt_body {
 	__u32	mbo_projid;	/* also fix lustre_swab_mdt_body */
 	__u64	mbo_dom_size;	/* size of DOM component */
 	__u64	mbo_dom_blocks; /* blocks consumed by DOM component */
-	__u64	mbo_padding_8; /* also fix lustre_swab_mdt_body */
-	__u64	mbo_padding_9;
+	__u64	mbo_btime;
+	__u64	mbo_padding_9; /* also fix lustre_swab_mdt_body */
 	__u64	mbo_padding_10;
 }; /* 216 */
 
