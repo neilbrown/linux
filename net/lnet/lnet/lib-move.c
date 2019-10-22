@@ -1259,6 +1259,12 @@ lnet_find_route_locked(struct lnet_net *net, u32 remote_net,
 		if (!lp_best) {
 			best_route = last_route = route;
 			lp_best = lp;
+			best_gw_ni = lnet_find_best_lpni_on_net(NULL,
+								LNET_NID_ANY,
+								route->lr_gateway,
+								route->lr_lnet);
+			LASSERT(best_gw_ni);
+			continue;
 		}
 
 		/* no protection on below fields, but it's harmless */
