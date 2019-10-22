@@ -1230,22 +1230,17 @@ lnet_compare_routes(struct lnet_route *r1, struct lnet_route *r2,
 }
 
 static struct lnet_route *
-lnet_find_route_locked(struct lnet_net *net, u32 remote_net,
+lnet_find_route_locked(struct lnet_remotenet *rnet,
 		       struct lnet_route **prev_route,
 		       struct lnet_peer_ni **gwni)
 {
 	struct lnet_peer_ni *best_gw_ni = NULL;
 	struct lnet_route *best_route;
 	struct lnet_route *last_route;
-	struct lnet_remotenet *rnet;
 	struct lnet_peer *lp_best;
 	struct lnet_route *route;
 	struct lnet_peer *lp;
 	int rc;
-
-	rnet = lnet_find_rnet_locked(remote_net);
-	if (!rnet)
-		return NULL;
 
 	lp_best = NULL;
 	best_route = NULL;
@@ -1755,7 +1750,7 @@ lnet_handle_find_routed_path(struct lnet_send_data *sd,
 	struct lnet_peer *lp;
 	struct lnet_peer_net *lpn;
 	struct lnet_peer_net *best_lpn = NULL;
-	struct lnet_remotenet *rnet;
+	struct lnet_remotenet *rnet, *best_rnet = NULL;
 	struct lnet_route *best_route = NULL;
 	struct lnet_route *last_route = NULL;
 	struct lnet_peer_ni *lpni = NULL;
@@ -1790,13 +1785,16 @@ lnet_handle_find_routed_path(struct lnet_send_data *sd,
 			if (!rnet)
 				continue;
 
-			if (!best_lpn)
+			if (!best_lpn) {
 				best_lpn = lpn;
+				best_rnet = rnet;
+			}
 
 			if (best_lpn->lpn_seq <= lpn->lpn_seq)
 				continue;
 
 			best_lpn = lpn;
+			best_rnet = rnet;
 		}
 
 		if (!best_lpn) {
@@ -1816,8 +1814,8 @@ lnet_handle_find_routed_path(struct lnet_send_data *sd,
 			return -EHOSTUNREACH;
 		}
 
-		best_route = lnet_find_route_locked(NULL, best_lpn->lpn_net_id,
-						    &last_route, &gwni);
+		best_route = lnet_find_route_locked(best_rnet, &last_route,
+						    &gwni);
 		if (!best_route) {
 			CERROR("no route to %s from %s\n",
 			       libcfs_nid2str(dst_nid),
