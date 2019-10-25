@@ -748,6 +748,7 @@ static int osc_shrink_grant_interpret(const struct lu_env *env,
 	osc_update_grant(cli, body);
 out:
 	kmem_cache_free(osc_obdo_kmem, aa->aa_oa);
+	aa->aa_oa = NULL;
 
 	return rc;
 }
@@ -2134,6 +2135,7 @@ static int brw_interpret(const struct lu_env *env,
 		cl_object_attr_unlock(obj);
 	}
 	kmem_cache_free(osc_obdo_kmem, aa->aa_oa);
+	aa->aa_oa = NULL;
 
 	if (lustre_msg_get_opc(req->rq_reqmsg) == OST_WRITE && rc == 0)
 		osc_inc_unstable_pages(req);
