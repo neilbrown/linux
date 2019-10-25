@@ -1345,8 +1345,11 @@ static int lmv_select_statfs_mdt(struct lmv_obd *lmv, u32 flags)
 			break;
 
 		if (LNET_NETTYP(LNET_NIDNET(lnet_id.nid)) != LOLND) {
+			/* We dont need a full 64-bit modulus, just enough
+			 * to distribute the requests across MDTs evenly.
+			 */
 			lmv->lmv_statfs_start =
-				lnet_id.nid % lmv->desc.ld_tgt_count;
+				(u32)lnet_id.nid % lmv->desc.ld_tgt_count;
 			break;
 		}
 	}
