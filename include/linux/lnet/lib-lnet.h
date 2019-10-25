@@ -427,7 +427,6 @@ void lnet_notify_locked(struct lnet_peer_ni *lp, int notifylnd, int alive,
 			time64_t when);
 int lnet_add_route(u32 net, u32 hops, lnet_nid_t gateway_nid,
 		   unsigned int priority);
-int lnet_check_routes(void);
 int lnet_del_route(u32 net, lnet_nid_t gw_nid);
 void lnet_destroy_routes(void);
 int lnet_get_route(int idx, u32 *net, u32 *hops,

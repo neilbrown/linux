@@ -2452,10 +2452,6 @@ LNetNIInit(lnet_pid_t requested_pid)
 		if (rc)
 			goto err_shutdown_lndnis;
 
-		rc = lnet_check_routes();
-		if (rc)
-			goto err_destroy_routes;
-
 		rc = lnet_rtrpools_alloc(im_a_router);
 		if (rc)
 			goto err_destroy_routes;
@@ -3405,12 +3401,6 @@ LNetCtl(unsigned int cmd, void *arg)
 				    config->cfg_config_u.cfg_route.rtr_hop,
 				    config->cfg_nid,
 				    config->cfg_config_u.cfg_route.rtr_priority);
-		if (!rc) {
-			rc = lnet_check_routes();
-			if (rc)
-				lnet_del_route(config->cfg_net,
-					       config->cfg_nid);
-		}
 		mutex_unlock(&the_lnet.ln_api_mutex);
 		return rc;
 
