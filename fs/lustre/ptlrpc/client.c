@@ -199,7 +199,6 @@ struct ptlrpc_bulk_desc *ptlrpc_prep_bulk_imp(struct ptlrpc_request *req,
 	if (!desc)
 		return NULL;
 
-	desc->bd_import_generation = req->rq_import_generation;
 	desc->bd_import = class_import_get(imp);
 	desc->bd_req = req;
 
