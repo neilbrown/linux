@@ -53,6 +53,8 @@
 #include <uapi/linux/lnet/nidstr.h>
 
 extern struct lnet the_lnet;	/* THE network */
+extern unsigned int lnet_current_net_count;
+
 
 #if (BITS_PER_LONG == 32)
 /* 2 CPTs, allowing more CPTs might make us under memory pressure */
@@ -453,6 +455,7 @@ struct lnet_net *lnet_get_net_locked(u32 net_id);
 
 int lnet_islocalnid(lnet_nid_t nid);
 int lnet_islocalnet(u32 net);
+int lnet_islocalnet_locked(u32 net);
 
 void lnet_msg_attach_md(struct lnet_msg *msg, struct lnet_libmd *md,
 			unsigned int offset, unsigned int mlen);
@@ -691,7 +694,10 @@ bool lnet_net_unique(u32 net_id, struct list_head *nilist,
 bool lnet_ni_unique_net(struct list_head *nilist, char *iface);
 void lnet_incr_dlc_seq(void);
 u32 lnet_get_dlc_seq_locked(void);
+int lnet_get_net_count(void);
 
+struct lnet_peer_net *lnet_get_next_peer_net_locked(struct lnet_peer *lp,
+						    u32 prev_lpn_id);
 struct lnet_peer_ni *lnet_get_next_peer_ni_locked(struct lnet_peer *peer,
 						  struct lnet_peer_net *peer_net,
 						  struct lnet_peer_ni *prev);
