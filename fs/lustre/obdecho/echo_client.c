@@ -50,6 +50,10 @@
  * @{
  */
 
+/* echo thread key have a CL_THREAD flag, which set cl_env function directly */
+#define ECHO_DT_CTX_TAG (LCT_REMEMBER | LCT_DT_THREAD)
+#define ECHO_SES_TAG    (LCT_REMEMBER | LCT_SESSION | LCT_SERVER_SESSION)
+
 struct echo_device {
 	struct cl_device		ed_cl;
 	struct echo_client_obd	       *ed_ec;
@@ -1481,6 +1485,7 @@ echo_client_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 	struct echo_object *eco;
 	struct obd_ioctl_data *data = karg;
 	struct lu_env *env;
+	u16 refcheck;
 	struct obdo *oa;
 	struct lu_fid fid;
 	int rw = OBD_BRW_READ;
@@ -1497,16 +1502,14 @@ echo_client_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 	if (rc < 0)
 		return rc;
 
-	env = kzalloc(sizeof(*env), GFP_NOFS);
-	if (!env)
-		return -ENOMEM;
+	env = cl_env_get(&refcheck);
+	if (IS_ERR(env))
+		return PTR_ERR(env);
 
-	rc = lu_env_init(env, LCT_DT_THREAD);
-	if (rc) {
-		rc = -ENOMEM;
-		goto out;
-	}
 	lu_env_add(env);
+	rc = lu_env_refill_by_tags(env, ECHO_DT_CTX_TAG, ECHO_SES_TAG);
+	if (rc != 0)
+		goto out;
 
 	switch (cmd) {
 	case OBD_IOC_CREATE:		/* may create echo object */
@@ -1574,8 +1577,7 @@ echo_client_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 
 out:
 	lu_env_remove(env);
-	lu_env_fini(env);
-	kfree(env);
+	cl_env_put(env, &refcheck);
 
 	return rc;
 }
@@ -1605,6 +1607,9 @@ static int echo_client_setup(const struct lu_env *env,
 	INIT_LIST_HEAD(&ec->ec_objects);
 	INIT_LIST_HEAD(&ec->ec_locks);
 	ec->ec_unique = 0;
+
+	lu_context_tags_update(ECHO_DT_CTX_TAG);
+	lu_session_tags_update(ECHO_SES_TAG);
 
 	ocd = kzalloc(sizeof(*ocd), GFP_NOFS);
 	if (!ocd)
@@ -1641,6 +1646,9 @@ static int echo_client_cleanup(struct obd_device *obddev)
 		CERROR("still has clients!\n");
 		return -EBUSY;
 	}
+
+	lu_session_tags_clear(ECHO_SES_TAG & ~LCT_SESSION);
+	lu_context_tags_clear(ECHO_DT_CTX_TAG);
 
 	LASSERT(refcount_read(&ec->ec_exp->exp_handle.h_ref) > 0);
 	rc = obd_disconnect(ec->ec_exp);
