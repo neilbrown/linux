@@ -494,6 +494,8 @@ static void osc_lru_use(struct client_obd *cli, struct osc_page *opg)
 	 * ops_lru should be empty
 	 */
 	if (opg->ops_in_lru) {
+		if (list_empty(&opg->ops_lru))
+			return;
 		spin_lock(&cli->cl_lru_list_lock);
 		if (!list_empty(&opg->ops_lru)) {
 			__osc_lru_del(cli, opg);
