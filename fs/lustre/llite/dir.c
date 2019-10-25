@@ -1505,16 +1505,24 @@ finish_req:
 	case LL_IOC_LOV_GETSTRIPE:
 	case LL_IOC_LOV_GETSTRIPE_NEW:
 	case LL_IOC_MDC_GETINFO:
+	case LL_IOC_MDC_GETINFO_OLD:
 	case IOC_MDC_GETFILEINFO:
+	case IOC_MDC_GETFILEINFO_OLD:
 	case IOC_MDC_GETFILESTRIPE: {
 		struct ptlrpc_request *request = NULL;
 		struct lov_user_md __user *lump;
 		struct lov_mds_md *lmm = NULL;
 		struct mdt_body *body;
 		char *filename = NULL;
+		lstat_t __user *statp = NULL;
+		struct statx __user *stxp = NULL;
+		u64 __user *flagsp = NULL;
+		u32 __user *lmmsizep = NULL;
+		struct lu_fid __user *fidp = NULL;
 		int lmmsize;
 
-		if (cmd == IOC_MDC_GETFILEINFO ||
+		if (cmd == IOC_MDC_GETFILEINFO_OLD ||
+		    cmd == IOC_MDC_GETFILEINFO ||
 		    cmd == IOC_MDC_GETFILESTRIPE) {
 			filename = ll_getname((const char __user *)arg);
 			if (IS_ERR(filename))
@@ -1536,7 +1544,9 @@ finish_req:
 		}
 
 		if (rc == -ENODATA && (cmd == IOC_MDC_GETFILEINFO ||
-				       cmd == LL_IOC_MDC_GETINFO)) {
+				       cmd == LL_IOC_MDC_GETINFO ||
+				       cmd == IOC_MDC_GETFILEINFO_OLD ||
+				       cmd == LL_IOC_MDC_GETINFO_OLD)) {
 			lmmsize = 0;
 			rc = 0;
 		}
@@ -1548,10 +1558,21 @@ finish_req:
 		    cmd == LL_IOC_LOV_GETSTRIPE ||
 		    cmd == LL_IOC_LOV_GETSTRIPE_NEW) {
 			lump = (struct lov_user_md __user *)arg;
+		} else if (cmd == IOC_MDC_GETFILEINFO_OLD ||
+			   cmd == LL_IOC_MDC_GETINFO_OLD){
+			struct lov_user_mds_data_v1 __user *lmdp;
+
+			lmdp = (struct lov_user_mds_data_v1 __user *)arg;
+			statp = &lmdp->lmd_st;
+			lump = &lmdp->lmd_lmm;
 		} else {
 			struct lov_user_mds_data __user *lmdp;
 
 			lmdp = (struct lov_user_mds_data __user *)arg;
+			fidp = &lmdp->lmd_fid;
+			stxp = &lmdp->lmd_stx;
+			flagsp = &lmdp->lmd_flags;
+			lmmsizep = &lmdp->lmd_lmmsize;
 			lump = &lmdp->lmd_lmm;
 		}
 
@@ -1571,8 +1592,8 @@ finish_req:
 			rc = -EOVERFLOW;
 		}
 
-		if (cmd == IOC_MDC_GETFILEINFO || cmd == LL_IOC_MDC_GETINFO) {
-			struct lov_user_mds_data __user *lmdp;
+		if (cmd == IOC_MDC_GETFILEINFO_OLD ||
+		    cmd == LL_IOC_MDC_GETINFO_OLD) {
 			lstat_t st = { 0 };
 
 			st.st_dev = inode->i_sb->s_dev;
@@ -1591,8 +1612,72 @@ finish_req:
 						     sbi->ll_flags &
 						     LL_SBI_32BIT_API);
 
-			lmdp = (struct lov_user_mds_data __user *)arg;
-			if (copy_to_user(&lmdp->lmd_st, &st, sizeof(st))) {
+			if (copy_to_user(statp, &st, sizeof(st))) {
+				rc = -EFAULT;
+				goto out_req;
+			}
+		} else if (cmd == IOC_MDC_GETFILEINFO ||
+			   cmd == LL_IOC_MDC_GETINFO) {
+			struct statx stx = { 0 };
+			u64 valid = body->mbo_valid;
+
+			stx.stx_blksize = PAGE_SIZE;
+			stx.stx_nlink = body->mbo_nlink;
+			stx.stx_uid = body->mbo_uid;
+			stx.stx_gid = body->mbo_gid;
+			stx.stx_mode = body->mbo_mode;
+			stx.stx_ino = cl_fid_build_ino(&body->mbo_fid1,
+						       sbi->ll_flags &
+						       LL_SBI_32BIT_API);
+			stx.stx_size = body->mbo_size;
+			stx.stx_blocks = body->mbo_blocks;
+			stx.stx_atime.tv_sec = body->mbo_atime;
+			stx.stx_ctime.tv_sec = body->mbo_ctime;
+			stx.stx_mtime.tv_sec = body->mbo_mtime;
+			stx.stx_rdev_major = MAJOR(body->mbo_rdev);
+			stx.stx_rdev_minor = MINOR(body->mbo_rdev);
+			stx.stx_dev_major = MAJOR(inode->i_sb->s_dev);
+			stx.stx_dev_minor = MINOR(inode->i_sb->s_dev);
+			stx.stx_mask |= STATX_BASIC_STATS;
+
+			/*
+			 * For a striped directory, the size and blocks returned
+			 * from MDT is not correct.
+			 * The size and blocks are aggregated by client across
+			 * all stripes.
+			 * Thus for a striped directory, do not return the valid
+			 * FLSIZE and FLBLOCKS flags to the caller.
+			 * However, this whould be better decided by the MDS
+			 * instead of the client.
+			 */
+			if (cmd == LL_IOC_MDC_GETINFO &&
+			    ll_i2info(inode)->lli_lsm_md)
+				valid &= ~(OBD_MD_FLSIZE | OBD_MD_FLBLOCKS);
+
+			if (flagsp && copy_to_user(flagsp, &valid,
+						   sizeof(*flagsp))) {
+				rc = -EFAULT;
+				goto out_req;
+			}
+
+			if (fidp && copy_to_user(fidp, &body->mbo_fid1,
+						 sizeof(*fidp))) {
+				rc = -EFAULT;
+				goto out_req;
+			}
+
+			if (!(valid & OBD_MD_FLSIZE))
+				stx.stx_mask &= ~STATX_SIZE;
+			if (!(valid & OBD_MD_FLBLOCKS))
+				stx.stx_mask &= ~STATX_BLOCKS;
+
+			if (stxp && copy_to_user(stxp, &stx, sizeof(stx))) {
+				rc = -EFAULT;
+				goto out_req;
+			}
+
+			if (lmmsizep && copy_to_user(lmmsizep, &lmmsize,
+						     sizeof(*lmmsizep))) {
 				rc = -EFAULT;
 				goto out_req;
 			}
