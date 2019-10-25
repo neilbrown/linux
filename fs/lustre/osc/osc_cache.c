@@ -1423,7 +1423,6 @@ static void osc_consume_write_grant(struct client_obd *cli,
 {
 	assert_spin_locked(&cli->cl_loi_list_lock);
 	LASSERT(!(pga->flag & OBD_BRW_FROM_GRANT));
-	atomic_long_inc(&obd_dirty_pages);
 	cli->cl_dirty_pages++;
 	pga->flag |= OBD_BRW_FROM_GRANT;
 	CDEBUG(D_CACHE, "using %lu grant credits for brw %p page %p\n",
@@ -1560,13 +1559,18 @@ static bool osc_enter_cache_try(struct client_obd *cli,
 	if (osc_reserve_grant(cli, bytes) < 0)
 		return rc;
 
-	if (cli->cl_dirty_pages < cli->cl_dirty_max_pages &&
-	    atomic_long_read(&obd_dirty_pages) + 1 <= obd_max_dirty_pages) {
-		osc_consume_write_grant(cli, &oap->oap_brw_page);
-		rc = true;
-	} else {
-		__osc_unreserve_grant(cli, bytes, bytes);
+	if (cli->cl_dirty_pages < cli->cl_dirty_max_pages) {
+		if (atomic_long_add_return(1, &obd_dirty_pages) <=
+		    obd_max_dirty_pages) {
+			osc_consume_write_grant(cli, &oap->oap_brw_page);
+			rc = true;
+			goto out;
+		} else
+			atomic_long_dec(&obd_dirty_pages);
 	}
+	__osc_unreserve_grant(cli, bytes, bytes);
+
+out:
 	return rc;
 }
 
