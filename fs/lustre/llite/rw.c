@@ -376,7 +376,7 @@ ll_read_ahead_pages(const struct lu_env *env, struct cl_io *io,
 				 * update read ahead RPC size.
 				 * NB: it's racy but doesn't matter
 				 */
-				if (ras->ras_rpc_size > ra.cra_rpc_size &&
+				if (ras->ras_rpc_size != ra.cra_rpc_size &&
 				    ra.cra_rpc_size > 0)
 					ras->ras_rpc_size = ra.cra_rpc_size;
 				/* trim it to align with optimal RPC size */
@@ -1203,6 +1203,8 @@ int ll_readpage(struct file *file, struct page *vmpage)
 		struct ll_readahead_state *ras = &fd->fd_ras;
 		struct lu_env *local_env = NULL;
 		struct inode *inode = file_inode(file);
+		unsigned long fast_read_pages =
+			max(RA_REMAIN_WINDOW_MIN, ras->ras_rpc_size);
 		struct vvp_page *vpg;
 
 		result = -ENODATA;
@@ -1245,7 +1247,7 @@ int ll_readpage(struct file *file, struct page *vmpage)
 			 * a cl_io to issue the RPC.
 			 */
 			if (ras->ras_window_start + ras->ras_window_len <
-			    ras->ras_next_readahead + PTLRPC_MAX_BRW_PAGES) {
+			    ras->ras_next_readahead + fast_read_pages) {
 				/* export the page and skip io stack */
 				vpg->vpg_ra_used = 1;
 				cl_page_export(env, page, 1);
