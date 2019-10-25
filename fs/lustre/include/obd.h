@@ -1055,6 +1055,8 @@ struct md_ops {
 
 	int (*unpackmd)(struct obd_export *exp, struct lmv_stripe_md **plsm,
 			const union lmv_mds_md *lmv, size_t lmv_size);
+	int (*rmfid)(struct obd_export *exp, struct fid_array *fa, int *rcs,
+		     struct ptlrpc_request_set *set);
 };
 
 static inline struct md_open_data *obd_mod_alloc(void)
