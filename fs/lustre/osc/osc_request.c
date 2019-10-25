@@ -47,7 +47,6 @@
 #include <lprocfs_status.h>
 #include <uapi/linux/lustre/lustre_ioctl.h>
 #include <lustre_obdo.h>
-#include <uapi/linux/lustre/lustre_param.h>
 #include <lustre_fid.h>
 #include <obd_class.h>
 #include <obd.h>
@@ -3354,18 +3353,6 @@ int osc_cleanup_common(struct obd_device *obd)
 }
 EXPORT_SYMBOL(osc_cleanup_common);
 
-int osc_process_config_base(struct obd_device *obd, struct lustre_cfg *lcfg)
-{
-	ssize_t count  = class_modify_config(lcfg, PARAM_OSC,
-					     &obd->obd_kset.kobj);
-	return count > 0 ? 0 : count;
-}
-
-static int osc_process_config(struct obd_device *obd, u32 len, void *buf)
-{
-	return osc_process_config_base(obd, buf);
-}
-
 static const struct obd_ops osc_obd_ops = {
 	.owner		= THIS_MODULE,
 	.setup		= osc_setup,
@@ -3385,7 +3372,6 @@ static const struct obd_ops osc_obd_ops = {
 	.iocontrol	= osc_iocontrol,
 	.set_info_async	= osc_set_info_async,
 	.import_event	= osc_import_event,
-	.process_config	= osc_process_config,
 	.quotactl	= osc_quotactl,
 };
 
