@@ -2902,23 +2902,6 @@ int osc_set_info_async(const struct lu_env *env, struct obd_export *exp,
 		return 0;
 	}
 
-	if (KEY_IS(KEY_CACHE_SET)) {
-		struct client_obd *cli = &obd->u.cli;
-
-		LASSERT(!cli->cl_cache); /* only once */
-		cli->cl_cache = val;
-		cl_cache_incref(cli->cl_cache);
-		cli->cl_lru_left = &cli->cl_cache->ccc_lru_left;
-
-		/* add this osc into entity list */
-		LASSERT(list_empty(&cli->cl_lru_osc));
-		spin_lock(&cli->cl_cache->ccc_lru_lock);
-		list_add(&cli->cl_lru_osc, &cli->cl_cache->ccc_lru);
-		spin_unlock(&cli->cl_cache->ccc_lru_lock);
-
-		return 0;
-	}
-
 	if (KEY_IS(KEY_CACHE_LRU_SHRINK)) {
 		struct client_obd *cli = &obd->u.cli;
 		long nr = atomic_long_read(&cli->cl_lru_in_list) >> 1;
