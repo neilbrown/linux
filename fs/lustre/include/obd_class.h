@@ -1693,6 +1693,7 @@ extern char obd_jobid_name[];
 int class_procfs_init(void);
 int class_procfs_clean(void);
 /* prng.c */
+
 #define ll_generate_random_uuid(uuid_out) \
 	get_random_bytes(uuid_out, sizeof(class_uuid_t))
 
@@ -1712,5 +1713,17 @@ struct root_squash_info {
 /* linux-module.c */
 struct obd_ioctl_data;
 int obd_ioctl_getdata(struct obd_ioctl_data **data, int *len, void __user *arg);
+
+
+extern void obd_heat_add(struct obd_heat_instance *instance,
+			 unsigned int time_second, u64 count,
+			 unsigned int weight, unsigned int period_second);
+extern void obd_heat_decay(struct obd_heat_instance *instance,
+			   u64 time_second, unsigned int weight,
+			   unsigned int period_second);
+extern u64 obd_heat_get(struct obd_heat_instance *instance,
+			unsigned int time_second, unsigned int weight,
+			unsigned int period_second);
+extern void obd_heat_clear(struct obd_heat_instance *instance, int count);
 
 #endif /* __LINUX_OBD_CLASS_H */
