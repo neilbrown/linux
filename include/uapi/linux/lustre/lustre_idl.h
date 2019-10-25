@@ -795,6 +795,7 @@ struct ptlrpc_body_v2 {
 #define OBD_CONNECT2_DIR_MIGRATE	0x4ULL		/* migrate striped dir
 							 */
 #define OBD_CONNECT2_SUM_STATFS		0x8ULL /* MDT return aggregated stats */
+#define OBD_CONNECT2_OVERSTRIPING	0x10ULL /* OST overstriping support */
 #define OBD_CONNECT2_FLR		0x20ULL		/* FLR support */
 #define OBD_CONNECT2_WBC_INTENTS	0x40ULL /* create/unlink/... intents
 						 * for wbc, also operations
