@@ -136,7 +136,7 @@ extern struct lu_kmem_descr osc_caches[];
 
 int osc_quota_setup(struct obd_device *obd);
 int osc_quota_cleanup(struct obd_device *obd);
-int osc_quota_setdq(struct client_obd *cli, const unsigned int qid[],
+int osc_quota_setdq(struct client_obd *cli, u64 xid, const unsigned int qid[],
 		    u32 valid, u32 flags);
 int osc_quota_chkdq(struct client_obd *cli, const unsigned int qid[]);
 int osc_quotactl(struct obd_device *unused, struct obd_export *exp,

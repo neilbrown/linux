@@ -1755,7 +1755,8 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
 		       "setdq for [%u %u %u] with valid %#llx, flags %x\n",
 		       body->oa.o_uid, body->oa.o_gid, body->oa.o_projid,
 		       body->oa.o_valid, body->oa.o_flags);
-		osc_quota_setdq(cli, qid, body->oa.o_valid, body->oa.o_flags);
+		osc_quota_setdq(cli, req->rq_xid, qid, body->oa.o_valid,
+				body->oa.o_flags);
 	}
 
 	osc_update_grant(cli, body);
