@@ -90,16 +90,8 @@ extern struct kmem_cache *lnet_small_mds_cachep; /* <= LNET_SMALL_MD_SIZE bytes
 						  */
 #define LNET_LND_DEFAULT_TIMEOUT 5
 
-static inline int lnet_is_route_alive(struct lnet_route *route)
-{
-	/* gateway is down */
-	/* TODO re-implement gateway alive indication */
-	CDEBUG(D_NET, "TODO: reimplement routing. gateway = %s\n",
-	       route->lr_gateway ?
-		libcfs_nid2str(route->lr_gateway->lp_primary_nid) :
-		"undefined");
-	return 1;
-}
+bool lnet_is_route_alive(struct lnet_route *route);
+bool lnet_is_gateway_alive(struct lnet_peer *gw);
 
 static inline int lnet_is_wire_handle_none(struct lnet_handle_wire *wh)
 {
