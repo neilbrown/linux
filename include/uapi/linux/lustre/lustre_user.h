@@ -405,6 +405,7 @@ struct ll_ioc_lease_id {
 
 #define LOV_MAXPOOLNAME 15
 #define LOV_POOLNAMEF "%.15s"
+#define LOV_OFFSET_DEFAULT      ((__u16)-1)
 
 #define LOV_MIN_STRIPE_BITS	16	/* maximum PAGE_SIZE (ia64), power of 2 */
 #define LOV_MIN_STRIPE_SIZE	(1 << LOV_MIN_STRIPE_BITS)
