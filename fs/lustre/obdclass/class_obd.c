@@ -703,6 +703,79 @@ static void obdclass_exit(void)
 	obd_zombie_impexp_stop();
 }
 
+void obd_heat_clear(struct obd_heat_instance *instance, int count)
+{
+	memset(instance, 0, sizeof(*instance) * count);
+}
+EXPORT_SYMBOL(obd_heat_clear);
+
+/*
+ * The file heat is calculated for every time interval period I. The access
+ * frequency during each period is counted. The file heat is only recalculated
+ * at the end of a time period.  And a percentage of the former file heat is
+ * lost when recalculated. The recursion formula to calculate the heat of the
+ * file f is as follow:
+ *
+ * Hi+1(f) = (1-P)*Hi(f)+ P*Ci
+ *
+ * Where Hi is the heat value in the period between time points i*I and
+ * (i+1)*I; Ci is the access count in the period; the symbol P refers to the
+ * weight of Ci. The larger the value the value of P is, the more influence Ci
+ * has on the file heat.
+ */
+void obd_heat_decay(struct obd_heat_instance *instance,  u64 time_second,
+		    unsigned int weight, unsigned int period_second)
+{
+	u64 second;
+
+	if (instance->ohi_time_second > time_second) {
+		obd_heat_clear(instance, 1);
+		return;
+	}
+
+	if (instance->ohi_time_second == 0)
+		return;
+
+	for (second = instance->ohi_time_second + period_second;
+	     second < time_second;
+	     second += period_second) {
+		instance->ohi_heat = instance->ohi_heat *
+				(256 - weight) / 256 +
+				instance->ohi_count * weight / 256;
+		instance->ohi_count = 0;
+		instance->ohi_time_second = second;
+	}
+}
+EXPORT_SYMBOL(obd_heat_decay);
+
+u64 obd_heat_get(struct obd_heat_instance *instance, unsigned int time_second,
+		 unsigned int weight, unsigned int period_second)
+{
+	obd_heat_decay(instance, time_second, weight, period_second);
+
+	if (instance->ohi_count == 0)
+		return instance->ohi_heat;
+
+	return instance->ohi_heat * (256 - weight) / 256 +
+	       instance->ohi_count * weight / 256;
+}
+EXPORT_SYMBOL(obd_heat_get);
+
+void obd_heat_add(struct obd_heat_instance *instance,
+		  unsigned int time_second,  u64 count,
+		  unsigned int weight, unsigned int period_second)
+{
+	obd_heat_decay(instance, time_second, weight, period_second);
+	if (instance->ohi_time_second == 0) {
+		instance->ohi_time_second = time_second;
+		instance->ohi_heat = 0;
+		instance->ohi_count = count;
+	} else {
+		instance->ohi_count += count;
+	}
+}
+EXPORT_SYMBOL(obd_heat_add);
+
 MODULE_AUTHOR("OpenSFS, Inc. <http://www.lustre.org/>");
 MODULE_DESCRIPTION("Lustre Class Driver");
 MODULE_VERSION(LUSTRE_VERSION_STRING);

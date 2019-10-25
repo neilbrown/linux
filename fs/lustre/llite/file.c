@@ -1397,6 +1397,37 @@ static void ll_io_init(struct cl_io *io, const struct file *file, int write)
 	ll_io_set_mirror(io, file);
 }
 
+static void ll_heat_add(struct inode *inode, enum cl_io_type iot,
+			u64 count)
+{
+	struct ll_inode_info *lli = ll_i2info(inode);
+	struct ll_sb_info *sbi = ll_i2sbi(inode);
+	enum obd_heat_type sample_type;
+	enum obd_heat_type iobyte_type;
+	u64 now = ktime_get_real_seconds();
+
+	if (!ll_sbi_has_file_heat(sbi) ||
+	    lli->lli_heat_flags & LU_HEAT_FLAG_OFF)
+		return;
+
+	if (iot == CIT_READ) {
+		sample_type = OBD_HEAT_READSAMPLE;
+		iobyte_type = OBD_HEAT_READBYTE;
+	} else if (iot == CIT_WRITE) {
+		sample_type = OBD_HEAT_WRITESAMPLE;
+		iobyte_type = OBD_HEAT_WRITEBYTE;
+	} else {
+		return;
+	}
+
+	spin_lock(&lli->lli_heat_lock);
+	obd_heat_add(&lli->lli_heat_instances[sample_type], now, 1,
+		     sbi->ll_heat_decay_weight, sbi->ll_heat_period_second);
+	obd_heat_add(&lli->lli_heat_instances[iobyte_type], now, count,
+		     sbi->ll_heat_decay_weight, sbi->ll_heat_period_second);
+	spin_unlock(&lli->lli_heat_lock);
+}
+
 static ssize_t
 ll_file_io_generic(const struct lu_env *env, struct vvp_io_args *args,
 		   struct file *file, enum cl_io_type iot,
@@ -1510,6 +1541,8 @@ out:
 		}
 	}
 	CDEBUG(D_VFSTRACE, "iot: %d, result: %zd\n", iot, result);
+	if (result > 0)
+		ll_heat_add(file_inode(file), iot, result);
 
 	return result > 0 ? result : rc;
 }
@@ -1573,9 +1606,11 @@ ll_do_fast_read(struct kiocb *iocb, struct iov_iter *iter)
 	if (result == -ENODATA)
 		result = 0;
 
-	if (result > 0)
+	if (result > 0) {
+		ll_heat_add(file_inode(iocb->ki_filp), CIT_READ, result);
 		ll_stats_ops_tally(ll_i2sbi(file_inode(iocb->ki_filp)),
 				   LPROC_LL_READ_BYTES, result);
+	}
 
 	return result;
 }
@@ -1658,6 +1693,7 @@ static ssize_t ll_do_tiny_write(struct kiocb *iocb, struct iov_iter *iter)
 		result = 0;
 
 	if (result > 0) {
+		ll_heat_add(inode, CIT_WRITE, result);
 		ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_WRITE_BYTES,
 				   result);
 		set_bit(LLIF_DATA_MODIFIED, &ll_i2info(inode)->lli_flags);
@@ -3124,6 +3160,41 @@ static long ll_file_set_lease(struct file *file, struct ll_ioc_lease *ioc,
 	return rc;
 }
 
+static void ll_heat_get(struct inode *inode, struct lu_heat *heat)
+{
+	struct ll_inode_info *lli = ll_i2info(inode);
+	struct ll_sb_info *sbi = ll_i2sbi(inode);
+	u64 now = ktime_get_real_seconds();
+	int i;
+
+	spin_lock(&lli->lli_heat_lock);
+	heat->lh_flags = lli->lli_heat_flags;
+	for (i = 0; i < heat->lh_count; i++)
+		heat->lh_heat[i] = obd_heat_get(&lli->lli_heat_instances[i],
+						now, sbi->ll_heat_decay_weight,
+						sbi->ll_heat_period_second);
+	spin_unlock(&lli->lli_heat_lock);
+}
+
+static int ll_heat_set(struct inode *inode, u64 flags)
+{
+	struct ll_inode_info *lli = ll_i2info(inode);
+	int rc = 0;
+
+	spin_lock(&lli->lli_heat_lock);
+	if (flags & LU_HEAT_FLAG_CLEAR)
+		obd_heat_clear(lli->lli_heat_instances, OBD_HEAT_COUNT);
+
+	if (flags & LU_HEAT_FLAG_OFF)
+		lli->lli_heat_flags |= LU_HEAT_FLAG_OFF;
+	else
+		lli->lli_heat_flags &= ~LU_HEAT_FLAG_OFF;
+
+	spin_unlock(&lli->lli_heat_lock);
+
+	return rc;
+}
+
 static long
 ll_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
@@ -3506,6 +3577,37 @@ out_ladvise:
 		return ll_ioctl_fssetxattr(inode, cmd, arg);
 	case BLKSSZGET:
 		return put_user(PAGE_SIZE, (int __user *)arg);
+	case LL_IOC_HEAT_GET: {
+		struct lu_heat uheat;
+		struct lu_heat *heat;
+		int size;
+
+		if (copy_from_user(&uheat, (void __user *)arg, sizeof(uheat)))
+			return -EFAULT;
+
+		if (uheat.lh_count > OBD_HEAT_COUNT)
+			uheat.lh_count = OBD_HEAT_COUNT;
+
+		size = offsetof(typeof(uheat), lh_heat[uheat.lh_count]);
+		heat = kzalloc(size, GFP_KERNEL);
+		if (!heat)
+			return -ENOMEM;
+
+		heat->lh_count = uheat.lh_count;
+		ll_heat_get(inode, heat);
+		rc = copy_to_user((char __user *)arg, heat, size);
+		kfree(heat);
+		return rc ? -EFAULT : 0;
+	}
+	case LL_IOC_HEAT_SET: {
+		u64 flags;
+
+		if (copy_from_user(&flags, (void __user *)arg, sizeof(flags)))
+			return -EFAULT;
+
+		rc = ll_heat_set(inode, flags);
+		return rc;
+	}
 	default:
 		return obd_iocontrol(cmd, ll_i2dtexp(inode), 0, NULL,
 				     (void __user *)arg);
