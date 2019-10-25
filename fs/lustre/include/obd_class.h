@@ -909,8 +909,9 @@ static inline int obd_statfs_async(struct obd_export *exp,
 
 	obd = exp->exp_obd;
 	if (!obd->obd_type || !obd->obd_type->typ_dt_ops->statfs) {
-		CERROR("%s: no %s operation\n", obd->obd_name, __func__);
-		return -EOPNOTSUPP;
+		rc = -EOPNOTSUPP;
+		CERROR("%s: no statfs operation: rc = %d\n", obd->obd_name, rc);
+		return rc;
 	}
 
 	CDEBUG(D_SUPER, "%s: osfs %p age %lld, max_age %lld\n",
