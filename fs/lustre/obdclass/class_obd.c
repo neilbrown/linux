@@ -507,8 +507,8 @@ int class_handle_ioctl(unsigned int cmd, unsigned long arg)
 static long obd_class_ioctl(struct file *filp, unsigned int cmd,
 			    unsigned long arg)
 {
-	/* Allow non-root access for OBD_IOC_PING_TARGET - used by lfs check */
-	if (!capable(CAP_SYS_ADMIN) && (cmd != OBD_IOC_PING_TARGET))
+	/* Allow non-root access for some limited ioctls */
+	if (!capable(CAP_SYS_ADMIN))
 		return -EACCES;
 
 	if ((cmd & 0xffffff00) == ((int)'T') << 8) /* ignore all tty ioctls */
