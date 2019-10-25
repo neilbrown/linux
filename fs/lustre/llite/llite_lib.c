@@ -87,6 +87,7 @@ static struct ll_sb_info *ll_init_sbi(void)
 	spin_lock_init(&sbi->ll_pp_extent_lock);
 	spin_lock_init(&sbi->ll_process_lock);
 	sbi->ll_rw_stats_on = 0;
+	sbi->ll_statfs_max_age = OBD_STATFS_CACHE_SECONDS;
 
 	si_meminfo(&si);
 	pages = si.totalram - si.totalhigh;
@@ -317,7 +318,7 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
 	 * available
 	 */
 	err = obd_statfs(NULL, sbi->ll_md_exp, osfs,
-			 ktime_get_seconds() - OBD_STATFS_CACHE_SECONDS,
+			 ktime_get_seconds() - sbi->ll_statfs_max_age,
 			 OBD_STATFS_FOR_MDT0);
 	if (err)
 		goto out_md_fid;
@@ -1844,7 +1845,7 @@ int ll_statfs_internal(struct ll_sb_info *sbi, struct obd_statfs *osfs,
 	time64_t max_age;
 	int rc;
 
-	max_age = ktime_get_seconds() - OBD_STATFS_CACHE_SECONDS;
+	max_age = ktime_get_seconds() - sbi->ll_statfs_max_age;
 
 	rc = obd_statfs(NULL, sbi->ll_md_exp, osfs, max_age, flags);
 	if (rc)
