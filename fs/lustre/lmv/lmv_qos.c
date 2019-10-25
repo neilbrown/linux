@@ -77,7 +77,6 @@ static int lmv_qos_calc_ppts(struct lmv_obd *lmv)
 	u64 ba_max, ba_min, ba;
 	u64 ia_max, ia_min, ia;
 	u32 num_active;
-	unsigned int i;
 	int prio_wide;
 	time64_t now, age;
 	u32 maxage = lmv->desc.ld_qos_maxage;
@@ -114,9 +113,8 @@ static int lmv_qos_calc_ppts(struct lmv_obd *lmv)
 	now = ktime_get_real_seconds();
 
 	/* Calculate server penalty per object */
-	for (i = 0; i < lmv->desc.ld_tgt_count; i++) {
-		tgt = lmv->tgts[i];
-		if (!tgt || !tgt->ltd_exp || !tgt->ltd_active)
+	lmv_foreach_tgt(lmv, tgt) {
+		if (!tgt->ltd_exp || !tgt->ltd_active)
 			continue;
 
 		/* bavail >> 16 to avoid overflow */
@@ -164,9 +162,8 @@ static int lmv_qos_calc_ppts(struct lmv_obd *lmv)
 		 * we have to double the MDT penalty
 		 */
 		num_active = 2;
-		for (i = 0; i < lmv->desc.ld_tgt_count; i++) {
-			tgt = lmv->tgts[i];
-			if (!tgt || !tgt->ltd_exp || !tgt->ltd_active)
+		lmv_foreach_tgt(lmv, tgt) {
+			if (!tgt->ltd_exp || !tgt->ltd_active)
 				continue;
 
 			tgt->ltd_qos.ltq_penalty_per_obj <<= 1;
@@ -265,7 +262,6 @@ static int lmv_qos_used(struct lmv_obd *lmv, struct lu_tgt_desc *tgt,
 {
 	struct lu_tgt_qos *ltq;
 	struct lu_svr_qos *svr;
-	unsigned int i;
 
 	ltq = &tgt->ltd_qos;
 	LASSERT(ltq);
@@ -301,9 +297,8 @@ static int lmv_qos_used(struct lmv_obd *lmv, struct lu_tgt_desc *tgt,
 
 	*total_wt = 0;
 	/* Decrease all MDT penalties */
-	for (i = 0; i < lmv->desc.ld_tgt_count; i++) {
-		ltq = &lmv->tgts[i]->ltd_qos;
-		if (!tgt || !tgt->ltd_exp || !tgt->ltd_active)
+	lmv_foreach_tgt(lmv, tgt) {
+		if (!tgt->ltd_exp || !tgt->ltd_active)
 			continue;
 
 		if (ltq->ltq_penalty < ltq->ltq_penalty_per_obj)
@@ -311,7 +306,7 @@ static int lmv_qos_used(struct lmv_obd *lmv, struct lu_tgt_desc *tgt,
 		else
 			ltq->ltq_penalty -= ltq->ltq_penalty_per_obj;
 
-		lmv_qos_calc_weight(lmv->tgts[i]);
+		lmv_qos_calc_weight(tgt);
 
 		/* Recalc the total weight of usable osts */
 		if (ltq->ltq_usable)
@@ -319,7 +314,7 @@ static int lmv_qos_used(struct lmv_obd *lmv, struct lu_tgt_desc *tgt,
 
 		CDEBUG(D_OTHER,
 		       "recalc tgt %d usable=%d avail=%llu tgtppo=%llu tgtp=%llu svrppo=%llu svrp=%llu wt=%llu\n",
-		       i, ltq->ltq_usable,
+		       tgt->ltd_index, ltq->ltq_usable,
 		       tgt_statfs_bavail(tgt) >> 10,
 		       ltq->ltq_penalty_per_obj >> 10,
 		       ltq->ltq_penalty >> 10,
@@ -337,7 +332,6 @@ struct lu_tgt_desc *lmv_locate_tgt_qos(struct lmv_obd *lmv, u32 *mdt)
 	u64 total_weight = 0;
 	u64 cur_weight = 0;
 	u64 rand;
-	int i;
 	int rc;
 
 	if (!lmv_qos_is_usable(lmv))
@@ -356,11 +350,7 @@ struct lu_tgt_desc *lmv_locate_tgt_qos(struct lmv_obd *lmv, u32 *mdt)
 		goto unlock;
 	}
 
-	for (i = 0; i < lmv->desc.ld_tgt_count; i++) {
-		tgt = lmv->tgts[i];
-		if (!tgt)
-			continue;
-
+	lmv_foreach_tgt(lmv, tgt) {
 		tgt->ltd_qos.ltq_usable = 0;
 		if (!tgt->ltd_exp || !tgt->ltd_active)
 			continue;
@@ -372,10 +362,8 @@ struct lu_tgt_desc *lmv_locate_tgt_qos(struct lmv_obd *lmv, u32 *mdt)
 
 	rand = lu_prandom_u64_max(total_weight);
 
-	for (i = 0; i < lmv->desc.ld_tgt_count; i++) {
-		tgt = lmv->tgts[i];
-
-		if (!tgt || !tgt->ltd_qos.ltq_usable)
+	lmv_foreach_tgt(lmv, tgt) {
+		if (!tgt->ltd_qos.ltq_usable)
 			continue;
 
 		cur_weight += tgt->ltd_qos.ltq_weight;
@@ -404,17 +392,18 @@ struct lu_tgt_desc *lmv_locate_tgt_rr(struct lmv_obd *lmv, u32 *mdt)
 
 	spin_lock(&lmv->lmv_qos.lq_rr.lqr_alloc);
 	for (i = 0; i < lmv->desc.ld_tgt_count; i++) {
-		tgt = lmv->tgts[(i + lmv->lmv_qos_rr_index) %
-				lmv->desc.ld_tgt_count];
-		if (tgt && tgt->ltd_exp && tgt->ltd_active) {
-			*mdt = tgt->ltd_index;
-			lmv->lmv_qos_rr_index =
-				(i + lmv->lmv_qos_rr_index + 1) %
-				lmv->desc.ld_tgt_count;
-			spin_unlock(&lmv->lmv_qos.lq_rr.lqr_alloc);
+		tgt = lmv_tgt(lmv,
+			(i + lmv->lmv_qos_rr_index) % lmv->desc.ld_tgt_count);
+		if (!tgt || !tgt->ltd_exp || !tgt->ltd_active)
+			continue;
 
-			return tgt;
-		}
+		*mdt = tgt->ltd_index;
+		lmv->lmv_qos_rr_index =
+			(i + lmv->lmv_qos_rr_index + 1) %
+			lmv->desc.ld_tgt_count;
+		spin_unlock(&lmv->lmv_qos.lq_rr.lqr_alloc);
+
+		return tgt;
 	}
 	spin_unlock(&lmv->lmv_qos.lq_rr.lqr_alloc);
 
