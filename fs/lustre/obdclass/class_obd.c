@@ -418,6 +418,8 @@ int class_handle_ioctl(unsigned int cmd, unsigned long arg)
 
 		if (obd->obd_stopping)
 			status = "ST";
+		else if (obd->obd_inactive)
+			status = "IN";
 		else if (obd->obd_set_up)
 			status = "UP";
 		else if (obd->obd_attached)
