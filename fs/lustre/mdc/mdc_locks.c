@@ -485,9 +485,9 @@ mdc_intent_getattr_pack(struct obd_export *exp, struct lookup_intent *it,
 		OBD_MD_FLMODEASIZE | OBD_MD_FLDIREA |
 		OBD_MD_MEA | OBD_MD_FLACL;
 	struct ldlm_intent *lit;
-	int rc;
 	u32 easize;
 	bool have_secctx = false;
+	int rc;
 
 	req = ptlrpc_request_alloc(class_exp2cliimp(exp),
 				   &RQF_LDLM_INTENT_GETATTR);
@@ -526,6 +526,8 @@ mdc_intent_getattr_pack(struct obd_export *exp, struct lookup_intent *it,
 
 	req_capsule_set_size(&req->rq_pill, &RMF_MDT_MD, RCL_SERVER, easize);
 	req_capsule_set_size(&req->rq_pill, &RMF_ACL, RCL_SERVER, acl_bufsize);
+	req_capsule_set_size(&req->rq_pill, &RMF_DEFAULT_MDT_MD, RCL_SERVER,
+			     sizeof(struct lmv_user_md));
 
 	if (have_secctx) {
 		char *secctx_name;

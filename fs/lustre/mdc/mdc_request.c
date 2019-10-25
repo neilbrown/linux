@@ -543,13 +543,13 @@ static int mdc_get_lustre_md(struct obd_export *exp,
 			goto out;
 		}
 
-		lmv_size = md->body->mbo_eadatasize;
-		if (!lmv_size) {
-			CDEBUG(D_INFO,
-			       "OBD_MD_FLDIREA is set, but eadatasize 0\n");
-			return -EPROTO;
-		}
 		if (md->body->mbo_valid & OBD_MD_MEA) {
+			lmv_size = md->body->mbo_eadatasize;
+			if (!lmv_size) {
+				CDEBUG(D_INFO,
+				       "OBD_MD_FLDIREA is set, but eadatasize 0\n");
+				return -EPROTO;
+			}
 			lmv = req_capsule_server_sized_get(pill, &RMF_MDT_MD,
 							   lmv_size);
 			if (!lmv) {
@@ -561,19 +561,44 @@ static int mdc_get_lustre_md(struct obd_export *exp,
 			if (rc < 0)
 				goto out;
 
-			if (rc < (typeof(rc))sizeof(*md->lmv)) {
-				struct lmv_foreign_md   *lfm = md->lfm;
+			if (rc < (int)sizeof(*md->lmv)) {
+				struct lmv_foreign_md *lfm = md->lfm;
 
 				/* short (< sizeof(struct lmv_stripe_md))
 				 * foreign LMV case
 				 */
 				if (lfm->lfm_magic != LMV_MAGIC_FOREIGN) {
 					CDEBUG(D_INFO,
-					       "size too small: rc < sizeof(*md->lmv) (%d < %d)\n",
+					       "lmv size too small: %d < %d\n",
 					       rc, (int)sizeof(*md->lmv));
 					rc = -EPROTO;
 					goto out;
 				}
+			}
+		}
+
+		/* since 2.12.58 intent_getattr fetches default LMV */
+		if (md->body->mbo_valid & OBD_MD_DEFAULT_MEA) {
+			lmv_size = sizeof(struct lmv_user_md);
+			lmv = req_capsule_server_sized_get(pill,
+							   &RMF_DEFAULT_MDT_MD,
+							   lmv_size);
+			if (!lmv) {
+				rc = -EPROTO;
+				goto out;
+			}
+
+			rc = md_unpackmd(md_exp, &md->default_lmv, lmv,
+					 lmv_size);
+			if (rc < 0)
+				goto out;
+
+			if (rc < (int)sizeof(*md->default_lmv)) {
+				CDEBUG(D_INFO,
+				       "default lmv size too small: %d < %d\n",
+				       rc, (int)sizeof(*md->lmv));
+				rc = -EPROTO;
+				goto out;
 			}
 		}
 	}
