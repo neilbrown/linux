@@ -43,6 +43,7 @@ extern unsigned int osc_reqpool_maxreqcount;
 extern struct ptlrpc_request_pool *osc_rq_pool;
 
 int osc_shrink_grant_to_target(struct client_obd *cli, u64 target_bytes);
+void osc_schedule_grant_work(void);
 void osc_update_next_shrink(struct client_obd *cli);
 int lru_queue_work(const struct lu_env *env, void *data);
 int osc_extent_finish(const struct lu_env *env, struct osc_extent *ext,
