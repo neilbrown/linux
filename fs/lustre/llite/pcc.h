@@ -187,7 +187,7 @@ int pcc_readwrite_attach(struct file *file, struct inode *inode,
 int pcc_readwrite_attach_fini(struct file *file, struct inode *inode,
 			      u32 gen, bool lease_broken, int rc,
 			      bool attached);
-int pcc_ioctl_detach(struct inode *inode);
+int pcc_ioctl_detach(struct inode *inode, u32 opt);
 int pcc_ioctl_state(struct file *file, struct inode *inode,
 		    struct lu_pcc_state *state);
 void pcc_file_init(struct pcc_file *pccf);

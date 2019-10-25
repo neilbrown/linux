@@ -1819,7 +1819,7 @@ migrate_free:
 	case FS_IOC_FSSETXATTR:
 		return ll_ioctl_fssetxattr(inode, cmd, arg);
 	case LL_IOC_PCC_DETACH_BY_FID: {
-		struct lu_pcc_detach *detach;
+		struct lu_pcc_detach_fid *detach;
 		struct lu_fid *fid;
 		struct inode *inode2;
 		unsigned long ino;
@@ -1829,7 +1829,7 @@ migrate_free:
 			return -ENOMEM;
 
 		if (copy_from_user(detach,
-				   (const struct lu_pcc_detach __user *)arg,
+				   (const struct lu_pcc_detach_fid __user *)arg,
 				   sizeof(*detach))) {
 			rc = -EFAULT;
 			goto out_detach;
@@ -1856,7 +1856,7 @@ migrate_free:
 			goto out_iput;
 		}
 
-		rc = pcc_ioctl_detach(inode2);
+		rc = pcc_ioctl_detach(inode2, detach->pccd_opt);
 out_iput:
 		iput(inode2);
 out_detach:

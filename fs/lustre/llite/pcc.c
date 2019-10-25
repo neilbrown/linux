@@ -1002,6 +1002,7 @@ static void pcc_inode_init(struct pcc_inode *pcci, struct ll_inode_info *lli)
 {
 	pcci->pcci_lli = lli;
 	lli->lli_pcc_inode = pcci;
+	lli->lli_pcc_state = PCC_STATE_FL_NONE;
 	atomic_set(&pcci->pcci_refcount, 0);
 	pcci->pcci_type = LU_PCC_NONE;
 	pcci->pcci_layout_gen = CL_LAYOUT_GEN_NONE;
@@ -1734,8 +1735,9 @@ int pcc_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf,
 		CDEBUG(D_MMAP,
 		       "%s: PCC backend fs not support ->page_mkwrite()\n",
 		       ll_i2sbi(inode)->ll_fsname);
-		pcc_ioctl_detach(inode);
+		pcc_ioctl_detach(inode, PCC_DETACH_OPT_NONE);
 		up_read(&mm->mmap_sem);
+		*cached = true;
 		return VM_FAULT_RETRY | VM_FAULT_NOPAGE;
 	}
 	/* Pause to allow for a race with concurrent detach */
@@ -1774,7 +1776,7 @@ int pcc_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf,
 	 */
 	if (OBD_FAIL_CHECK(OBD_FAIL_LLITE_PCC_DETACH_MKWRITE)) {
 		pcc_io_fini(inode);
-		pcc_ioctl_detach(inode);
+		pcc_ioctl_detach(inode, PCC_DETACH_OPT_NONE);
 		up_read(&mm->mmap_sem);
 		return VM_FAULT_RETRY | VM_FAULT_NOPAGE;
 	}
@@ -2266,10 +2268,51 @@ out_unlock:
 	return rc;
 }
 
-int pcc_ioctl_detach(struct inode *inode)
+static int pcc_hsm_remove(struct inode *inode)
+{
+	struct hsm_user_request *hur;
+	u32 gen;
+	int len;
+	int rc;
+
+	rc = ll_layout_restore(inode, 0, OBD_OBJECT_EOF);
+	if (rc) {
+		CDEBUG(D_CACHE, DFID" RESTORE failure: %d\n",
+		       PFID(&ll_i2info(inode)->lli_fid), rc);
+		return rc;
+	}
+
+	ll_layout_refresh(inode, &gen);
+
+	len = sizeof(struct hsm_user_request) +
+	      sizeof(struct hsm_user_item);
+	hur = kzalloc(len, GFP_NOFS);
+	if (!hur)
+		return -ENOMEM;
+
+	hur->hur_request.hr_action = HUA_REMOVE;
+	hur->hur_request.hr_archive_id = 0;
+	hur->hur_request.hr_flags = 0;
+	memcpy(&hur->hur_user_item[0].hui_fid, &ll_i2info(inode)->lli_fid,
+	       sizeof(hur->hur_user_item[0].hui_fid));
+	hur->hur_user_item[0].hui_extent.offset = 0;
+	hur->hur_user_item[0].hui_extent.length = OBD_OBJECT_EOF;
+	hur->hur_request.hr_itemcount = 1;
+	rc = obd_iocontrol(LL_IOC_HSM_REQUEST, ll_i2sbi(inode)->ll_md_exp,
+			   len, hur, NULL);
+	if (rc)
+		CDEBUG(D_CACHE, DFID" HSM REMOVE failure: %d\n",
+		       PFID(&ll_i2info(inode)->lli_fid), rc);
+
+	kfree(hur);
+	return rc;
+}
+
+int pcc_ioctl_detach(struct inode *inode, u32 opt)
 {
 	struct ll_inode_info *lli = ll_i2info(inode);
 	struct pcc_inode *pcci;
+	bool hsm_remove = false;
 	int rc = 0;
 
 	pcc_inode_lock(inode);
@@ -2278,11 +2321,26 @@ int pcc_ioctl_detach(struct inode *inode)
 	    !pcc_inode_has_layout(pcci))
 		goto out_unlock;
 
-	__pcc_layout_invalidate(pcci);
-	pcc_inode_put(pcci);
+	LASSERT(atomic_read(&pcci->pcci_refcount) > 0);
+
+	if (pcci->pcci_type == LU_PCC_READWRITE) {
+		if (opt == PCC_DETACH_OPT_UNCACHE)
+			hsm_remove = true;
+
+		__pcc_layout_invalidate(pcci);
+		pcc_inode_put(pcci);
+	}
 
 out_unlock:
 	pcc_inode_unlock(inode);
+	if (hsm_remove) {
+		const struct cred *old_cred;
+
+		old_cred = override_creds(pcc_super_cred(inode->i_sb));
+		rc = pcc_hsm_remove(inode);
+		revert_creds(old_cred);
+	}
+
 	return rc;
 }
 

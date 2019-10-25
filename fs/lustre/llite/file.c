@@ -3729,14 +3729,35 @@ out_ladvise:
 		rc = ll_heat_set(inode, flags);
 		return rc;
 	}
-	case LL_IOC_PCC_DETACH:
-		if (!S_ISREG(inode->i_mode))
-			return -EINVAL;
+	case LL_IOC_PCC_DETACH: {
+		struct lu_pcc_detach *detach;
 
-		if (!inode_owner_or_capable(inode))
-			return -EPERM;
+		detach = kzalloc(sizeof(*detach), GFP_KERNEL);
+		if (!detach)
+			return -ENOMEM;
 
-		return pcc_ioctl_detach(inode);
+		if (copy_from_user(detach,
+				   (const struct lu_pcc_detach __user *)arg,
+				   sizeof(*detach))) {
+			rc = -EFAULT;
+			goto out_detach_free;
+		}
+
+		if (!S_ISREG(inode->i_mode)) {
+			rc = -EINVAL;
+			goto out_detach_free;
+		}
+
+		if (!inode_owner_or_capable(inode)) {
+			rc = -EPERM;
+			goto out_detach_free;
+		}
+
+		rc = pcc_ioctl_detach(inode, detach->pccd_opt);
+out_detach_free:
+		kfree(detach);
+		return rc;
+	}
 	case LL_IOC_PCC_STATE: {
 		struct lu_pcc_state __user *ustate =
 			(struct lu_pcc_state __user *)arg;
