@@ -372,8 +372,10 @@ struct ll_ioc_lease_id {
 #define IOC_MDC_TYPE		'i'
 #define IOC_MDC_LOOKUP		_IOWR(IOC_MDC_TYPE, 20, struct obd_device *)
 #define IOC_MDC_GETFILESTRIPE	_IOWR(IOC_MDC_TYPE, 21, struct lov_user_md *)
-#define IOC_MDC_GETFILEINFO	_IOWR(IOC_MDC_TYPE, 22, struct lov_user_mds_data *)
-#define LL_IOC_MDC_GETINFO	_IOWR(IOC_MDC_TYPE, 23, struct lov_user_mds_data *)
+#define IOC_MDC_GETFILEINFO_OLD	_IOWR(IOC_MDC_TYPE, 22, struct lov_user_mds_data_v1 *)
+#define IOC_MDC_GETFILEINFO	_IOWR(IOC_MDC_TYPE, 22, struct lov_user_mds_data)
+#define LL_IOC_MDC_GETINFO_OLD	_IOWR(IOC_MDC_TYPE, 23, struct lov_user_mds_data_v1 *)
+#define LL_IOC_MDC_GETINFO	_IOWR(IOC_MDC_TYPE, 23, struct lov_user_mds_data)
 
 #define MAX_OBD_NAME 128 /* If this changes, a NEW ioctl must be added */
 
@@ -637,10 +639,19 @@ static inline __u32 lov_user_md_size(__u16 stripes, __u32 lmm_magic)
  * is possible the application has already #included <sys/stat.h>.
  */
 #ifdef HAVE_LOV_USER_MDS_DATA
-#define lov_user_mds_data lov_user_mds_data_v1
+#define lov_user_mds_data lov_user_mds_data_v2
 struct lov_user_mds_data_v1 {
 	lstat_t lmd_st;			/* MDS stat struct */
 	struct lov_user_md_v1 lmd_lmm;	/* LOV EA V1 user data */
+} __packed;
+
+struct lov_user_mds_data_v2 {
+	struct lu_fid lmd_fid;		/* Lustre FID */
+	struct statx lmd_stx;		/* MDS statx struct */
+	__u64 lmd_flags;		/* MDS stat flags */
+	__u32 lmd_lmmsize;		/* LOV EA size */
+	__u32 lmd_padding;		/* unused */
+	struct lov_user_md_v1 lmd_lmm;	/* LOV EA user data */
 } __packed;
 
 struct lov_user_mds_data_v3 {
