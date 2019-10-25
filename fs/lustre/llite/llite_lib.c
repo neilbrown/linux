@@ -944,6 +944,7 @@ void ll_lli_init(struct ll_inode_info *lli)
 		obd_heat_clear(lli->lli_heat_instances, OBD_HEAT_COUNT);
 		lli->lli_heat_flags = 0;
 		mutex_init(&lli->lli_pcc_lock);
+		lli->lli_pcc_state = PCC_STATE_FL_NONE;
 		lli->lli_pcc_inode = NULL;
 	}
 	mutex_init(&lli->lli_layout_mutex);
