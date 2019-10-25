@@ -672,6 +672,8 @@ static inline void ptlrpc_assign_next_xid(struct ptlrpc_request *req)
 	spin_unlock(&req->rq_import->imp_lock);
 }
 
+static atomic64_t ptlrpc_last_xid;
+
 int ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
 			     u32 version, int opcode, char **bufs,
 			     struct ptlrpc_cli_ctx *ctx)
@@ -721,7 +723,6 @@ int ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
 	ptlrpc_at_set_req_timeout(request);
 
 	lustre_msg_set_opc(request->rq_reqmsg, opcode);
-	ptlrpc_assign_next_xid(request);
 
 	/* Let's setup deadline for req/reply/bulk unlink for opcode. */
 	if (cfs_fail_val == opcode) {
@@ -736,6 +737,11 @@ int ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
 		} else if (CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_BOTH_UNLINK)) {
 			fail_t = &request->rq_reply_deadline;
 			fail2_t = &request->rq_bulk_deadline;
+		} else if (CFS_FAIL_CHECK(OBD_FAIL_PTLRPC_ROUND_XID)) {
+			time64_t now = ktime_get_real_seconds();
+
+			atomic64_set(&ptlrpc_last_xid,
+				     ((u64)now >> 4) << 24);
 		}
 
 		if (fail_t) {
@@ -751,6 +757,7 @@ int ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
 			msleep(4 * MSEC_PER_SEC);
 		}
 	}
+	ptlrpc_assign_next_xid(request);
 
 	return 0;
 
@@ -3028,8 +3035,6 @@ void ptlrpc_abort_set(struct ptlrpc_request_set *set)
 		spin_unlock(&req->rq_lock);
 	}
 }
-
-static atomic64_t ptlrpc_last_xid;
 
 /**
  * Initialize the XID for the node.  This is common among all requests on
