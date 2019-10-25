@@ -105,7 +105,7 @@ lnet_selftest_init(void)
 
 	nscheds = cfs_cpt_number(lnet_cpt_table());
 	lst_test_wq = kvmalloc_array(nscheds, sizeof(lst_test_wq[0]),
-					GFP_KERNEL | __GFP_ZERO);
+				     GFP_KERNEL | __GFP_ZERO);
 	if (!lst_test_wq) {
 		rc = -ENOMEM;
 		goto error;
