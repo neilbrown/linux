@@ -491,20 +491,6 @@ struct lnet_ping_buffer {
 #define LNET_PING_INFO_TO_BUFFER(PINFO)	\
 	container_of((PINFO), struct lnet_ping_buffer, pb_info)
 
-/* router checker data, per router */
-struct lnet_rc_data {
-	/* chain on the_lnet.ln_zombie_rcd or ln_deathrow_rcd */
-	struct list_head	rcd_list;
-	/* ping buffer MD */
-	struct lnet_handle_md	rcd_mdh;
-	/* reference to gateway */
-	struct lnet_peer_ni	*rcd_gateway;
-	/* ping buffer */
-	struct lnet_ping_buffer	*rcd_pingbuffer;
-	/* desired size of buffer */
-	int			rcd_nnis;
-};
-
 struct lnet_peer_ni {
 	/* chain on lpn_peer_nis */
 	struct list_head	 lpni_peer_nis;
@@ -526,6 +512,8 @@ struct lnet_peer_ni {
 	struct lnet_peer_net	*lpni_peer_net;
 	/* low water mark */
 	int			 lpni_mintxcredits;
+	/* bytes queued for sending */
+	long			 lpni_txqnob;
 	/*
 	 * Each peer_ni in a gateway maintains its own credits. This
 	 * allows more traffic to gateways that have multiple interfaces.
@@ -534,22 +522,6 @@ struct lnet_peer_ni {
 	int			 lpni_rtrcredits;
 	/* low water mark */
 	int			 lpni_minrtrcredits;
-	/* notification outstanding? */
-	bool			 lpni_notify;
-	/* outstanding notification for LND? */
-	bool			 lpni_notifylnd;
-	/* some thread is handling notification */
-	bool			 lpni_notifying;
-	/* # times router went dead<->alive */
-	int			 lpni_alive_count;
-	/* ytes queued for sending */
-	long			 lpni_txqnob;
-	/* time of last aliveness news */
-	time64_t		 lpni_timestamp;
-	/* when I was last alive */
-	time64_t		 lpni_last_alive;
-	/* when lpni_ni was queried last time */
-	time64_t		 lpni_last_query;
 	/* network peer is on */
 	struct lnet_net		*lpni_net;
 	/* peer's NID */
@@ -579,8 +551,6 @@ struct lnet_peer_ni {
 	} lpni_pref;
 	/* number of preferred NIDs in lnpi_pref_nids */
 	u32			 lpni_pref_nnids;
-	/* router checker state */
-	struct lnet_rc_data	*lpni_rcd;
 };
 
 /* Preferred path added due to traffic on non-MR peer_ni */
@@ -804,8 +774,6 @@ struct lnet_route {
 	u32			lr_lnet;
 	/* sequence for round-robin */
 	int			lr_seq;
-	/* number of down NIs */
-	unsigned int		lr_downis;
 	/* how far I am */
 	u32			lr_hops;
 	/* route priority */
@@ -1093,12 +1061,6 @@ struct lnet {
 
 	/* monitor thread startup/shutdown state */
 	enum lnet_rc_state		ln_mt_state;
-	/* router checker's event queue */
-	lnet_eq_handler_t		ln_rc_eq;
-	/* rcd still pending on net */
-	struct list_head		ln_rcd_deathrow;
-	/* rcd ready for free */
-	struct list_head		ln_rcd_zombie;
 	/* serialise startup/shutdown */
 	struct completion		ln_mt_signal;
 

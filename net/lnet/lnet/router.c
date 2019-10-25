@@ -227,101 +227,6 @@ bool lnet_is_route_alive(struct lnet_route *route)
 	return route_alive;
 }
 
-void
-lnet_notify_locked(struct lnet_peer_ni *lp, int notifylnd, int alive,
-		   time64_t when)
-{
-	if (lp->lpni_timestamp > when) { /* out of date information */
-		CDEBUG(D_NET, "Out of date\n");
-		return;
-	}
-
-	/*
-	 * This function can be called with different cpt locks being
-	 * held. lpni_alive_count modification needs to be properly protected.
-	 * Significant reads to lpni_alive_count are also protected with
-	 * the same lock
-	 */
-	spin_lock(&lp->lpni_lock);
-
-	lp->lpni_timestamp = when;		/* update timestamp */
-
-	/* got old news */
-	if (lp->lpni_alive_count != 0 &&
-	    /* new date for old news */
-	    (!lnet_is_peer_ni_alive(lp)) == !alive) {
-		spin_unlock(&lp->lpni_lock);
-		CDEBUG(D_NET, "Old news\n");
-		return;
-	}
-
-	/* Flag that notification is outstanding */
-
-	lp->lpni_alive_count++;
-	lp->lpni_notify = 1;
-	lp->lpni_notifylnd = notifylnd;
-	if (lnet_is_peer_ni_alive(lp))
-		lp->lpni_ping_feats = LNET_PING_FEAT_INVAL; /* reset */
-
-	spin_unlock(&lp->lpni_lock);
-
-	CDEBUG(D_NET, "set %s %d\n", libcfs_nid2str(lp->lpni_nid), alive);
-}
-
-/*
- * This function will always be called with lp->lpni_cpt lock held.
- */
-static void
-lnet_ni_notify_locked(struct lnet_ni *ni, struct lnet_peer_ni *lp)
-{
-	int alive;
-	int notifylnd;
-
-	/*
-	 * Notify only in 1 thread at any time to ensure ordered notification.
-	 * NB individual events can be missed; the only guarantee is that you
-	 * always get the most recent news
-	 */
-	spin_lock(&lp->lpni_lock);
-
-	if (lp->lpni_notifying || !ni) {
-		spin_unlock(&lp->lpni_lock);
-		return;
-	}
-
-	lp->lpni_notifying = 1;
-
-	/*
-	 * lp->lpni_notify needs to be protected because it can be set in
-	 * lnet_notify_locked().
-	 */
-	while (lp->lpni_notify) {
-		alive = lnet_is_peer_ni_alive(lp);
-		notifylnd = lp->lpni_notifylnd;
-
-		lp->lpni_notifylnd = 0;
-		lp->lpni_notify = 0;
-
-		if (notifylnd && ni->ni_net->net_lnd->lnd_notify) {
-			spin_unlock(&lp->lpni_lock);
-			lnet_net_unlock(lp->lpni_cpt);
-
-			/*
-			 * A new notification could happen now; I'll handle it
-			 * when control returns to me
-			 */
-			ni->ni_net->net_lnd->lnd_notify(ni, lp->lpni_nid,
-							alive);
-
-			lnet_net_lock(lp->lpni_cpt);
-			spin_lock(&lp->lpni_lock);
-		}
-	}
-
-	lp->lpni_notifying = 0;
-	spin_unlock(&lp->lpni_lock);
-}
-
 static void
 lnet_rtr_addref_locked(struct lnet_peer *lp)
 {
@@ -734,93 +639,6 @@ lnet_get_route(int idx, u32 *net, u32 *hops,
 	return -ENOENT;
 }
 
-void
-lnet_swap_pinginfo(struct lnet_ping_buffer *pbuf)
-{
-	struct lnet_ni_status *stat;
-	int nnis;
-	int i;
-
-	__swab32s(&pbuf->pb_info.pi_magic);
-	__swab32s(&pbuf->pb_info.pi_features);
-	__swab32s(&pbuf->pb_info.pi_pid);
-	__swab32s(&pbuf->pb_info.pi_nnis);
-	nnis = pbuf->pb_info.pi_nnis;
-	if (nnis > pbuf->pb_nnis)
-		nnis = pbuf->pb_nnis;
-	for (i = 0; i < nnis; i++) {
-		stat = &pbuf->pb_info.pi_ni[i];
-		__swab64s(&stat->ns_nid);
-		__swab32s(&stat->ns_status);
-	}
-}
-
-/**
- * TODO: re-implement
- */
-static void
-lnet_parse_rc_info(struct lnet_rc_data *rcd)
-{
-	rcd = rcd;
-}
-
-static void
-lnet_router_checker_event(struct lnet_event *event)
-{
-	struct lnet_rc_data *rcd = event->md_user_ptr;
-	struct lnet_peer_ni *lp;
-
-	LASSERT(rcd);
-
-	if (event->unlinked) {
-		LNetInvalidateMDHandle(&rcd->rcd_mdh);
-		return;
-	}
-
-	LASSERT(event->type == LNET_EVENT_SEND ||
-		event->type == LNET_EVENT_REPLY);
-
-	lp = rcd->rcd_gateway;
-	LASSERT(lp);
-
-	/*
-	 * NB: it's called with holding lnet_res_lock, we have a few
-	 * places need to hold both locks at the same time, please take
-	 * care of lock ordering
-	 */
-	lnet_net_lock(lp->lpni_cpt);
-	if (!lnet_isrouter(lp) || lp->lpni_rcd != rcd) {
-		/* ignore if no longer a router or rcd is replaced */
-		goto out;
-	}
-
-	if (event->type == LNET_EVENT_SEND) {
-		if (!event->status)
-			goto out;
-	}
-
-	/* LNET_EVENT_REPLY */
-	/*
-	 * A successful REPLY means the router is up.  If _any_ comms
-	 * to the router fail I assume it's down (this will happen if
-	 * we ping alive routers to try to detect router death before
-	 * apps get burned).
-	 */
-	lnet_notify_locked(lp, 1, !event->status, ktime_get_seconds());
-
-	/*
-	 * The router checker will wake up very shortly and do the
-	 * actual notification.
-	 * XXX If 'lp' stops being a router before then, it will still
-	 * have the notification pending!!!
-	 */
-	if (avoid_asym_router_failure && !event->status)
-		lnet_parse_rc_info(rcd);
-
-out:
-	lnet_net_unlock(lp->lpni_cpt);
-}
-
 static void
 lnet_wait_known_routerstate(void)
 {
@@ -850,26 +668,6 @@ lnet_wait_known_routerstate(void)
 			return;
 
 		schedule_timeout_uninterruptible(HZ);
-	}
-}
-
-/* TODO: reimplement */
-void
-lnet_router_ni_update_locked(struct lnet_peer_ni *gw, u32 net)
-{
-	struct lnet_route *rte;
-	struct lnet_peer *lp;
-
-	if ((gw->lpni_ping_feats & LNET_PING_FEAT_NI_STATUS))
-		lp = gw->lpni_peer_net->lpn_peer;
-	else
-		return;
-
-	list_for_each_entry(rte, &lp->lp_routes, lr_gwlist) {
-		if (rte->lr_net == net) {
-			rte->lr_downis = 0;
-			break;
-		}
 	}
 }
 
@@ -915,17 +713,6 @@ lnet_update_ni_status_locked(void)
 	}
 }
 
-int lnet_router_pre_mt_start(void)
-{
-	if (check_routers_before_use &&
-	    dead_router_check_interval <= 0) {
-		return -EINVAL;
-	}
-
-	the_lnet.ln_rc_eq = lnet_router_checker_event;
-	return 0;
-}
-
 void lnet_router_post_mt_start(void)
 {
 	if (check_routers_before_use) {
@@ -936,17 +723,6 @@ void lnet_router_post_mt_start(void)
 		 */
 		lnet_wait_known_routerstate();
 	}
-}
-
-void
-lnet_router_cleanup(void)
-{
-}
-
-void
-lnet_prune_rc_data(int wait_unlink)
-{
-	wait_unlink = wait_unlink;
 }
 
 /*
@@ -963,11 +739,6 @@ bool lnet_router_checker_active(void)
 	 * order to call lnet_update_ni_status_locked()
 	 */
 	if (the_lnet.ln_routing)
-		return true;
-
-	/* if there are routers that need to be cleaned up then do so */
-	if (!list_empty(&the_lnet.ln_rcd_deathrow) ||
-	    !list_empty(&the_lnet.ln_rcd_zombie))
 		return true;
 
 	return !list_empty(&the_lnet.ln_routers) &&
@@ -1000,8 +771,6 @@ rescan:
 		lnet_update_ni_status_locked();
 
 	lnet_net_unlock(cpt);
-
-	lnet_prune_rc_data(0); /* don't wait for UNLINK */
 }
 
 void
@@ -1505,20 +1274,6 @@ lnet_notify(struct lnet_ni *ni, lnet_nid_t nid, int alive, time64_t when)
 		cpt = lp->lpni_cpt;
 		lnet_net_lock(cpt);
 	}
-
-	/*
-	 * We can't fully trust LND on reporting exact peer last_alive
-	 * if he notifies us about dead peer. For example ksocklnd can
-	 * call us with when == _time_when_the_node_was_booted_ if
-	 * no connections were successfully established
-	 */
-	if (ni && !alive && when < lp->lpni_last_alive)
-		when = lp->lpni_last_alive;
-
-	lnet_notify_locked(lp, !ni, alive, when);
-
-	if (ni)
-		lnet_ni_notify_locked(ni, lp);
 
 	lnet_peer_ni_decref_locked(lp);
 

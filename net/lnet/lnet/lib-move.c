@@ -3133,9 +3133,6 @@ lnet_monitor_thread(void *arg)
 						 false, HZ * interval);
 	}
 
-	/* clean up the router checker */
-	lnet_prune_rc_data(1);
-
 	/* Shutting down */
 	lnet_net_lock(LNET_LOCK_EX);
 	the_lnet.ln_mt_state = LNET_MT_STATE_SHUTDOWN;
@@ -3347,11 +3344,6 @@ int lnet_monitor_thr_start(void)
 
 	the_lnet.ln_mt_eqh = lnet_mt_event_handler;
 
-	/* Pre monitor thread start processing */
-	rc = lnet_router_pre_mt_start();
-	if (rc)
-		goto free_mem;
-
 	init_completion(&the_lnet.ln_mt_signal);
 
 	lnet_net_lock(LNET_LOCK_EX);
@@ -3380,8 +3372,6 @@ clean_thread:
 	/* block until event callback signals exit */
 	wait_for_completion(&the_lnet.ln_mt_signal);
 	/* clean up */
-	lnet_router_cleanup();
-free_mem:
 	lnet_net_lock(LNET_LOCK_EX);
 	the_lnet.ln_mt_state = LNET_MT_STATE_SHUTDOWN;
 	lnet_net_unlock(LNET_LOCK_EX);
@@ -3411,7 +3401,6 @@ void lnet_monitor_thr_stop(void)
 	LASSERT(the_lnet.ln_mt_state == LNET_MT_STATE_SHUTDOWN);
 
 	/* perform cleanup tasks */
-	lnet_router_cleanup();
 	lnet_rsp_tracker_clean();
 	lnet_clean_local_ni_recoveryq();
 	lnet_clean_peer_ni_recoveryq();
