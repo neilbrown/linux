@@ -838,10 +838,12 @@ lnet_msg_detach_md(struct lnet_msg *msg, int cpt, int status)
 		md->md_eq(&msg->msg_ev);
 	}
 
-	if (unlink) {
+	if (unlink || (md->md_refcount == 0 &&
+		       md->md_threshold == LNET_MD_THRESH_INF))
 		lnet_detach_rsp_tracker(md, cpt);
+
+	if (unlink)
 		lnet_md_unlink(md);
-	}
 
 	msg->msg_md = NULL;
 }
