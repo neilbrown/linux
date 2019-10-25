@@ -71,11 +71,16 @@ static struct ll_sb_info *ll_init_sbi(void)
 	unsigned long pages;
 	unsigned long lru_page_max;
 	struct sysinfo si;
+	int rc;
 	int i;
 
 	sbi = kzalloc(sizeof(*sbi), GFP_NOFS);
 	if (!sbi)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
+
+	rc = pcc_super_init(&sbi->ll_pcc_super);
+	if (rc < 0)
+		goto out_sbi;
 
 	spin_lock_init(&sbi->ll_lock);
 	mutex_init(&sbi->ll_lco.lco_lock);
@@ -89,8 +94,8 @@ static struct ll_sb_info *ll_init_sbi(void)
 
 	sbi->ll_cache = cl_cache_init(lru_page_max);
 	if (!sbi->ll_cache) {
-		kfree(sbi);
-		return NULL;
+		rc = -ENOMEM;
+		goto out_pcc;
 	}
 
 	sbi->ll_ra_info.ra_max_pages_per_file = min(pages / 32,
@@ -128,12 +133,16 @@ static struct ll_sb_info *ll_init_sbi(void)
 	sbi->ll_squash.rsi_gid = 0;
 	INIT_LIST_HEAD(&sbi->ll_squash.rsi_nosquash_nids);
 	spin_lock_init(&sbi->ll_squash.rsi_lock);
-	pcc_super_init(&sbi->ll_pcc_super);
 
 	/* Per-filesystem file heat */
 	sbi->ll_heat_decay_weight = SBI_DEFAULT_HEAT_DECAY_WEIGHT;
 	sbi->ll_heat_period_second = SBI_DEFAULT_HEAT_PERIOD_SECOND;
 	return sbi;
+out_pcc:
+	pcc_super_fini(&sbi->ll_pcc_super);
+out_sbi:
+	kfree(sbi);
+	return ERR_PTR(rc);
 }
 
 static void ll_free_sbi(struct super_block *sb)
@@ -981,8 +990,8 @@ int ll_fill_super(struct super_block *sb)
 	/* client additional sb info */
 	sbi = ll_init_sbi();
 	lsi->lsi_llsbi = sbi;
-	if (!sbi) {
-		err = -ENOMEM;
+	if (IS_ERR(sbi)) {
+		err = PTR_ERR(sbi);
 		goto out_free;
 	}
 
@@ -1107,7 +1116,7 @@ void ll_put_super(struct super_block *sb)
 	int next, force = 1, rc = 0;
 	long ccc_count;
 
-	if (!sbi)
+	if (IS_ERR(sbi))
 		goto out_no_sbi;
 
 	/* Should replace instance_id with something better for ASLR */
