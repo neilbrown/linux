@@ -1974,8 +1974,15 @@ EXPORT_SYMBOL(lustre_swab_lmv_user_md_objects);
 
 void lustre_swab_lmv_user_md(struct lmv_user_md *lum)
 {
-	u32 count = lum->lum_stripe_count;
+	u32 count;
 
+	if (lum->lum_magic == LMV_MAGIC_FOREIGN) {
+		__swab32s(&lum->lum_magic);
+		__swab32s(&((struct lmv_foreign_md *)lum)->lfm_length);
+		return;
+	}
+
+	count = lum->lum_stripe_count;
 	__swab32s(&lum->lum_magic);
 	__swab32s(&lum->lum_stripe_count);
 	__swab32s(&lum->lum_stripe_offset);
