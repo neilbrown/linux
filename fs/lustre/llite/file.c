@@ -59,6 +59,7 @@ struct split_param {
 struct pcc_param {
 	u64	pa_data_version;
 	u32	pa_archive_id;
+	u32	pa_layout_gen;
 };
 
 static int
@@ -241,6 +242,12 @@ static int ll_close_inode_openhandle(struct inode *inode,
 		body = req_capsule_server_get(&req->rq_pill, &RMF_MDT_BODY);
 		if (!(body->mbo_valid & OBD_MD_CLOSE_INTENT_EXECED))
 			rc = -EBUSY;
+
+		if (bias & MDS_PCC_ATTACH) {
+			struct pcc_param *param = data;
+
+			param->pa_layout_gen = body->mbo_layout_gen;
+		}
 	}
 
 	ll_finish_md_op_data(op_data);
@@ -1657,7 +1664,7 @@ static ssize_t ll_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	ssize_t result;
 	u16 refcheck;
 	ssize_t rc2;
-	bool cached = false;
+	bool cached;
 
 	/**
 	 * Currently when PCC read failed, we do not fall back to the
@@ -1766,20 +1773,21 @@ static ssize_t ll_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct vvp_io_args *args;
 	ssize_t rc_tiny = 0, rc_normal;
 	u16 refcheck;
-	bool cached = false;
+	bool cached;
 	int result;
 
 	/**
-	 * When PCC write failed, we do not fall back to the normal
-	 * write path, just return the error. The reason is that:
-	 * PCC is actually a HSM device, and HSM does not handle the
-	 * failure especially -ENOSPC due to space used out; Moreover,
-	 * the fallback to normal I/O path for ENOSPC failure, needs
-	 * to restore the file data to OSTs first and redo the write
-	 * again, making the logic of PCC very complex.
+	 * When PCC write failed, we usually do not fall back to the normal
+	 * write path, just return the error. But there is a special case when
+	 * returned error code is -ENOSPC due to running out of space on PCC HSM
+	 * bakcend. At this time, it will fall back to normal I/O path and
+	 * retry the I/O. As the file is in HSM released state, it will restore
+	 * the file data to OSTs first and redo the write again. And the
+	 * restore process will revoke the layout lock and detach the file
+	 * from PCC cache automatically.
 	 */
 	result = pcc_file_write_iter(iocb, from, &cached);
-	if (cached)
+	if (cached && result != -ENOSPC)
 		return result;
 
 	/* NB: we can't do direct IO for tiny writes because they use the page
@@ -3194,8 +3202,10 @@ out:
 	case LL_LEASE_PCC_ATTACH:
 		if (!rc)
 			rc = rc2;
-		rc = pcc_readwrite_attach_fini(file, inode, lease_broken,
-					       rc, attached);
+		rc = pcc_readwrite_attach_fini(file, inode,
+					       param.pa_layout_gen,
+					       lease_broken, rc,
+					       attached);
 		break;
 	}
 
@@ -3718,6 +3728,14 @@ out_ladvise:
 		rc = ll_heat_set(inode, flags);
 		return rc;
 	}
+	case LL_IOC_PCC_DETACH:
+		if (!S_ISREG(inode->i_mode))
+			return -EINVAL;
+
+		if (!inode_owner_or_capable(inode))
+			return -EPERM;
+
+		return pcc_ioctl_detach(inode);
 	case LL_IOC_PCC_STATE: {
 		struct lu_pcc_state __user *ustate =
 			(struct lu_pcc_state __user *)arg;
@@ -3732,7 +3750,7 @@ out_ladvise:
 			goto out_state;
 		}
 
-		rc = pcc_ioctl_state(inode, state);
+		rc = pcc_ioctl_state(file, inode, state);
 		if (rc)
 			goto out_state;
 
@@ -3852,19 +3870,13 @@ int ll_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 {
 	struct inode *inode = file_inode(file);
 	struct ll_inode_info *lli = ll_i2info(inode);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
 	struct ptlrpc_request *req;
-	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
 	int rc, err;
 
 	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID "(%p)\n",
 	       PFID(ll_inode2fid(inode)), inode);
 	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FSYNC, 1);
 
-	/* pcc cache path */
-	if (pcc_file)
-		return file_inode(pcc_file)->i_fop->fsync(pcc_file,
-					start, end, datasync);
 
 	rc = file_write_and_wait_range(file, start, end);
 	inode_lock(inode);
@@ -3874,6 +3886,7 @@ int ll_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	 */
 	if (!S_ISDIR(inode->i_mode)) {
 		err = lli->lli_async_rc;
+
 		lli->lli_async_rc = 0;
 		if (rc == 0)
 			rc = err;
@@ -3892,8 +3905,15 @@ int ll_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 
 	if (S_ISREG(inode->i_mode)) {
 		struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+		bool cached;
 
-		err = cl_sync_file_range(inode, start, end, CL_FSYNC_ALL, 0);
+		/* Sync metadata on MDT first, and then sync the cached data
+		 * on PCC.
+		 */
+		err = pcc_fsync(file, start, end, datasync, &cached);
+		if (!cached)
+			err = cl_sync_file_range(inode, start, end,
+						 CL_FSYNC_ALL, 0);
 		if (rc == 0 && err < 0)
 			rc = err;
 		if (rc < 0)
@@ -4412,11 +4432,12 @@ int ll_getattr_dentry(struct dentry *de, struct kstat *stat)
 		return rc;
 
 	if (S_ISREG(inode->i_mode)) {
-		bool cached = false;
+		bool cached;
 
 		rc = pcc_inode_getattr(inode, &cached);
 		if (cached && rc < 0)
 			return rc;
+
 		/* In case of restore, the MDT has the right size and has
 		 * already send it back without granting the layout lock,
 		 * inode is up-to-date so glimpse is useless.
