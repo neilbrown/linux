@@ -767,7 +767,7 @@ static int process_param2_config(struct lustre_cfg *lcfg)
 	char *param = lustre_cfg_string(lcfg, 1);
 	struct kobject *kobj = NULL;
 	const char *subsys = param;
-	char *envp[3];
+	char *envp[4];
 	char *value;
 	size_t len;
 	int rc;
@@ -796,7 +796,9 @@ static int process_param2_config(struct lustre_cfg *lcfg)
 	param = strsep(&value, "=");
 	envp[0] = kasprintf(GFP_KERNEL, "PARAM=%s", param);
 	envp[1] = kasprintf(GFP_KERNEL, "SETTING=%s", value);
-	envp[2] = NULL;
+	envp[2] = kasprintf(GFP_KERNEL, "TIME=%lld",
+			    ktime_get_real_seconds());
+	envp[3] = NULL;
 
 	rc = kobject_uevent_env(kobj, KOBJ_CHANGE, envp);
 	for (i = 0; i < ARRAY_SIZE(envp); i++)
@@ -1117,14 +1119,25 @@ ssize_t class_modify_config(struct lustre_cfg *lcfg, const char *prefix,
 		}
 
 		if (!attr) {
-			char *envp[3];
+			char *envp[4], *param, *path;
 
-			envp[0] = kasprintf(GFP_KERNEL, "PARAM=%s.%s.%.*s",
-					    kobject_name(kobj->parent),
-					    kobject_name(kobj),
-					    (int)keylen, key);
+			path = kobject_get_path(kobj, GFP_KERNEL);
+			if (!path)
+				return -EINVAL;
+
+			/* convert sysfs path to uevent format */
+			param = path;
+			while ((param = strchr(param, '/')) != NULL)
+				*param = '.';
+
+			param = strstr(path, "fs.lustre.") + 10;
+
+			envp[0] = kasprintf(GFP_KERNEL, "PARAM=%s.%.*s",
+					    param, (int)keylen, key);
 			envp[1] = kasprintf(GFP_KERNEL, "SETTING=%s", value);
-			envp[2] = NULL;
+			envp[2] = kasprintf(GFP_KERNEL, "TIME=%lld",
+					    ktime_get_real_seconds());
+			envp[3] = NULL;
 
 			if (kobject_uevent_env(kobj, KOBJ_CHANGE, envp)) {
 				CERROR("%s: failed to send uevent %s\n",
@@ -1133,6 +1146,7 @@ ssize_t class_modify_config(struct lustre_cfg *lcfg, const char *prefix,
 
 			for (i = 0; i < ARRAY_SIZE(envp); i++)
 				kfree(envp[i]);
+			kfree(path);
 		} else {
 			count += lustre_attr_store(kobj, attr, value,
 						   strlen(value));
