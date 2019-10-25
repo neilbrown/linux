@@ -3930,7 +3930,9 @@ again:
 	if (!rc) {
 		LASSERT(request);
 		ll_update_times(request, parent);
+	}
 
+	if (rc == 0 || rc == -EAGAIN) {
 		body = req_capsule_server_get(&request->rq_pill, &RMF_MDT_BODY);
 		LASSERT(body);
 
@@ -3953,7 +3955,7 @@ again:
 		request = NULL;
 	}
 
-	/* Try again if the file layout has changed. */
+	/* Try again if the lease has cancelled. */
 	if (rc == -EAGAIN && S_ISREG(child_inode->i_mode))
 		goto again;
 
