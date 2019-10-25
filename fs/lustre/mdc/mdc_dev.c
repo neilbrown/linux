@@ -670,7 +670,8 @@ int mdc_enqueue_send(const struct lu_env *env, struct obd_export *exp,
 	enum ldlm_mode mode;
 	bool glimpse = *flags & LDLM_FL_HAS_INTENT;
 	u64 match_flags = *flags;
-	int rc;
+	LIST_HEAD(cancels);
+	int rc, count;
 
 	mode = einfo->ei_mode;
 	if (einfo->ei_mode == LCK_PR)
@@ -726,7 +727,15 @@ no_match:
 	if (!req)
 		return -ENOMEM;
 
-	rc = ldlm_prep_enqueue_req(exp, req, NULL, 0);
+	/* For WRITE lock cancel other locks on resource early if any */
+	if (einfo->ei_mode & LCK_PW)
+		count = mdc_resource_get_unused_res(exp, res_id, &cancels,
+						    einfo->ei_mode,
+						    MDS_INODELOCK_DOM);
+	else
+		count = 0;
+
+	rc = ldlm_prep_enqueue_req(exp, req, &cancels, count);
 	if (rc < 0) {
 		ptlrpc_request_free(req);
 		return rc;
