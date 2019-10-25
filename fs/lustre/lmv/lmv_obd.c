@@ -2911,6 +2911,103 @@ static int lmv_get_info(const struct lu_env *env, struct obd_export *exp,
 	return -EINVAL;
 }
 
+static int lmv_rmfid(struct obd_export *exp, struct fid_array *fa,
+		     int *__rcs, struct ptlrpc_request_set *_set)
+{
+	struct obd_device *obddev = class_exp2obd(exp);
+	struct ptlrpc_request_set *set = _set;
+	struct lmv_obd *lmv = &obddev->u.lmv;
+	int tgt_count = lmv->desc.ld_tgt_count;
+	struct fid_array *fat, **fas = NULL;
+	int i, rc, **rcs = NULL;
+
+	if (!set) {
+		set = ptlrpc_prep_set();
+		if (!set)
+			return -ENOMEM;
+	}
+
+	/* split FIDs by targets */
+	fas = kcalloc(tgt_count, sizeof(fas), GFP_NOFS);
+	if (!fas) {
+		rc = -ENOMEM;
+		goto out;
+	}
+	rcs = kcalloc(tgt_count, sizeof(int *), GFP_NOFS);
+	if (!rcs) {
+		rc = -ENOMEM;
+		goto out_fas;
+	}
+
+	for (i = 0; i < fa->fa_nr; i++) {
+		unsigned int idx;
+
+		rc = lmv_fld_lookup(lmv, &fa->fa_fids[i], &idx);
+		if (rc) {
+			CDEBUG(D_OTHER, "can't lookup "DFID": rc = %d\n",
+			       PFID(&fa->fa_fids[i]), rc);
+			continue;
+		}
+		LASSERT(idx < tgt_count);
+		if (!fas[idx])
+			fas[idx] = kzalloc(offsetof(struct fid_array,
+						    fa_fids[fa->fa_nr]),
+					   GFP_NOFS);
+		if (!fas[idx]) {
+			rc = -ENOMEM;
+			goto out;
+		}
+		if (!rcs[idx])
+			rcs[idx] = kcalloc(fa->fa_nr, sizeof(int), GFP_NOFS);
+		if (!rcs[idx]) {
+			rc = -ENOMEM;
+			goto out;
+		}
+
+		fat = fas[idx];
+		fat->fa_fids[fat->fa_nr++] = fa->fa_fids[i];
+	}
+
+	for (i = 0; i < tgt_count; i++) {
+		fat = fas[i];
+		if (!fat || fat->fa_nr == 0)
+			continue;
+		rc = md_rmfid(lmv->tgts[i]->ltd_exp, fat, rcs[i], set);
+	}
+
+	rc = ptlrpc_set_wait(set);
+	if (rc == 0) {
+		int j = 0;
+
+		for (i = 0; i < tgt_count; i++) {
+			fat = fas[i];
+			if (!fat || fat->fa_nr == 0)
+				continue;
+			/* copy FIDs back */
+			memcpy(fa->fa_fids + j, fat->fa_fids,
+			       fat->fa_nr * sizeof(struct lu_fid));
+			/* copy rcs back */
+			memcpy(__rcs + j, rcs[i], fat->fa_nr * sizeof(**rcs));
+			j += fat->fa_nr;
+		}
+	}
+	if (set != _set)
+		ptlrpc_set_destroy(set);
+
+out:
+	for (i = 0; i < tgt_count; i++) {
+		if (fas)
+			kfree(fas[i]);
+		if (rcs)
+			kfree(rcs[i]);
+	}
+	kfree(rcs);
+out_fas:
+	kfree(fas);
+
+	return rc;
+}
+
 /**
  * Asynchronously set by key a value associated with a LMV device.
  *
@@ -3493,6 +3590,7 @@ static const struct md_ops lmv_md_ops = {
 	.revalidate_lock	= lmv_revalidate_lock,
 	.get_fid_from_lsm	= lmv_get_fid_from_lsm,
 	.unpackmd		= lmv_unpackmd,
+	.rmfid			= lmv_rmfid,
 };
 
 static int __init lmv_init(void)

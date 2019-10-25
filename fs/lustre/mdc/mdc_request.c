@@ -2478,6 +2478,79 @@ static int mdc_fsync(struct obd_export *exp, const struct lu_fid *fid,
 	return rc;
 }
 
+struct mdc_rmfid_args {
+	int *mra_rcs;
+	int mra_nr;
+};
+
+int mdc_rmfid_interpret(const struct lu_env *env, struct ptlrpc_request *req,
+			  void *args, int rc)
+{
+	struct mdc_rmfid_args *aa;
+	int *rcs, size;
+
+	if (!rc) {
+		aa = ptlrpc_req_async_args(aa, req);
+
+		size = req_capsule_get_size(&req->rq_pill, &RMF_RCS,
+					    RCL_SERVER);
+		LASSERT(size == sizeof(int) * aa->mra_nr);
+		rcs = req_capsule_server_get(&req->rq_pill, &RMF_RCS);
+		LASSERT(rcs);
+		LASSERT(aa->mra_rcs);
+		LASSERT(aa->mra_nr);
+		memcpy(aa->mra_rcs, rcs, size);
+	}
+
+	return rc;
+}
+
+static int mdc_rmfid(struct obd_export *exp, struct fid_array *fa,
+		     int *rcs, struct ptlrpc_request_set *set)
+{
+	struct ptlrpc_request *req;
+	struct mdc_rmfid_args *aa;
+	struct mdt_body *b;
+	struct lu_fid *tmp;
+	int rc, flen;
+
+	req = ptlrpc_request_alloc(class_exp2cliimp(exp), &RQF_MDS_RMFID);
+	if (!req)
+		return -ENOMEM;
+
+	flen = fa->fa_nr * sizeof(struct lu_fid);
+	req_capsule_set_size(&req->rq_pill, &RMF_FID_ARRAY,
+			     RCL_CLIENT, flen);
+	req_capsule_set_size(&req->rq_pill, &RMF_FID_ARRAY,
+			     RCL_SERVER, flen);
+	req_capsule_set_size(&req->rq_pill, &RMF_RCS,
+			     RCL_SERVER, fa->fa_nr * sizeof(u32));
+	rc = ptlrpc_request_pack(req, LUSTRE_MDS_VERSION, MDS_RMFID);
+	if (rc) {
+		ptlrpc_request_free(req);
+		return rc;
+	}
+	tmp = req_capsule_client_get(&req->rq_pill, &RMF_FID_ARRAY);
+	memcpy(tmp, fa->fa_fids, flen);
+
+	mdc_pack_body(req, NULL, 0, 0, -1, 0);
+	b = req_capsule_client_get(&req->rq_pill, &RMF_MDT_BODY);
+	b->mbo_ctime = ktime_get_real_seconds();
+
+	ptlrpc_request_set_replen(req);
+
+	LASSERT(rcs);
+	aa = ptlrpc_req_async_args(aa, req);
+	aa->mra_rcs = rcs;
+	aa->mra_nr = fa->fa_nr;
+	req->rq_interpret_reply = mdc_rmfid_interpret;
+
+	ptlrpc_set_add_req(set, req);
+	ptlrpc_check_set(NULL, set);
+
+	return rc;
+}
+
 static int mdc_import_event(struct obd_device *obd, struct obd_import *imp,
 			    enum obd_import_event event)
 {
@@ -2779,7 +2852,8 @@ static const struct md_ops mdc_md_ops = {
 	.set_open_replay_data	= mdc_set_open_replay_data,
 	.clear_open_replay_data	= mdc_clear_open_replay_data,
 	.intent_getattr_async	= mdc_intent_getattr_async,
-	.revalidate_lock	= mdc_revalidate_lock
+	.revalidate_lock	= mdc_revalidate_lock,
+	.rmfid			= mdc_rmfid,
 };
 
 static int __init mdc_init(void)

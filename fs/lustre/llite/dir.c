@@ -1081,6 +1081,57 @@ out:
 	return rc;
 }
 
+int ll_rmfid(struct file *file, void __user *arg)
+{
+	const struct fid_array __user *ufa = arg;
+	struct fid_array *lfa = NULL;
+	size_t size;
+	unsigned int nr;
+	int i, rc, *rcs = NULL;
+
+	if (!capable(CAP_DAC_READ_SEARCH) &&
+	    !(ll_i2sbi(file_inode(file))->ll_flags & LL_SBI_USER_FID2PATH))
+		return -EPERM;
+	/* Only need to get the buflen */
+	if (get_user(nr, &ufa->fa_nr))
+		return -EFAULT;
+	/* DoS protection */
+	if (nr > OBD_MAX_FIDS_IN_ARRAY)
+		return -E2BIG;
+
+	size = offsetof(struct fid_array, fa_fids[nr]);
+	lfa = kzalloc(size, GFP_NOFS);
+	if (!lfa)
+		return -ENOMEM;
+	rcs = kcalloc(nr, sizeof(int), GFP_NOFS);
+	if (!rcs) {
+		rc = -ENOMEM;
+		goto free_lfa;
+	}
+
+	if (copy_from_user(lfa, arg, size)) {
+		rc = -EFAULT;
+		goto free_rcs;
+	}
+
+	/* Call mdc_iocontrol */
+	rc = md_rmfid(ll_i2mdexp(file_inode(file)), lfa, rcs, NULL);
+	if (!rc) {
+		for (i = 0; i < nr; i++)
+			if (rcs[i])
+				lfa->fa_fids[i].f_ver = rcs[i];
+		if (copy_to_user(arg, lfa, size))
+			rc = -EFAULT;
+	}
+
+free_rcs:
+	kfree(rcs);
+free_lfa:
+	kfree(lfa);
+
+	return rc;
+}
+
 /* This function tries to get a single name component,
  * to send to the server. No actual path traversal involved,
  * so we limit to NAME_MAX
@@ -1445,7 +1496,8 @@ finish_req:
 		ptlrpc_req_finished(request);
 		return rc;
 	}
-
+	case LL_IOC_RMFID:
+		return ll_rmfid(file, (void __user *)arg);
 	case LL_IOC_LOV_SWAP_LAYOUTS:
 		return -EPERM;
 	case IOC_OBD_STATFS:
