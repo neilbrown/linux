@@ -1871,7 +1871,7 @@ kiblnd_peer_notify(struct kib_peer_ni *peer_ni)
 
 	if (error)
 		lnet_notify(peer_ni->ibp_ni,
-			    peer_ni->ibp_nid, 0, last_alive);
+			    peer_ni->ibp_nid, false, false, last_alive);
 }
 
 void

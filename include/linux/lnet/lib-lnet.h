@@ -412,7 +412,7 @@ extern int portal_rotor;
 int lnet_lib_init(void);
 void lnet_lib_exit(void);
 
-int lnet_notify(struct lnet_ni *ni, lnet_nid_t peer, int alive,
+int lnet_notify(struct lnet_ni *ni, lnet_nid_t peer, bool alive, bool reset,
 		time64_t when);
 void lnet_notify_locked(struct lnet_peer_ni *lp, int notifylnd, int alive,
 			time64_t when);
@@ -778,6 +778,12 @@ lnet_is_peer_ni_alive(struct lnet_peer_ni *lpni)
 		 (LNET_MAX_HEALTH_VALUE * router_sensitivity_percentage / 100));
 
 	return halive && lpni->lpni_ns_status == LNET_NI_STATUS_UP;
+}
+
+static inline void
+lnet_set_healthv(atomic_t *healthv, int value)
+{
+	atomic_set(healthv, value);
 }
 
 static inline void
