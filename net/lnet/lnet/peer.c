@@ -218,6 +218,13 @@ lnet_peer_alloc(lnet_nid_t nid)
 	spin_lock_init(&lp->lp_lock);
 	lp->lp_primary_nid = nid;
 
+	/*
+	 * all peers created on a router should have health on
+	 * if it's not already on.
+	 */
+	if (the_lnet.ln_routing && !lnet_health_sensitivity)
+		lp->lp_health_sensitivity = 1;
+
 	/* Turn off discovery for loopback peer. If you're creating a peer
 	 * for the loopback interface then that was initiated when we
 	 * attempted to send a message over the loopback. There is no need

@@ -418,7 +418,7 @@ lnet_add_route_to_rnet(struct lnet_remotenet *rnet, struct lnet_route *route)
 
 int
 lnet_add_route(u32 net, u32 hops, lnet_nid_t gateway,
-	       unsigned int priority)
+	       u32 priority, u32 sensitivity)
 {
 	struct list_head *route_entry;
 	struct lnet_remotenet *rnet;
@@ -519,8 +519,10 @@ lnet_add_route(u32 net, u32 hops, lnet_nid_t gateway,
 	 * to move the routes from the peer that's being deleted to the
 	 * consolidated peer lp_routes list
 	 */
-	if (add_route)
+	if (add_route) {
+		gw->lp_health_sensitivity = sensitivity;
 		lnet_add_route_to_rnet(rnet2, route);
+	}
 
 	/*
 	 * get rid of the reference on the lpni.
@@ -691,13 +693,13 @@ int lnet_get_rtr_pool_cfg(int cpt, struct lnet_ioctl_pool_cfg *pool_cfg)
 
 int
 lnet_get_route(int idx, u32 *net, u32 *hops,
-	       lnet_nid_t *gateway, u32 *alive, u32 *priority)
+	       lnet_nid_t *gateway, u32 *alive, u32 *priority, u32 *sensitivity)
 {
 	struct lnet_remotenet *rnet;
+	struct list_head *rn_list;
 	struct lnet_route *route;
 	int cpt;
 	int i;
-	struct list_head *rn_list;
 
 	cpt = lnet_net_lock_current();
 
@@ -711,6 +713,8 @@ lnet_get_route(int idx, u32 *net, u32 *hops,
 					*hops = route->lr_hops;
 					*priority =
 					    route->lr_priority;
+					*sensitivity = route->lr_gateway->
+						lp_health_sensitivity;
 					*alive = lnet_is_route_alive(route);
 					lnet_net_unlock(cpt);
 					return 0;
