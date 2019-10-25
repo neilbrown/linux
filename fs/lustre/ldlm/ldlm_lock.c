@@ -1150,6 +1150,8 @@ static struct ldlm_lock *search_itree(struct ldlm_resource *res,
 {
 	int idx;
 
+	data->lmd_lock = NULL;
+
 	for (idx = 0; idx < LCK_MODE_NUM; idx++) {
 		struct ldlm_interval_tree *tree = &res->lr_itree[idx];
 
@@ -1163,11 +1165,14 @@ static struct ldlm_lock *search_itree(struct ldlm_resource *res,
 				   data->lmd_policy->l_extent.start,
 				   data->lmd_policy->l_extent.end,
 				   lock_matches, data);
+		if (data->lmd_lock)
+			return data->lmd_lock;
 	}
-	return data->lmd_lock;
+
+	return NULL;
 }
 
-/**
+/*
  * Search for a lock with given properties in a queue.
  *
  * @queue	search for a lock in this queue
@@ -1180,9 +1185,12 @@ static struct ldlm_lock *search_queue(struct list_head *queue,
 {
 	struct ldlm_lock *lock;
 
+	data->lmd_lock = NULL;
+
 	list_for_each_entry(lock, queue, l_res_link)
 		if (lock_matches(lock, data))
 			return data->lmd_lock;
+
 	return NULL;
 }
 
