@@ -2956,6 +2956,19 @@ struct close_data {
 	};
 };
 
+/* sepol string format is:
+ * <1-digit for SELinux status>:<policy name>:<policy version>:<policy hash>
+ */
+/* Max length of the sepol string
+ * Should be large enough to contain a sha512sum of the policy
+ */
+#define SELINUX_MODE_LEN 1
+#define SELINUX_POLICY_VER_LEN 3 /* 3 chars to leave room for the future */
+#define SELINUX_POLICY_HASH_LEN 64
+#define LUSTRE_NODEMAP_SEPOL_LENGTH (SELINUX_MODE_LEN + NAME_MAX + \
+				     SELINUX_POLICY_VER_LEN + \
+				     SELINUX_POLICY_HASH_LEN + 3)
+
 /*
  * This is the lu_ladvise struct which goes out on the wire.
  * Corresponds to the userspace arg llapi_lu_ladvise.
