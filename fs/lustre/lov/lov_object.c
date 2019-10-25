@@ -75,6 +75,8 @@ struct lov_layout_operations {
 			    struct cl_object *obj, struct cl_io *io);
 	int  (*llo_getattr)(const struct lu_env *env, struct cl_object *obj,
 			    struct cl_attr *attr);
+	int  (*llo_flush)(const struct lu_env *env, struct cl_object *obj,
+			  struct ldlm_lock *lock);
 };
 
 static int lov_layout_wait(const struct lu_env *env, struct lov_object *lov);
@@ -999,9 +1001,23 @@ static int lov_attr_get_composite(const struct lu_env *env,
 	return 0;
 }
 
-static const struct lov_layout_operations lov_dispatch[] = {
+static int lov_flush_composite(const struct lu_env *env,
+			       struct cl_object *obj,
+			       struct ldlm_lock *lock)
+{
+	struct lov_object *lov = cl2lov(obj);
+	struct lovsub_object *lovsub;
+
+	if (!lsme_is_dom(lov->lo_lsm->lsm_entries[0]))
+		return -EINVAL;
+
+	lovsub = lov->u.composite.lo_entries[0].lle_dom.lo_dom;
+	return cl_object_flush(env, lovsub2cl(lovsub), lock);
+}
+
+const static struct lov_layout_operations lov_dispatch[] = {
 	[LLT_EMPTY] = {
-		.llo_init	= lov_init_empty,
+		.llo_init      = lov_init_empty,
 		.llo_delete	= lov_delete_empty,
 		.llo_fini	= lov_fini_empty,
 		.llo_print	= lov_print_empty,
@@ -1029,6 +1045,7 @@ static const struct lov_layout_operations lov_dispatch[] = {
 		.llo_lock_init	= lov_lock_init_composite,
 		.llo_io_init	= lov_io_init_composite,
 		.llo_getattr	= lov_attr_get_composite,
+		.llo_flush     = lov_flush_composite,
 	},
 	[LLT_FOREIGN] = {
 		.llo_init      = lov_init_foreign,
@@ -2061,6 +2078,12 @@ static loff_t lov_object_maxbytes(struct cl_object *obj)
 	return maxbytes;
 }
 
+static int lov_object_flush(const struct lu_env *env, struct cl_object *obj,
+			    struct ldlm_lock *lock)
+{
+	return LOV_2DISPATCH_NOLOCK(cl2lov(obj), llo_flush, env, obj, lock);
+}
+
 static const struct cl_object_operations lov_ops = {
 	.coo_page_init		= lov_page_init,
 	.coo_lock_init		= lov_lock_init,
@@ -2072,6 +2095,7 @@ static const struct cl_object_operations lov_ops = {
 	.coo_layout_get		= lov_object_layout_get,
 	.coo_maxbytes		= lov_object_maxbytes,
 	.coo_fiemap		= lov_object_fiemap,
+	.coo_object_flush = lov_object_flush
 };
 
 static const struct lu_object_operations lov_lu_obj_ops = {
