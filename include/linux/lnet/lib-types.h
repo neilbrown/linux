@@ -566,6 +566,8 @@ struct lnet_peer_ni {
 	int			 lpni_cpt;
 	/* state flags -- protected by lpni_lock */
 	unsigned int		 lpni_state;
+	/* status of the peer NI as reported by the peer */
+	u32			lpni_ns_status;
 	/* sequence number used to round robin over peer nis within a net */
 	u32			 lpni_seq;
 	/* sequence number used to round robin over gateways */
