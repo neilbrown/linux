@@ -1139,6 +1139,11 @@ struct lnet {
 	/* recovery eq handler */
 	lnet_eq_handler_t		ln_mt_eqh;
 
+	/*
+	 * Completed when the discovery and monitor threads can enter their
+	 * work loops
+	 */
+	struct completion		ln_started;
 };
 
 #endif
