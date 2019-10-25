@@ -1460,6 +1460,27 @@ lnet_get_ni_count(void)
 	return count;
 }
 
+void
+lnet_swap_pinginfo(struct lnet_ping_buffer *pbuf)
+{
+	struct lnet_ni_status *stat;
+	int nnis;
+	int i;
+
+	__swab32s(&pbuf->pb_info.pi_magic);
+	__swab32s(&pbuf->pb_info.pi_features);
+	__swab32s(&pbuf->pb_info.pi_pid);
+	__swab32s(&pbuf->pb_info.pi_nnis);
+	nnis = pbuf->pb_info.pi_nnis;
+	if (nnis > pbuf->pb_nnis)
+		nnis = pbuf->pb_nnis;
+	for (i = 0; i < nnis; i++) {
+		stat = &pbuf->pb_info.pi_ni[i];
+		__swab64s(&stat->ns_nid);
+		__swab32s(&stat->ns_status);
+	}
+}
+
 int
 lnet_ping_info_validate(struct lnet_ping_info *pinfo)
 {
@@ -2327,12 +2348,9 @@ int lnet_lib_init(void)
 	}
 
 	the_lnet.ln_refcount = 0;
-	the_lnet.ln_rc_eq = NULL;
 	INIT_LIST_HEAD(&the_lnet.ln_lnds);
 	INIT_LIST_HEAD(&the_lnet.ln_net_zombie);
-	INIT_LIST_HEAD(&the_lnet.ln_rcd_zombie);
 	INIT_LIST_HEAD(&the_lnet.ln_msg_resend);
-	INIT_LIST_HEAD(&the_lnet.ln_rcd_deathrow);
 
 	/*
 	 * The hash table size is the number of bits it takes to express the set
