@@ -339,6 +339,8 @@ int ptlrpc_recover_import(struct obd_import *imp, char *new_uuid, int async)
 	if (rc)
 		goto out;
 
+	OBD_RACE(OBD_FAIL_PTLRPC_CONNECT_RACE);
+
 	rc = ptlrpc_connect_import(imp);
 	if (rc)
 		goto out;
