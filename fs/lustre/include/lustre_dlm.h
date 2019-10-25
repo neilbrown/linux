@@ -802,6 +802,20 @@ struct ldlm_lock {
 };
 
 /**
+ * Describe the overlap between two locks.  itree_overlap_cb data.
+ */
+struct ldlm_match_data {
+	struct ldlm_lock	*lmd_old;
+	struct ldlm_lock	*lmd_lock;
+	enum ldlm_mode		*lmd_mode;
+	union ldlm_policy_data	*lmd_policy;
+	u64			 lmd_flags;
+	u64			 lmd_skip_flags;
+	int			 lmd_unref;
+	bool			 lmd_has_ast_data;
+};
+
+/**
  * LDLM resource description.
  * Basically, resource is a representation for a single object.
  * Object has a name which is currently 4 64-bit integers. LDLM user is
@@ -1208,7 +1222,8 @@ static inline enum ldlm_mode ldlm_lock_match(struct ldlm_namespace *ns,
 	return ldlm_lock_match_with_skip(ns, flags, 0, res_id, type, policy,
 					 mode, lh, unref);
 }
-
+struct ldlm_lock *search_itree(struct ldlm_resource *res,
+			       struct ldlm_match_data *data);
 enum ldlm_mode ldlm_revalidate_lock_handle(const struct lustre_handle *lockh,
 					   u64 *bits);
 void ldlm_lock_cancel(struct ldlm_lock *lock);
