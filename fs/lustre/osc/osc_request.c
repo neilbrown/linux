@@ -1638,7 +1638,6 @@ static int check_write_checksum(struct obdo *oa,
 	const char *obd_name = aa->aa_cli->cl_import->imp_obd->obd_name;
 	obd_dif_csum_fn *fn = NULL;
 	int sector_size = 0;
-	bool t10pi = false;
 	u32 new_cksum;
 	char *msg;
 	enum cksum_type cksum_type;
@@ -1658,22 +1657,18 @@ static int check_write_checksum(struct obdo *oa,
 
 	switch (cksum_type) {
 	case OBD_CKSUM_T10IP512:
-		t10pi = true;
 		fn = obd_dif_ip_fn;
 		sector_size = 512;
 		break;
 	case OBD_CKSUM_T10IP4K:
-		t10pi = true;
 		fn = obd_dif_ip_fn;
 		sector_size = 4096;
 		break;
 	case OBD_CKSUM_T10CRC512:
-		t10pi = true;
 		fn = obd_dif_crc_fn;
 		sector_size = 512;
 		break;
 	case OBD_CKSUM_T10CRC4K:
-		t10pi = true;
 		fn = obd_dif_crc_fn;
 		sector_size = 4096;
 		break;
@@ -1681,13 +1676,10 @@ static int check_write_checksum(struct obdo *oa,
 		break;
 	}
 
-	if (t10pi)
+	if (fn)
 		rc = osc_checksum_bulk_t10pi(obd_name, aa->aa_requested_nob,
-					     aa->aa_page_count,
-					     aa->aa_ppga,
-					     OST_WRITE,
-					     fn,
-					     sector_size,
+					     aa->aa_page_count, aa->aa_ppga,
+					     OST_WRITE, fn, sector_size,
 					     &new_cksum);
 	else
 		rc = osc_checksum_bulk(aa->aa_requested_nob, aa->aa_page_count,
