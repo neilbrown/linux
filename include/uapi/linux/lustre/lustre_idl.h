@@ -1925,6 +1925,8 @@ struct mdt_rec_reint {
 	__u16		rr_padding_4; /* also fix lustre_swab_mdt_rec_reint */
 };
 
+#define LMV_DESC_QOS_MAXAGE_DEFAULT 60  /* Seconds */
+
 /* lmv structures */
 struct lmv_desc {
 	__u32 ld_tgt_count;		/* how many MDS's */

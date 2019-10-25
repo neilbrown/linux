@@ -60,6 +60,8 @@ int lmv_revalidate_slaves(struct obd_export *exp,
 
 int lmv_getattr_name(struct obd_export *exp, struct md_op_data *op_data,
 		     struct ptlrpc_request **preq);
+void lmv_activate_target(struct lmv_obd *lmv, struct lmv_tgt_desc *tgt,
+			 int activate);
 
 int lmv_statfs_check_update(struct obd_device *obd, struct lmv_tgt_desc *tgt);
 
@@ -77,7 +79,7 @@ lmv_get_target(struct lmv_obd *lmv, u32 mdt_idx, int *index)
 		if (!lmv->tgts[i])
 			continue;
 
-		if (lmv->tgts[i]->ltd_idx == mdt_idx) {
+		if (lmv->tgts[i]->ltd_index == mdt_idx) {
 			if (index)
 				*index = i;
 			return lmv->tgts[i];
@@ -133,8 +135,8 @@ static inline const struct lmv_oinfo *
 lsm_name_to_stripe_info(const struct lmv_stripe_md *lsm, const char *name,
 			int namelen, bool post_migrate)
 {
-	__u32 hash_type = lsm->lsm_md_hash_type;
-	__u32 stripe_count = lsm->lsm_md_stripe_count;
+	u32 hash_type = lsm->lsm_md_hash_type;
+	u32 stripe_count = lsm->lsm_md_stripe_count;
 	int stripe_index;
 
 	LASSERT(lmv_dir_striped(lsm));
@@ -191,6 +193,10 @@ static inline bool lmv_dir_retry_check_update(struct md_op_data *op_data)
 
 struct lmv_tgt_desc *lmv_locate_tgt(struct lmv_obd *lmv,
 				    struct md_op_data *op_data);
+
+/* lmv_qos.c */
+struct lu_tgt_desc *lmv_locate_tgt_qos(struct lmv_obd *lmv, u32 *mdt);
+struct lu_tgt_desc *lmv_locate_tgt_rr(struct lmv_obd *lmv, u32 *mdt);
 
 /* lproc_lmv.c */
 int lmv_tunables_init(struct obd_device *obd);
