@@ -37,6 +37,9 @@
 #define __LNET_LIB_LNET_H__
 
 #include <linux/netdevice.h>
+/* LNET has 0xeXXX */
+#define CFS_FAIL_PTLRPC_OST_BULK_CB2	0xe000
+
 #include <linux/libcfs/libcfs.h>
 #include <linux/libcfs/libcfs_cpu.h>
 #include <linux/libcfs/libcfs_string.h>
