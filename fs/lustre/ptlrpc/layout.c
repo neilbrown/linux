@@ -198,7 +198,8 @@ static const struct req_msg_field *mds_reint_create_acl_client[] = {
 	&RMF_EADATA,
 	&RMF_DLM_REQ,
 	&RMF_FILE_SECCTX_NAME,
-	&RMF_FILE_SECCTX
+	&RMF_FILE_SECCTX,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *mds_reint_create_sym_client[] = {
@@ -209,7 +210,8 @@ static const struct req_msg_field *mds_reint_create_sym_client[] = {
 	&RMF_SYMTGT,
 	&RMF_DLM_REQ,
 	&RMF_FILE_SECCTX_NAME,
-	&RMF_FILE_SECCTX
+	&RMF_FILE_SECCTX,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *mds_reint_open_client[] = {
@@ -220,7 +222,8 @@ static const struct req_msg_field *mds_reint_open_client[] = {
 	&RMF_NAME,
 	&RMF_EADATA,
 	&RMF_FILE_SECCTX_NAME,
-	&RMF_FILE_SECCTX
+	&RMF_FILE_SECCTX,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *mds_reint_open_server[] = {
@@ -237,7 +240,8 @@ static const struct req_msg_field *mds_reint_unlink_client[] = {
 	&RMF_REC_REINT,
 	&RMF_CAPA1,
 	&RMF_NAME,
-	&RMF_DLM_REQ
+	&RMF_DLM_REQ,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *mds_reint_link_client[] = {
@@ -246,7 +250,8 @@ static const struct req_msg_field *mds_reint_link_client[] = {
 	&RMF_CAPA1,
 	&RMF_CAPA2,
 	&RMF_NAME,
-	&RMF_DLM_REQ
+	&RMF_DLM_REQ,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *mds_reint_rename_client[] = {
@@ -256,7 +261,8 @@ static const struct req_msg_field *mds_reint_rename_client[] = {
 	&RMF_CAPA2,
 	&RMF_NAME,
 	&RMF_SYMTGT,
-	&RMF_DLM_REQ
+	&RMF_DLM_REQ,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *mds_reint_migrate_client[] = {
@@ -267,6 +273,7 @@ static const struct req_msg_field *mds_reint_migrate_client[] = {
 	&RMF_NAME,
 	&RMF_SYMTGT,
 	&RMF_DLM_REQ,
+	&RMF_SELINUX_POL,
 	&RMF_MDT_EPOCH,
 	&RMF_CLOSE_DATA,
 	&RMF_EADATA
@@ -297,7 +304,8 @@ static const struct req_msg_field *mds_reint_setxattr_client[] = {
 	&RMF_CAPA1,
 	&RMF_NAME,
 	&RMF_EADATA,
-	&RMF_DLM_REQ
+	&RMF_DLM_REQ,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *mds_reint_resync[] = {
@@ -471,7 +479,8 @@ static const struct req_msg_field *ldlm_intent_create_client[] = {
 	&RMF_NAME,
 	&RMF_EADATA,
 	&RMF_FILE_SECCTX_NAME,
-	&RMF_FILE_SECCTX
+	&RMF_FILE_SECCTX,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *ldlm_intent_open_client[] = {
@@ -484,7 +493,8 @@ static const struct req_msg_field *ldlm_intent_open_client[] = {
 	&RMF_NAME,
 	&RMF_EADATA,
 	&RMF_FILE_SECCTX_NAME,
-	&RMF_FILE_SECCTX
+	&RMF_FILE_SECCTX,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *ldlm_intent_getxattr_client[] = {
@@ -493,6 +503,7 @@ static const struct req_msg_field *ldlm_intent_getxattr_client[] = {
 	&RMF_LDLM_INTENT,
 	&RMF_MDT_BODY,
 	&RMF_CAPA1,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *ldlm_intent_getxattr_server[] = {
@@ -517,7 +528,8 @@ static const struct req_msg_field *mds_getxattr_client[] = {
 	&RMF_MDT_BODY,
 	&RMF_CAPA1,
 	&RMF_NAME,
-	&RMF_EADATA
+	&RMF_EADATA,
+	&RMF_SELINUX_POL
 };
 
 static const struct req_msg_field *mds_getxattr_server[] = {
