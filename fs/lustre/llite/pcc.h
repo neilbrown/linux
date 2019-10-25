@@ -43,13 +43,64 @@ extern struct kmem_cache *pcc_inode_slab;
 
 #define LPROCFS_WR_PCC_MAX_CMD 4096
 
+/* User/Group/Project ID */
+struct pcc_match_id {
+	u32			pmi_id;
+	struct list_head	pmi_linkage;
+};
+
+/* wildcard file name */
+struct pcc_match_fname {
+	char			*pmf_name;
+	struct list_head	 pmf_linkage;
+};
+
+enum pcc_field {
+	PCC_FIELD_UID,
+	PCC_FIELD_GID,
+	PCC_FIELD_PROJID,
+	PCC_FIELD_FNAME,
+	PCC_FIELD_MAX
+};
+
+struct pcc_expression {
+	enum pcc_field		pe_field;
+	struct list_head	pe_cond;
+	struct list_head	pe_linkage;
+};
+
+struct pcc_conjunction {
+	/* link to disjunction */
+	struct list_head	pc_linkage;
+	/* list of logical conjunction */
+	struct list_head	pc_expressions;
+};
+
+/**
+ * Match rule for auto PCC-cached files.
+ */
+struct pcc_match_rule {
+	char			*pmr_conds_str;
+	struct list_head	 pmr_conds;
+};
+
+struct pcc_matcher {
+	u32		 pm_uid;
+	u32		 pm_gid;
+	u32		 pm_projid;
+	struct qstr	*pm_name;
+};
+
 struct pcc_dataset {
-	u32			pccd_id;	 /* Archive ID */
-	u32			pccd_projid;	 /* Project ID */
+	u32			pccd_rwid;	 /* Archive ID */
+	u32			pccd_roid;	 /* Readonly ID */
+	struct pcc_match_rule	pccd_rule;	 /* Match rule */
+	u32			pccd_rwonly:1, /* Only use as RW-PCC */
+				pccd_roonly:1; /* Only use as RO-PCC */
 	char			pccd_pathname[PATH_MAX]; /* full path */
 	struct path		pccd_path;	 /* Root path */
 	struct list_head	pccd_linkage;  /* Linked to pccs_datasets */
-	atomic_t		pccd_refcount; /* reference count */
+	atomic_t		pccd_refcount; /* Reference count */
 };
 
 struct pcc_super {
@@ -103,8 +154,10 @@ struct pcc_cmd {
 	char					*pccc_pathname;
 	union {
 		struct pcc_cmd_add {
-			u32			 pccc_id;
-			u32			 pccc_projid;
+			u32			 pccc_rwid;
+			u32			 pccc_roid;
+			struct list_head	 pccc_conds;
+			char			*pccc_conds_str;
 		} pccc_add;
 		struct pcc_cmd_del {
 			u32			 pccc_pad;
@@ -149,8 +202,8 @@ int pcc_inode_create(struct super_block *sb, struct pcc_dataset *dataset,
 		     struct lu_fid *fid, struct dentry **pcc_dentry);
 int pcc_inode_create_fini(struct pcc_dataset *dataset, struct inode *inode,
 			   struct dentry *pcc_dentry);
-struct pcc_dataset *pcc_dataset_get(struct pcc_super *super, u32 projid,
-				    u32 archive_id);
+struct pcc_dataset *pcc_dataset_match_get(struct pcc_super *super,
+					  struct pcc_matcher *matcher);
 void pcc_dataset_put(struct pcc_dataset *dataset);
 void pcc_inode_free(struct inode *inode);
 void pcc_layout_invalidate(struct inode *inode);
