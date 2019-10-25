@@ -978,7 +978,7 @@ void ldlm_grant_lock_with_skiplist(struct ldlm_lock *lock)
 {
 	struct sl_insert_point prev;
 
-	LASSERT(lock->l_req_mode == lock->l_granted_mode);
+	LASSERT(ldlm_is_granted(lock));
 
 	search_granted_lock(&lock->l_resource->lr_granted, lock, &prev);
 	ldlm_granted_list_add_lock(lock, &prev);
@@ -1577,7 +1577,7 @@ enum ldlm_error ldlm_lock_enqueue(struct ldlm_namespace *ns,
 	struct ldlm_resource *res;
 
 	res = lock_res_and_lock(lock);
-	if (lock->l_req_mode == lock->l_granted_mode) {
+	if (ldlm_is_granted(lock)) {
 		/* The server returned a blocked lock, but it was granted
 		 * before we got a chance to actually enqueue it.  We don't
 		 * need to do anything else.
@@ -1902,7 +1902,7 @@ void ldlm_lock_cancel(struct ldlm_lock *lock)
 	ldlm_resource_unlink_lock(lock);
 	ldlm_lock_destroy_nolock(lock);
 
-	if (lock->l_granted_mode == lock->l_req_mode)
+	if (ldlm_is_granted(lock))
 		ldlm_pool_del(&ns->ns_pool, lock);
 
 	/* Make sure we will not be called again for same lock what is possible
