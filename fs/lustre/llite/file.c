@@ -1625,6 +1625,8 @@ static ssize_t ll_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	u16 refcheck;
 	ssize_t rc2;
 
+	ll_ras_enter(iocb->ki_filp);
+
 	result = ll_do_fast_read(iocb, to);
 	if (result < 0 || iov_iter_count(to) == 0)
 		goto out;
