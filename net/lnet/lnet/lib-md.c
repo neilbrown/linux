@@ -270,6 +270,10 @@ lnet_md_validate(const struct lnet_md *umd)
 		CERROR("Invalid option: too many fragments %u, %d max\n",
 		       umd->length, LNET_MAX_IOV);
 		return -EINVAL;
+	} else if (umd->length > LNET_MTU) {
+		CERROR("Invalid length: too big fragment size %u, %d max\n",
+		       umd->length, LNET_MTU);
+		return -EINVAL;
 	}
 
 	return 0;
