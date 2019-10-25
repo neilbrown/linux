@@ -120,8 +120,6 @@ lnet_peer_ni_alloc(lnet_nid_t nid)
 		return NULL;
 
 	INIT_LIST_HEAD(&lpni->lpni_txq);
-	INIT_LIST_HEAD(&lpni->lpni_rtrq);
-	INIT_LIST_HEAD(&lpni->lpni_routes);
 	INIT_LIST_HEAD(&lpni->lpni_hashlist);
 	INIT_LIST_HEAD(&lpni->lpni_peer_nis);
 	INIT_LIST_HEAD(&lpni->lpni_recovery);
@@ -207,10 +205,13 @@ lnet_peer_alloc(lnet_nid_t nid)
 	if (!lp)
 		return NULL;
 
+	INIT_LIST_HEAD(&lp->lp_rtrq);
+	INIT_LIST_HEAD(&lp->lp_routes);
 	INIT_LIST_HEAD(&lp->lp_peer_list);
 	INIT_LIST_HEAD(&lp->lp_peer_nets);
 	INIT_LIST_HEAD(&lp->lp_dc_list);
 	INIT_LIST_HEAD(&lp->lp_dc_pendq);
+	INIT_LIST_HEAD(&lp->lp_rtr_list);
 	init_waitqueue_head(&lp->lp_dc_waitq);
 	spin_lock_init(&lp->lp_lock);
 	lp->lp_primary_nid = nid;
@@ -236,6 +237,7 @@ lnet_destroy_peer_locked(struct lnet_peer *lp)
 	CDEBUG(D_NET, "%p nid %s\n", lp, libcfs_nid2str(lp->lp_primary_nid));
 
 	LASSERT(atomic_read(&lp->lp_refcount) == 0);
+	LASSERT(lp->lp_rtr_refcount == 0);
 	LASSERT(list_empty(&lp->lp_peer_nets));
 	LASSERT(list_empty(&lp->lp_peer_list));
 	LASSERT(list_empty(&lp->lp_dc_list));
@@ -325,7 +327,7 @@ lnet_peer_ni_del_locked(struct lnet_peer_ni *lpni)
 	struct lnet_peer_table *ptable = NULL;
 
 	/* don't remove a peer_ni if it's also a gateway */
-	if (lpni->lpni_rtr_refcount > 0) {
+	if (lnet_isrouter(lpni)) {
 		CERROR("Peer NI %s is a gateway. Can not delete it\n",
 		       libcfs_nid2str(lpni->lpni_nid));
 		return -EBUSY;
@@ -572,7 +574,7 @@ lnet_peer_table_del_rtrs_locked(struct lnet_net *net,
 {
 	struct lnet_peer_ni *lp;
 	struct lnet_peer_ni *tmp;
-	lnet_nid_t lpni_nid;
+	lnet_nid_t gw_nid;
 	int i;
 
 	for (i = 0; i < LNET_PEER_HASH_SIZE; i++) {
@@ -581,13 +583,13 @@ lnet_peer_table_del_rtrs_locked(struct lnet_net *net,
 			if (net != lp->lpni_net)
 				continue;
 
-			if (!lp->lpni_rtr_refcount)
+			if (!lnet_isrouter(lp))
 				continue;
 
-			lpni_nid = lp->lpni_nid;
+			gw_nid = lp->lpni_peer_net->lpn_peer->lp_primary_nid;
 
 			lnet_net_unlock(LNET_LOCK_EX);
-			lnet_del_route(LNET_NIDNET(LNET_NID_ANY), lpni_nid);
+			lnet_del_route(LNET_NIDNET(LNET_NID_ANY), gw_nid);
 			lnet_net_lock(LNET_LOCK_EX);
 		}
 	}
@@ -1568,7 +1570,6 @@ lnet_destroy_peer_ni_locked(struct kref *ref)
 	CDEBUG(D_NET, "%p nid %s\n", lpni, libcfs_nid2str(lpni->lpni_nid));
 
 	LASSERT(kref_read(&lpni->lpni_kref) == 0);
-	LASSERT(lpni->lpni_rtr_refcount == 0);
 	LASSERT(list_empty(&lpni->lpni_txq));
 	LASSERT(lpni->lpni_txqnob == 0);
 	LASSERT(list_empty(&lpni->lpni_peer_nis));
