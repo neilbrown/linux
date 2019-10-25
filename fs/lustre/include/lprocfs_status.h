@@ -63,6 +63,9 @@ static inline unsigned int pct(unsigned long a, unsigned long b)
 	return b ? a * 100 / b : 0;
 }
 
+#define PAGES_TO_MiB(pages)	((pages) >> (20 - PAGE_SHIFT))
+#define MiB_TO_PAGES(mb)	((mb) << (20 - PAGE_SHIFT))
+
 struct lprocfs_static_vars {
 	struct lprocfs_vars		*obd_vars;
 	const struct attribute_group	*sysfs_vars;
