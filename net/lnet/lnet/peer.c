@@ -2156,6 +2156,8 @@ again:
 	 * zombie if we race with DLC, so we must check for that.
 	 */
 	for (;;) {
+		/* Keep lp alive when the lnet_net_lock is unlocked */
+		lnet_peer_addref_locked(lp);
 		prepare_to_wait(&lp->lp_dc_waitq, &wait, TASK_INTERRUPTIBLE);
 		if (signal_pending(current))
 			break;
@@ -2168,15 +2170,14 @@ again:
 		lnet_peer_queue_for_discovery(lp);
 
 		/*
-		 * if caller requested a non-blocking operation then
-		 * return immediately. Once discovery is complete then the
-		 * peer ref will be decremented and any pending messages
-		 * that were stopped due to discovery will be transmitted.
+		 * If caller requested a non-blocking operation then
+		 * return immediately. Once discovery is complete any
+		 * pending messages that were stopped due to discovery
+		 * will be transmitted.
 		 */
 		if (!block)
 			break;
 
-		lnet_peer_addref_locked(lp);
 		lnet_net_unlock(LNET_LOCK_EX);
 		schedule();
 		finish_wait(&lp->lp_dc_waitq, &wait);
@@ -2199,10 +2200,12 @@ again:
 
 	lnet_net_unlock(LNET_LOCK_EX);
 	lnet_net_lock(cpt);
-
-	/* If the peer has changed after we've discovered the older peer,
-	 * then we need to discovery the new peer to make sure the
-	 * interface information is up to date
+	lnet_peer_decref_locked(lp);
+	/* The peer may have changed, so re-check and rediscover if that turns
+	 * out to have been the case. The reference count on lp ensured that
+	 * even if it was unlinked from lpni the memory could not be recycled.
+	 * Thus the check below is sufficient to determine whether the peer
+	 * changed. If the peer changed, then lp must not be dereferenced.
 	 */
 	if (lp != lpni->lpni_peer_net->lpn_peer)
 		goto again;
