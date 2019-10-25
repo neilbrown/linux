@@ -678,6 +678,7 @@ chlg_registered_dev_find_by_name(const char *name)
 {
 	struct chlg_registered_dev *dit;
 
+	LASSERT(mutex_is_locked(&chlg_registered_dev_lock));
 	list_for_each_entry(dit, &chlg_registered_devices, ced_link)
 		if (strcmp(name, dit->ced_name) == 0)
 			return dit;
@@ -696,6 +697,7 @@ chlg_registered_dev_find_by_obd(const struct obd_device *obd)
 	struct chlg_registered_dev *dit;
 	struct obd_device *oit;
 
+	LASSERT(mutex_is_locked(&chlg_registered_dev_lock));
 	list_for_each_entry(dit, &chlg_registered_devices, ced_link)
 		list_for_each_entry(oit, &dit->ced_obds,
 				    u.cli.cl_chg_dev_linkage)
@@ -769,6 +771,7 @@ static void chlg_dev_clear(struct kref *kref)
 	struct chlg_registered_dev *entry = container_of(kref,
 							 struct chlg_registered_dev,
 							 ced_refs);
+	LASSERT(mutex_is_locked(&chlg_registered_dev_lock));
 	list_del(&entry->ced_link);
 	misc_deregister(&entry->ced_misc);
 	kfree(entry);
@@ -779,9 +782,10 @@ static void chlg_dev_clear(struct kref *kref)
  */
 void mdc_changelog_cdev_finish(struct obd_device *obd)
 {
-	struct chlg_registered_dev *dev = chlg_registered_dev_find_by_obd(obd);
+	struct chlg_registered_dev *dev;
 
 	mutex_lock(&chlg_registered_dev_lock);
+	dev = chlg_registered_dev_find_by_obd(obd);
 	list_del_init(&obd->u.cli.cl_chg_dev_linkage);
 	kref_put(&dev->ced_refs, chlg_dev_clear);
 	mutex_unlock(&chlg_registered_dev_lock);
