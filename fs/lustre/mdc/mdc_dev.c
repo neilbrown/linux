@@ -312,7 +312,6 @@ static int mdc_dlm_blocking_ast0(const struct lu_env *env,
 		dlmlock->l_ast_data = NULL;
 		cl_object_get(obj);
 	}
-	ldlm_set_kms_ignore(dlmlock);
 	unlock_res_and_lock(dlmlock);
 
 	/* if l_ast_data is NULL, the dlmlock was enqueued by AGL or
@@ -432,7 +431,7 @@ void mdc_lock_lvb_update(const struct lu_env *env, struct osc_object *osc,
 }
 
 static void mdc_lock_granted(const struct lu_env *env, struct osc_lock *oscl,
-			     struct lustre_handle *lockh, bool lvb_update)
+			     struct lustre_handle *lockh)
 {
 	struct ldlm_lock *dlmlock;
 
@@ -473,10 +472,11 @@ static void mdc_lock_granted(const struct lu_env *env, struct osc_lock *oscl,
 		descr->cld_end = CL_PAGE_EOF;
 
 		/* no lvb update for matched lock */
-		if (lvb_update) {
+		if (!ldlm_is_lvb_cached(dlmlock)) {
 			LASSERT(oscl->ols_flags & LDLM_FL_LVB_READY);
 			mdc_lock_lvb_update(env, cl2osc(oscl->ols_cl.cls_obj),
 					    dlmlock, NULL);
+			ldlm_set_lvb_cached(dlmlock);
 		}
 	}
 	unlock_res_and_lock(dlmlock);
@@ -514,7 +514,7 @@ static int mdc_lock_upcall(void *cookie, struct lustre_handle *lockh,
 
 	CDEBUG(D_INODE, "rc %d, err %d\n", rc, errcode);
 	if (rc == 0)
-		mdc_lock_granted(env, oscl, lockh, errcode == ELDLM_OK);
+		mdc_lock_granted(env, oscl, lockh);
 
 	/* Error handling, some errors are tolerable. */
 	if (oscl->ols_locklessable && rc == -EUSERS) {
@@ -685,10 +685,8 @@ int mdc_enqueue_send(const struct lu_env *env, struct obd_export *exp,
 	 * LVB information, e.g. canceled locks or locks of just pruned object,
 	 * such locks should be skipped.
 	 */
-	mode = ldlm_lock_match_with_skip(obd->obd_namespace, match_flags,
-					 LDLM_FL_KMS_IGNORE, res_id,
-					 einfo->ei_type, policy, mode,
-					 &lockh, 0);
+	mode = ldlm_lock_match(obd->obd_namespace, match_flags, res_id,
+			       einfo->ei_type, policy, mode, &lockh, 0);
 	if (mode) {
 		struct ldlm_lock *matched;
 
@@ -696,13 +694,6 @@ int mdc_enqueue_send(const struct lu_env *env, struct obd_export *exp,
 			return ELDLM_OK;
 
 		matched = ldlm_handle2lock(&lockh);
-		/* this shouldn't happen but this check is kept to make
-		 * related test fail if problem occurs
-		 */
-		if (unlikely(ldlm_is_kms_ignore(matched))) {
-			LDLM_ERROR(matched, "matched lock has KMS ignore flag");
-			goto no_match;
-		}
 
 		if (OBD_FAIL_CHECK(OBD_FAIL_MDC_GLIMPSE_DDOS))
 			ldlm_set_kms_ignore(matched);
@@ -717,7 +708,6 @@ int mdc_enqueue_send(const struct lu_env *env, struct obd_export *exp,
 			LDLM_LOCK_PUT(matched);
 			return ELDLM_OK;
 		}
-no_match:
 		ldlm_lock_decref(&lockh, mode);
 		LDLM_LOCK_PUT(matched);
 	}
@@ -1362,9 +1352,30 @@ static int mdc_attr_get(const struct lu_env *env, struct cl_object *obj,
 
 static int mdc_object_ast_clear(struct ldlm_lock *lock, void *data)
 {
-	if (lock->l_ast_data == data)
+	struct osc_object *osc = (struct osc_object *)data;
+	struct ost_lvb *lvb = &lock->l_ost_lvb;
+	struct lov_oinfo *oinfo;
+
+	if (lock->l_ast_data == data) {
 		lock->l_ast_data = NULL;
-	ldlm_set_kms_ignore(lock);
+
+		LASSERT(osc);
+		LASSERT(osc->oo_oinfo);
+		LASSERT(lvb);
+
+		/* Updates lvb in lock by the cached oinfo */
+		oinfo = osc->oo_oinfo;
+		cl_object_attr_lock(&osc->oo_cl);
+		memcpy(lvb, &oinfo->loi_lvb, sizeof(oinfo->loi_lvb));
+		cl_object_attr_unlock(&osc->oo_cl);
+
+		LDLM_DEBUG(lock,
+			   "update lvb size %llu blocks %llu [cma]time: %llu %llu %llu",
+			   lvb->lvb_size, lvb->lvb_blocks,
+			   lvb->lvb_ctime, lvb->lvb_mtime, lvb->lvb_atime);
+
+		ldlm_clear_lvb_cached(lock);
+	}
 	return LDLM_ITER_CONTINUE;
 }
 
