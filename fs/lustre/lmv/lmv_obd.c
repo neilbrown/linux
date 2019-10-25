@@ -57,9 +57,8 @@
 
 static int lmv_check_connect(struct obd_device *obd);
 
-static void lmv_activate_target(struct lmv_obd *lmv,
-				struct lmv_tgt_desc *tgt,
-				int activate)
+void lmv_activate_target(struct lmv_obd *lmv, struct lmv_tgt_desc *tgt,
+			 int activate)
 {
 	if (tgt->ltd_active == activate)
 		return;
@@ -315,7 +314,7 @@ static int lmv_connect_mdc(struct obd_device *obd, struct lmv_tgt_desc *tgt)
 
 	target.ft_srv = NULL;
 	target.ft_exp = mdc_exp;
-	target.ft_idx = tgt->ltd_idx;
+	target.ft_idx = tgt->ltd_index;
 
 	fld_client_add_target(&lmv->lmv_fld, &target);
 
@@ -345,6 +344,12 @@ static int lmv_connect_mdc(struct obd_device *obd, struct lmv_tgt_desc *tgt)
 
 	md_init_ea_size(tgt->ltd_exp, lmv->max_easize, lmv->max_def_easize);
 
+	rc = lqos_add_tgt(&lmv->lmv_qos, tgt);
+	if (rc) {
+		obd_disconnect(mdc_exp);
+		return rc;
+	}
+
 	CDEBUG(D_CONFIG, "Connected to %s(%s) successfully (%d)\n",
 	       mdc_obd->obd_name, mdc_obd->obd_uuid.uuid,
 	       atomic_read(&obd->obd_refcount));
@@ -364,6 +369,8 @@ static void lmv_del_target(struct lmv_obd *lmv, int index)
 	if (!lmv->tgts[index])
 		return;
 
+	lqos_del_tgt(&lmv->lmv_qos, lmv->tgts[index]);
+
 	kfree(lmv->tgts[index]);
 	lmv->tgts[index] = NULL;
 }
@@ -371,8 +378,8 @@ static void lmv_del_target(struct lmv_obd *lmv, int index)
 static int lmv_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
 			  u32 index, int gen)
 {
-	struct lmv_obd *lmv = &obd->u.lmv;
 	struct obd_device *mdc_obd;
+	struct lmv_obd *lmv = &obd->u.lmv;
 	struct lmv_tgt_desc *tgt;
 	int orig_tgt_count = 0;
 	int rc = 0;
@@ -435,7 +442,7 @@ static int lmv_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
 	}
 
 	mutex_init(&tgt->ltd_fid_mutex);
-	tgt->ltd_idx = index;
+	tgt->ltd_index = index;
 	tgt->ltd_uuid = *uuidp;
 	tgt->ltd_active = 0;
 	lmv->tgts[index] = tgt;
@@ -1078,7 +1085,7 @@ hsm_req_err:
 			return -EINVAL;
 
 		/* only files on same MDT can have their layouts swapped */
-		if (tgt1->ltd_idx != tgt2->ltd_idx)
+		if (tgt1->ltd_index != tgt2->ltd_index)
 			return -EPERM;
 
 		rc = obd_iocontrol(cmd, tgt1->ltd_exp, len, karg, uarg);
@@ -1232,6 +1239,8 @@ static int lmv_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
 {
 	struct lmv_obd *lmv = &obd->u.lmv;
 	struct lmv_desc *desc;
+	struct lnet_process_id lnet_id;
+	int i = 0;
 	int rc;
 
 	if (LUSTRE_CFG_BUFLEN(lcfg, 1) < 1) {
@@ -1254,12 +1263,34 @@ static int lmv_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
 	obd_str2uuid(&lmv->desc.ld_uuid, desc->ld_uuid.uuid);
 	lmv->desc.ld_tgt_count = 0;
 	lmv->desc.ld_active_tgt_count = 0;
-	lmv->desc.ld_qos_maxage = 60;
+	lmv->desc.ld_qos_maxage = LMV_DESC_QOS_MAXAGE_DEFAULT;
 	lmv->max_def_easize = 0;
 	lmv->max_easize = 0;
 
 	spin_lock_init(&lmv->lmv_lock);
 	mutex_init(&lmv->lmv_init_mutex);
+
+	/* Set up allocation policy (QoS and RR) */
+	INIT_LIST_HEAD(&lmv->lmv_qos.lq_svr_list);
+	init_rwsem(&lmv->lmv_qos.lq_rw_sem);
+	lmv->lmv_qos.lq_dirty = 1;
+	lmv->lmv_qos.lq_rr.lqr_dirty = 1;
+	lmv->lmv_qos.lq_reset = 1;
+	/* Default priority is toward free space balance */
+	lmv->lmv_qos.lq_prio_free = 232;
+	/* Default threshold for rr (roughly 17%) */
+	lmv->lmv_qos.lq_threshold_rr = 43;
+
+	/*
+	 * initialize rr_index to lower 32bit of netid, so that client
+	 * can distribute subdirs evenly from the beginning.
+	 */
+	while (LNetGetId(i++, &lnet_id) != -ENOENT) {
+		if (LNET_NETTYP(LNET_NIDNET(lnet_id.nid)) != LOLND) {
+			lmv->lmv_qos_rr_index = (u32)lnet_id.nid;
+			break;
+		}
+	}
 
 	rc = lmv_tunables_init(obd);
 	if (rc)
@@ -1441,6 +1472,7 @@ static int lmv_statfs_update(void *cookie, int rc)
 		tgt->ltd_statfs = *osfs;
 		tgt->ltd_statfs_age = ktime_get_seconds();
 		spin_unlock(&lmv->lmv_lock);
+		lmv->lmv_qos.lq_dirty = 1;
 	}
 
 	return rc;
@@ -1520,7 +1552,7 @@ static int lmv_getattr(struct obd_export *exp, struct md_op_data *op_data,
 		return PTR_ERR(tgt);
 
 	if (op_data->op_flags & MF_GET_MDT_IDX) {
-		op_data->op_mds = tgt->ltd_idx;
+		op_data->op_mds = tgt->ltd_index;
 		return 0;
 	}
 
@@ -1564,17 +1596,6 @@ static int lmv_close(struct obd_export *exp, struct md_op_data *op_data,
 	return md_close(tgt->ltd_exp, op_data, mod, request);
 }
 
-static struct lmv_tgt_desc *lmv_locate_tgt_qos(struct lmv_obd *lmv, u32 *mdt)
-{
-	static unsigned int rr_index;
-
-	/* locate MDT round-robin is the first step */
-	*mdt = rr_index % lmv->tgts_size;
-	rr_index++;
-
-	return lmv->tgts[*mdt];
-}
-
 static struct lmv_tgt_desc *
 lmv_locate_tgt_by_name(struct lmv_obd *lmv, struct lmv_stripe_md *lsm,
 		       const char *name, int namelen, struct lu_fid *fid,
@@ -1588,7 +1609,7 @@ lmv_locate_tgt_by_name(struct lmv_obd *lmv, struct lmv_stripe_md *lsm,
 		if (IS_ERR(tgt))
 			return tgt;
 
-		*mds = tgt->ltd_idx;
+		*mds = tgt->ltd_index;
 		return tgt;
 	}
 
@@ -1680,12 +1701,18 @@ lmv_locate_tgt(struct lmv_obd *lmv, struct md_op_data *op_data)
 		   lmv_dir_space_hashed(op_data->op_default_mea1) &&
 		   !lmv_dir_striped(lsm)) {
 		tgt = lmv_locate_tgt_qos(lmv, &op_data->op_mds);
+		if (tgt == ERR_PTR(-EAGAIN))
+			tgt = lmv_locate_tgt_rr(lmv, &op_data->op_mds);
 		/*
 		 * only update statfs when mkdir under dir with "space" hash,
 		 * this means the cached statfs may be stale, and current mkdir
 		 * may not follow QoS accurately, but it's not serious, and it
 		 * avoids periodic statfs when client doesn't mkdir under
 		 * "space" hashed directories.
+		 *
+		 * TODO: after MDT support QoS object allocation, also update
+		 * statfs for 'lfs mkdir -i -1 ...", currently it's done in user
+		 * space.
 		 */
 		if (!IS_ERR(tgt)) {
 			struct obd_device *obd;
@@ -1805,7 +1832,7 @@ int lmv_create(struct obd_export *exp, struct md_op_data *op_data,
 		if (IS_ERR(tgt))
 			return PTR_ERR(tgt);
 
-		op_data->op_mds = tgt->ltd_idx;
+		op_data->op_mds = tgt->ltd_index;
 	}
 
 	CDEBUG(D_INODE, "CREATE obj " DFID " -> mds #%x\n",
@@ -1840,7 +1867,7 @@ lmv_enqueue(struct obd_export *exp, struct ldlm_enqueue_info *einfo,
 		return PTR_ERR(tgt);
 
 	CDEBUG(D_INODE, "ENQUEUE on " DFID " -> mds #%u\n",
-	       PFID(&op_data->op_fid1), tgt->ltd_idx);
+	       PFID(&op_data->op_fid1), tgt->ltd_index);
 
 	return md_enqueue(tgt->ltd_exp, einfo, policy, op_data, lockh,
 			  extra_lock_flags);
@@ -1863,7 +1890,7 @@ retry:
 
 	CDEBUG(D_INODE, "GETATTR_NAME for %*s on " DFID " -> mds #%u\n",
 	       (int)op_data->op_namelen, op_data->op_name,
-	       PFID(&op_data->op_fid1), tgt->ltd_idx);
+	       PFID(&op_data->op_fid1), tgt->ltd_index);
 
 	rc = md_getattr_name(tgt->ltd_exp, op_data, preq);
 	if (rc == -ENOENT && lmv_dir_retry_check_update(op_data)) {
@@ -1917,7 +1944,7 @@ static int lmv_early_cancel(struct obd_export *exp, struct lmv_tgt_desc *tgt,
 			return PTR_ERR(tgt);
 	}
 
-	if (tgt->ltd_idx != op_tgt) {
+	if (tgt->ltd_index != op_tgt) {
 		CDEBUG(D_INODE, "EARLY_CANCEL on " DFID "\n", PFID(fid));
 		policy.l_inodebits.bits = bits;
 		rc = md_cancel_unused(tgt->ltd_exp, fid, &policy,
@@ -1963,7 +1990,7 @@ static int lmv_link(struct obd_export *exp, struct md_op_data *op_data,
 	 * Cancel UPDATE lock on child (fid1).
 	 */
 	op_data->op_flags |= MF_MDC_CANCEL_FID2;
-	rc = lmv_early_cancel(exp, NULL, op_data, tgt->ltd_idx, LCK_EX,
+	rc = lmv_early_cancel(exp, NULL, op_data, tgt->ltd_index, LCK_EX,
 			      MDS_INODELOCK_UPDATE, MF_MDC_CANCEL_FID1);
 	if (rc != 0)
 		return rc;
@@ -2057,7 +2084,7 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 		return PTR_ERR(child_tgt);
 
 	if (!S_ISDIR(op_data->op_mode) && tp_tgt)
-		rc = __lmv_fid_alloc(lmv, &target_fid, tp_tgt->ltd_idx);
+		rc = __lmv_fid_alloc(lmv, &target_fid, tp_tgt->ltd_index);
 	else
 		rc = lmv_fid_alloc(NULL, exp, &target_fid, op_data);
 	if (rc)
@@ -2083,7 +2110,7 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 	}
 
 	/* cancel UPDATE lock of parent master object */
-	rc = lmv_early_cancel(exp, parent_tgt, op_data, tgt->ltd_idx, LCK_EX,
+	rc = lmv_early_cancel(exp, parent_tgt, op_data, tgt->ltd_index, LCK_EX,
 			      MDS_INODELOCK_UPDATE, MF_MDC_CANCEL_FID1);
 	if (rc)
 		return rc;
@@ -2108,14 +2135,14 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 	op_data->op_fid4 = target_fid;
 
 	/* cancel UPDATE locks of target parent */
-	rc = lmv_early_cancel(exp, tp_tgt, op_data, tgt->ltd_idx, LCK_EX,
+	rc = lmv_early_cancel(exp, tp_tgt, op_data, tgt->ltd_index, LCK_EX,
 			      MDS_INODELOCK_UPDATE, MF_MDC_CANCEL_FID2);
 	if (rc)
 		return rc;
 
 	/* cancel LOOKUP lock of source if source is remote object */
 	if (child_tgt != sp_tgt) {
-		rc = lmv_early_cancel(exp, sp_tgt, op_data, tgt->ltd_idx,
+		rc = lmv_early_cancel(exp, sp_tgt, op_data, tgt->ltd_index,
 				      LCK_EX, MDS_INODELOCK_LOOKUP,
 				      MF_MDC_CANCEL_FID3);
 		if (rc)
@@ -2123,7 +2150,7 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 	}
 
 	/* cancel ELC locks of source */
-	rc = lmv_early_cancel(exp, child_tgt, op_data, tgt->ltd_idx, LCK_EX,
+	rc = lmv_early_cancel(exp, child_tgt, op_data, tgt->ltd_index, LCK_EX,
 			      MDS_INODELOCK_ELC, MF_MDC_CANCEL_FID3);
 	if (rc)
 		return rc;
@@ -2183,7 +2210,7 @@ static int lmv_rename(struct obd_export *exp, struct md_op_data *op_data,
 	op_data->op_flags |= MF_MDC_CANCEL_FID4;
 
 	/* cancel UPDATE locks of target parent */
-	rc = lmv_early_cancel(exp, tp_tgt, op_data, tgt->ltd_idx, LCK_EX,
+	rc = lmv_early_cancel(exp, tp_tgt, op_data, tgt->ltd_index, LCK_EX,
 			      MDS_INODELOCK_UPDATE, MF_MDC_CANCEL_FID2);
 	if (rc != 0)
 		return rc;
@@ -2192,7 +2219,7 @@ static int lmv_rename(struct obd_export *exp, struct md_op_data *op_data,
 		/* cancel LOOKUP lock of target on target parent */
 		if (tgt != tp_tgt) {
 			rc = lmv_early_cancel(exp, tp_tgt, op_data,
-					      tgt->ltd_idx, LCK_EX,
+					      tgt->ltd_index, LCK_EX,
 					      MDS_INODELOCK_LOOKUP,
 					      MF_MDC_CANCEL_FID4);
 			if (rc != 0)
@@ -2206,7 +2233,7 @@ static int lmv_rename(struct obd_export *exp, struct md_op_data *op_data,
 			return PTR_ERR(src_tgt);
 
 		/* cancel ELC locks of source */
-		rc = lmv_early_cancel(exp, src_tgt, op_data, tgt->ltd_idx,
+		rc = lmv_early_cancel(exp, src_tgt, op_data, tgt->ltd_index,
 				      LCK_EX, MDS_INODELOCK_ELC,
 				      MF_MDC_CANCEL_FID3);
 		if (rc != 0)
@@ -2221,7 +2248,7 @@ retry:
 		return PTR_ERR(sp_tgt);
 
 	/* cancel UPDATE locks of source parent */
-	rc = lmv_early_cancel(exp, sp_tgt, op_data, tgt->ltd_idx, LCK_EX,
+	rc = lmv_early_cancel(exp, sp_tgt, op_data, tgt->ltd_index, LCK_EX,
 			      MDS_INODELOCK_UPDATE, MF_MDC_CANCEL_FID1);
 	if (rc != 0)
 		return rc;
@@ -2230,7 +2257,7 @@ retry:
 		/* cancel LOOKUP lock of source on source parent */
 		if (src_tgt != sp_tgt) {
 			rc = lmv_early_cancel(exp, sp_tgt, op_data,
-					      tgt->ltd_idx, LCK_EX,
+					      tgt->ltd_index, LCK_EX,
 					      MDS_INODELOCK_LOOKUP,
 					      MF_MDC_CANCEL_FID3);
 			if (rc != 0)
@@ -2275,7 +2302,7 @@ rename:
 		/* cancel LOOKUP lock of target on target parent */
 		if (tgt != tp_tgt) {
 			rc = lmv_early_cancel(exp, tp_tgt, op_data,
-					      tgt->ltd_idx, LCK_EX,
+					      tgt->ltd_index, LCK_EX,
 					      MDS_INODELOCK_LOOKUP,
 					      MF_MDC_CANCEL_FID4);
 			if (rc != 0)
@@ -2762,17 +2789,18 @@ retry:
 	op_data->op_flags |= MF_MDC_CANCEL_FID1 | MF_MDC_CANCEL_FID3;
 
 	if (parent_tgt != tgt)
-		rc = lmv_early_cancel(exp, parent_tgt, op_data, tgt->ltd_idx,
+		rc = lmv_early_cancel(exp, parent_tgt, op_data, tgt->ltd_index,
 				      LCK_EX, MDS_INODELOCK_LOOKUP,
 				      MF_MDC_CANCEL_FID3);
 
-	rc = lmv_early_cancel(exp, NULL, op_data, tgt->ltd_idx, LCK_EX,
+	rc = lmv_early_cancel(exp, NULL, op_data, tgt->ltd_index, LCK_EX,
 			      MDS_INODELOCK_ELC, MF_MDC_CANCEL_FID3);
 	if (rc)
 		return rc;
 
 	CDEBUG(D_INODE, "unlink with fid=" DFID "/" DFID " -> mds #%u\n",
-	       PFID(&op_data->op_fid1), PFID(&op_data->op_fid2), tgt->ltd_idx);
+	       PFID(&op_data->op_fid1), PFID(&op_data->op_fid2),
+	       tgt->ltd_index);
 
 	rc = md_unlink(tgt->ltd_exp, op_data, request);
 	if (rc == -ENOENT && lmv_dir_retry_check_update(op_data)) {
