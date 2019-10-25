@@ -793,16 +793,6 @@ lnet_msg_detach_md(struct lnet_msg *msg, int cpt, int status)
 	msg->msg_md = NULL;
 }
 
-static void
-lnet_detach_md(struct lnet_msg *msg, int status)
-{
-	int cpt = lnet_cpt_of_cookie(msg->msg_md->md_lh.lh_cookie);
-
-	lnet_res_lock(cpt);
-	lnet_msg_detach_md(msg, cpt, status);
-	lnet_res_unlock(cpt);
-}
-
 static bool
 lnet_is_health_check(struct lnet_msg *msg)
 {
@@ -892,7 +882,6 @@ lnet_finalize(struct lnet_msg *msg, int status)
 	int cpt;
 	int rc;
 	int i;
-	bool hc;
 
 	LASSERT(!in_interrupt());
 
@@ -901,37 +890,7 @@ lnet_finalize(struct lnet_msg *msg, int status)
 
 	msg->msg_ev.status = status;
 
-	/* if the message is successfully sent, no need to keep the MD around */
-	if (msg->msg_md && !status)
-		lnet_detach_md(msg, status);
-
-again:
-	hc = lnet_is_health_check(msg);
-
-	/*
-	 * the MD would've been detached from the message if it was
-	 * successfully sent. However, if it wasn't successfully sent the
-	 * MD would be around. And since we recalculate whether to
-	 * health check or not, it's possible that we change our minds and
-	 * we don't want to health check this message. In this case also
-	 * free the MD.
-	 *
-	 * If the message is successful we're going to
-	 * go through the lnet_health_check() function, but that'll just
-	 * increment the appropriate health value and return.
-	 */
-	if (msg->msg_md && !hc)
-		lnet_detach_md(msg, status);
-
-	rc = 0;
-	if (!msg->msg_tx_committed && !msg->msg_rx_committed) {
-		/* not committed to network yet */
-		LASSERT(!msg->msg_onactivelist);
-		kfree(msg);
-		return;
-	}
-
-	if (hc) {
+	if (lnet_is_health_check(msg)) {
 		/*
 		 * Check the health status of the message. If it has one
 		 * of the errors that we're supposed to handle, and it has
@@ -945,14 +904,27 @@ again:
 		 * put on the resend queue.
 		 */
 		if (!lnet_health_check(msg))
+			/* Message is queued for resend */
 			return;
+	}
 
-		/*
-		 * if we get here then we need to clean up the md because we're
-		 * finalizing the message.
-		 */
-		if (msg->msg_md)
-			lnet_detach_md(msg, status);
+	/*
+	 * We're not going to resend this message so detach its MD and invoke
+	 * the appropriate callbacks
+	 */
+	if (msg->msg_md) {
+		cpt = lnet_cpt_of_cookie(msg->msg_md->md_lh.lh_cookie);
+		lnet_res_lock(cpt);
+		lnet_msg_detach_md(msg, cpt, status);
+		lnet_res_unlock(cpt);
+	}
+
+again:
+	if (!msg->msg_tx_committed && !msg->msg_rx_committed) {
+		/* not committed to network yet */
+		LASSERT(!msg->msg_onactivelist);
+		kfree(msg);
+		return;
 	}
 
 	/*
@@ -986,6 +958,7 @@ again:
 
 	container->msc_finalizers[my_slot] = current;
 
+	rc = 0;
 	while ((msg = list_first_entry_or_null(&container->msc_finalizing,
 					       struct lnet_msg,
 					       msg_list)) != NULL) {
