@@ -119,10 +119,6 @@ static int ll_releasepage(struct page *vmpage, gfp_t gfp_mask)
 	if (!obj)
 		return 1;
 
-	/* 1 for caller, 1 for cl_page and 1 for page cache */
-	if (page_count(vmpage) > 3)
-		return 0;
-
 	page = cl_vmpage_page(vmpage, obj);
 	if (!page)
 		return 1;
