@@ -74,12 +74,9 @@
 struct kib_tunables {
 	int *kib_dev_failover;		/* HCA failover */
 	unsigned int *kib_service;	/* IB service number */
-	int *kib_min_reconnect_interval; /* first failed connection retry... */
-	int *kib_max_reconnect_interval; /* exponentially increasing to this */
 	int *kib_cksum;			/* checksum struct kib_msg? */
 	int *kib_timeout;		/* comms timeout (seconds) */
 	int *kib_keepalive;		/* keepalive timeout (seconds) */
-	int *kib_ntx;			/* # tx descs */
 	char **kib_default_ipif;	/* default IPoIB interface */
 	int *kib_retry_count;
 	int *kib_rnr_retry_count;
@@ -176,7 +173,6 @@ struct kib_hca_dev {
 	int			ibh_page_shift;	/* page shift of current HCA */
 	int			ibh_page_size;	/* page size of current HCA */
 	u64			ibh_page_mask;	/* page mask of current HCA */
-	int			ibh_mr_shift;	/* bits shift of max MR size */
 	u64			ibh_mr_size;	/* size of MR */
 	struct ib_pd		*ibh_pd;	/* PD */
 	struct kib_dev		*ibh_dev;	/* owner */
@@ -486,7 +482,6 @@ struct kib_rx {					/* receive message */
 	struct list_head	rx_list;	/* queue for attention */
 	struct kib_conn        *rx_conn;	/* owning conn */
 	int			rx_nob;		/* # bytes received (-1 while posted) */
-	enum ib_wc_status	rx_status;	/* completion status */
 	struct kib_msg	       *rx_msg;		/* message buffer (host vaddr) */
 	u64			rx_msgaddr;	/* message buffer (I/O addr) */
 	DEFINE_DMA_UNMAP_ADDR(rx_msgunmap);	/* for dma_unmap_single() */
