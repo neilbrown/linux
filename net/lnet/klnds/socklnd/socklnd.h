@@ -391,7 +391,6 @@ struct ksock_peer {
 							 */
 	struct lnet_process_id	ksnp_id;		/* who's on the other end(s) */
 	refcount_t		ksnp_refcount;		/* # users */
-	int			ksnp_sharecount;	/* lconf usage counter */
 	int			ksnp_closing;		/* being closed */
 	int			ksnp_accepting;		/* # passive connections pending
 							 */
