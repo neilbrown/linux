@@ -452,6 +452,7 @@ struct lmv_obd {
 
 	struct obd_connect_data	conn_data;
 	struct kobject		*lmv_tgts_kobj;
+	void			*lmv_cache;
 };
 
 struct niobuf_local {
@@ -669,7 +670,6 @@ void obd_uuid_del(struct obd_device *obd, struct obd_export *export);
 /*      KEY_SET_INFO in lustre_idl.h */
 #define KEY_SPTLRPC_CONF	"sptlrpc_conf"
 
-#define KEY_CACHE_SET		"cache_set"
 #define KEY_CACHE_LRU_SHRINK	"cache_lru_shrink"
 
 /* Flags for op_xvalid */
