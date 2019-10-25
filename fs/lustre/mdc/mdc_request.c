@@ -1193,8 +1193,8 @@ static void mdc_adjust_dirpages(struct page **pages, int cfs_pgs, int lu_pgs)
 
 	for (i = 0; i < cfs_pgs; i++) {
 		struct lu_dirpage *dp = kmap(pages[i]);
-		u64 hash_end = le64_to_cpu(dp->ldp_hash_end);
-		u32 flags = le32_to_cpu(dp->ldp_flags);
+		u64 hash_end = dp->ldp_hash_end;
+		u32 flags = dp->ldp_flags;
 		struct lu_dirpage *first = dp;
 
 		while (--lu_pgs > 0) {
@@ -1213,8 +1213,8 @@ static void mdc_adjust_dirpages(struct page **pages, int cfs_pgs, int lu_pgs)
 				break;
 
 			/* Save the hash and flags of this lu_dirpage. */
-			hash_end = le64_to_cpu(dp->ldp_hash_end);
-			flags = le32_to_cpu(dp->ldp_flags);
+			hash_end = dp->ldp_hash_end;
+			flags = dp->ldp_flags;
 
 			/* Check if lu_dirpage contains no entries. */
 			if (!end_dirent)
