@@ -706,6 +706,7 @@ struct kib_conn *kiblnd_create_conn(struct kib_peer_ni *peer_ni,
 	INIT_LIST_HEAD(&conn->ibc_tx_queue_rsrvd);
 	INIT_LIST_HEAD(&conn->ibc_tx_queue_nocred);
 	INIT_LIST_HEAD(&conn->ibc_active_txs);
+	INIT_LIST_HEAD(&conn->ibc_zombie_txs);
 	spin_lock_init(&conn->ibc_lock);
 
 	conn->ibc_connvars = kzalloc_cpt(sizeof(*conn->ibc_connvars), GFP_NOFS, cpt);
@@ -908,6 +909,9 @@ void kiblnd_destroy_conn(struct kib_conn *conn)
 
 	if (conn->ibc_cq)
 		ib_destroy_cq(conn->ibc_cq);
+
+	kiblnd_txlist_done(&conn->ibc_zombie_txs, -ECONNABORTED,
+			   LNET_MSG_STATUS_OK);
 
 	if (conn->ibc_rx_pages)
 		kiblnd_unmap_rx_descs(conn);
