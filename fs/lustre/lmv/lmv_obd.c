@@ -1145,15 +1145,22 @@ static int lmv_placement_policy(struct obd_device *obd,
 	 * 2. Then check if there is default stripe offset.
 	 * 3. Finally choose MDS by name hash if the parent
 	 *    is striped directory. (see lmv_locate_tgt()).
+	 *
+	 * presently explicit MDT location is not supported
+	 * for foreign dirs (as it can't be embedded into free
+	 * format LMV, like with lum_stripe_offset), so we only
+	 * rely on default stripe offset or then name hashing.
 	 */
 	if (op_data->op_cli_flags & CLI_SET_MEA && lum &&
+	    le32_to_cpu(lum->lum_magic != LMV_MAGIC_FOREIGN) &&
 	    le32_to_cpu(lum->lum_stripe_offset) != (u32)-1) {
 		*mds = le32_to_cpu(lum->lum_stripe_offset);
 	} else if (op_data->op_default_stripe_offset != (u32)-1) {
 		*mds = op_data->op_default_stripe_offset;
 		op_data->op_mds = *mds;
 		/* Correct the stripe offset in lum */
-		if (lum)
+		if (lum &&
+		    le32_to_cpu(lum->lum_magic != LMV_MAGIC_FOREIGN))
 			lum->lum_stripe_offset = cpu_to_le32(*mds);
 	} else {
 		*mds = op_data->op_mds;
@@ -1586,6 +1593,10 @@ lmv_locate_tgt(struct lmv_obd *lmv, struct md_op_data *op_data,
 	struct lmv_stripe_md *lsm = op_data->op_mea1;
 	struct lmv_oinfo *oinfo;
 	struct lmv_tgt_desc *tgt;
+
+	/* foreign dir is not striped dir */
+	if (lsm && lsm->lsm_md_magic == LMV_MAGIC_FOREIGN)
+		return ERR_PTR(-ENODATA);
 
 	/*
 	 * During creating VOLATILE file, it should honor the mdt
@@ -2638,6 +2649,10 @@ static int lmv_read_page(struct obd_export *exp, struct md_op_data *op_data,
 	struct lmv_tgt_desc *tgt;
 
 	if (unlikely(lsm)) {
+		/* foreign dir is not striped dir */
+		if (lsm->lsm_md_magic == LMV_MAGIC_FOREIGN)
+			return -ENODATA;
+
 		return lmv_striped_read_page(exp, op_data, cb_op,
 					     offset, ppage);
 	}
@@ -2943,6 +2958,16 @@ static int lmv_unpackmd(struct obd_export *exp, struct lmv_stripe_md **lsmp,
 	/* Free memmd */
 	if (lsm && !lmm) {
 		int i;
+		struct lmv_foreign_md *lfm = (struct lmv_foreign_md *)lsm;
+
+		if (lfm->lfm_magic == LMV_MAGIC_FOREIGN) {
+			size_t lfm_size;
+
+			lfm_size = lfm->lfm_length + offsetof(typeof(*lfm),
+							      lfm_value[0]);
+			kvfree(lfm);
+			return 0;
+		}
 
 		for (i = 0; i < lsm->lsm_md_stripe_count; i++)
 			iput(lsm->lsm_md_oinfo[i].lmo_root);
@@ -2950,6 +2975,25 @@ static int lmv_unpackmd(struct obd_export *exp, struct lmv_stripe_md **lsmp,
 		kvfree(lsm);
 		*lsmp = NULL;
 		return 0;
+	}
+
+	/* foreign lmv case */
+	if (le32_to_cpu(lmm->lmv_magic) == LMV_MAGIC_FOREIGN) {
+		struct lmv_foreign_md *lfm = (struct lmv_foreign_md *)lsm;
+
+		if (!lfm) {
+			lfm = kvzalloc(lmm_size, GFP_NOFS);
+			if (!lfm)
+				return -ENOMEM;
+			*lsmp = (struct lmv_stripe_md *)lfm;
+		}
+		lfm->lfm_magic = le32_to_cpu(lmm->lmv_foreign_md.lfm_magic);
+		lfm->lfm_length = le32_to_cpu(lmm->lmv_foreign_md.lfm_length);
+		lfm->lfm_type = le32_to_cpu(lmm->lmv_foreign_md.lfm_type);
+		lfm->lfm_flags = le32_to_cpu(lmm->lmv_foreign_md.lfm_flags);
+		memcpy(&lfm->lfm_value, &lmm->lmv_foreign_md.lfm_value,
+		       lfm->lfm_length);
+		return lmm_size;
 	}
 
 	if (le32_to_cpu(lmm->lmv_magic) == LMV_MAGIC_STRIPE)
@@ -3259,6 +3303,10 @@ static int lmv_merge_attr(struct obd_export *exp,
 			  ldlm_blocking_callback cb_blocking)
 {
 	int rc, i;
+
+	/* foreign dir is not striped dir */
+	if (lsm->lsm_md_magic == LMV_MAGIC_FOREIGN)
+		return 0;
 
 	rc = lmv_revalidate_slaves(exp, lsm, cb_blocking, 0);
 	if (rc < 0)

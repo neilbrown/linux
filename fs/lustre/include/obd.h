@@ -926,7 +926,10 @@ struct obd_ops {
 struct lustre_md {
 	struct mdt_body			*body;
 	struct lu_buf			 layout;
-	struct lmv_stripe_md		*lmv;
+	union {
+		struct lmv_stripe_md		*lmv;
+		struct lmv_foreign_md   *lfm;
+	};
 #ifdef CONFIG_LUSTRE_FS_POSIX_ACL
 	struct posix_acl		*posix_acl;
 #endif
