@@ -147,7 +147,8 @@ static void sec_gc_main(struct work_struct *ws)
 
 	sec_process_ctx_list();
 again:
-	/* go through sec list do gc.
+	/*
+	 * go through sec list do gc.
 	 * FIXME here we iterate through the whole list each time which
 	 * is not optimal. we perhaps want to use balanced binary tree
 	 * to trace each sec as order of expiry time.
@@ -156,7 +157,8 @@ again:
 	 */
 	mutex_lock(&sec_gc_mutex);
 	list_for_each_entry(sec, &sec_gc_list, ps_gc_list) {
-		/* if someone is waiting to be deleted, let it
+		/*
+		 * if someone is waiting to be deleted, let it
 		 * proceed as soon as possible.
 		 */
 		if (atomic_read(&sec_gc_wait_del)) {
