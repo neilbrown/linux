@@ -2311,7 +2311,7 @@ static int kiblnd_dummy_callback(struct rdma_cm_id *cmid,
 	return 0;
 }
 
-static int kiblnd_dev_need_failover(struct kib_dev *dev)
+static int kiblnd_dev_need_failover(struct kib_dev *dev, struct net *ns)
 {
 	struct rdma_cm_id *cmid;
 	struct sockaddr_in srcaddr;
@@ -2335,8 +2335,8 @@ static int kiblnd_dev_need_failover(struct kib_dev *dev)
 	 * a. rdma_bind_addr(), it will conflict with listener cmid
 	 * b. rdma_resolve_addr() to zero addr
 	 */
-	cmid = kiblnd_rdma_create_id(kiblnd_dummy_callback, dev, RDMA_PS_TCP,
-				     IB_QPT_RC);
+	cmid = kiblnd_rdma_create_id(ns, kiblnd_dummy_callback, dev,
+				     RDMA_PS_TCP, IB_QPT_RC);
 	if (IS_ERR(cmid)) {
 		rc = PTR_ERR(cmid);
 		CERROR("Failed to create cmid for failover: %d\n", rc);
@@ -2365,7 +2365,7 @@ static int kiblnd_dev_need_failover(struct kib_dev *dev)
 	return rc;
 }
 
-int kiblnd_dev_failover(struct kib_dev *dev)
+int kiblnd_dev_failover(struct kib_dev *dev, struct net *ns)
 {
 	LIST_HEAD(zombie_tpo);
 	LIST_HEAD(zombie_ppo);
@@ -2382,7 +2382,7 @@ int kiblnd_dev_failover(struct kib_dev *dev)
 	LASSERT(*kiblnd_tunables.kib_dev_failover > 1 ||
 		dev->ibd_can_failover || !dev->ibd_hdev);
 
-	rc = kiblnd_dev_need_failover(dev);
+	rc = kiblnd_dev_need_failover(dev, ns);
 	if (rc <= 0)
 		goto out;
 
@@ -2407,7 +2407,7 @@ int kiblnd_dev_failover(struct kib_dev *dev)
 		rdma_destroy_id(cmid);
 	}
 
-	cmid = kiblnd_rdma_create_id(kiblnd_cm_callback, dev, RDMA_PS_TCP,
+	cmid = kiblnd_rdma_create_id(ns, kiblnd_cm_callback, dev, RDMA_PS_TCP,
 				     IB_QPT_RC);
 	if (IS_ERR(cmid)) {
 		rc = PTR_ERR(cmid);
@@ -2629,7 +2629,7 @@ out:
 		kiblnd_base_shutdown();
 }
 
-static int kiblnd_base_startup(void)
+static int kiblnd_base_startup(struct net *ns)
 {
 	struct kib_sched_info *sched;
 	int rc;
@@ -2694,7 +2694,7 @@ static int kiblnd_base_startup(void)
 	}
 
 	if (*kiblnd_tunables.kib_dev_failover)
-		rc = kiblnd_thread_start(kiblnd_failover_thread, NULL,
+		rc = kiblnd_thread_start(kiblnd_failover_thread, ns,
 					 "kiblnd_failover");
 
 	if (rc) {
@@ -2792,7 +2792,7 @@ static int kiblnd_startup(struct lnet_ni *ni)
 	LASSERT(ni->ni_net->net_lnd == &the_o2iblnd);
 
 	if (kiblnd_data.kib_init == IBLND_INIT_NOTHING) {
-		rc = kiblnd_base_startup();
+		rc = kiblnd_base_startup(ni->ni_net_ns);
 		if (rc)
 			return rc;
 	}
@@ -2830,7 +2830,7 @@ static int kiblnd_startup(struct lnet_ni *ni)
 		goto failed;
 	}
 
-	rc = lnet_inet_enumerate(&ifaces);
+	rc = lnet_inet_enumerate(&ifaces, ni->ni_net_ns);
 	if (rc < 0)
 		goto failed;
 
@@ -2861,7 +2861,7 @@ static int kiblnd_startup(struct lnet_ni *ni)
 	INIT_LIST_HEAD(&ibdev->ibd_fail_list);
 
 	/* initialize the device */
-	rc = kiblnd_dev_failover(ibdev);
+	rc = kiblnd_dev_failover(ibdev, ni->ni_net_ns);
 	if (rc) {
 		CERROR("ko2iblnd: Can't initialize device: rc = %d\n", rc);
 		goto failed;
