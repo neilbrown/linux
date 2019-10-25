@@ -368,6 +368,13 @@ int osc_io_commit_async(const struct lu_env *env,
 }
 EXPORT_SYMBOL(osc_io_commit_async);
 
+static bool osc_import_not_healthy(struct obd_import *imp)
+{
+	return imp->imp_invalid || imp->imp_deactive ||
+	       !(imp->imp_state == LUSTRE_IMP_FULL ||
+		 imp->imp_state == LUSTRE_IMP_IDLE);
+}
+
 int osc_io_iter_init(const struct lu_env *env, const struct cl_io_slice *ios)
 {
 	struct osc_object *osc = cl2osc(ios->cis_obj);
@@ -376,7 +383,14 @@ int osc_io_iter_init(const struct lu_env *env, const struct cl_io_slice *ios)
 	int rc = -EIO;
 
 	spin_lock(&imp->imp_lock);
-	if (likely(!imp->imp_invalid)) {
+	/**
+	 * check whether this OSC device is available for non-delay read,
+	 * fast switching mirror if we haven't tried all mirrors.
+	 */
+	if (ios->cis_io->ci_type == CIT_READ && ios->cis_io->ci_ndelay &&
+	    !ios->cis_io->ci_tried_all_mirrors && osc_import_not_healthy(imp)) {
+		rc = -EWOULDBLOCK;
+	} else if (likely(!imp->imp_invalid)) {
 		atomic_inc(&osc->oo_nr_ios);
 		oio->oi_is_active = 1;
 		rc = 0;
