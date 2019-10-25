@@ -104,7 +104,7 @@ static struct ll_sb_info *ll_init_sbi(void)
 
 	sbi->ll_flags |= LL_SBI_VERBOSE;
 	sbi->ll_flags |= LL_SBI_CHECKSUM;
-
+	sbi->ll_flags |= LL_SBI_FLOCK;
 	sbi->ll_flags |= LL_SBI_LRU_RESIZE;
 	sbi->ll_flags |= LL_SBI_LAZYSTATFS;
 
