@@ -86,6 +86,7 @@ void lustre_swab_lov_user_md_v3(struct lov_user_md_v3 *lum);
 void lustre_swab_lov_comp_md_v1(struct lov_comp_md_v1 *lum);
 void lustre_swab_lov_user_md_objects(struct lov_user_ost_data *lod,
 				     int stripe_count);
+void lustre_swab_lov_user_md(struct lov_user_md *lum);
 void lustre_swab_lov_mds_md(struct lov_mds_md *lmm);
 void lustre_swab_lustre_capa(struct lustre_capa *c);
 void lustre_swab_lustre_capa_key(struct lustre_capa_key *k);

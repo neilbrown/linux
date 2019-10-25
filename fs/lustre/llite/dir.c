@@ -521,60 +521,46 @@ int ll_dir_setstripe(struct inode *inode, struct lov_user_md *lump,
 	int lum_size;
 
 	if (lump) {
-		/*
-		 * This is coming from userspace, so should be in
-		 * local endian.  But the MDS would like it in little
-		 * endian, so we swab it before we send it.
-		 */
 		switch (lump->lmm_magic) {
-		case LOV_USER_MAGIC_V1: {
-			if (lump->lmm_magic != cpu_to_le32(LOV_USER_MAGIC_V1))
-				lustre_swab_lov_user_md_v1(lump);
+		case LOV_USER_MAGIC_V1:
 			lum_size = sizeof(struct lov_user_md_v1);
 			break;
-		}
-		case LOV_USER_MAGIC_V3: {
-			if (lump->lmm_magic != cpu_to_le32(LOV_USER_MAGIC_V3))
-				lustre_swab_lov_user_md_v3((struct lov_user_md_v3 *)lump);
+		case LOV_USER_MAGIC_V3:
 			lum_size = sizeof(struct lov_user_md_v3);
 			break;
-		}
-		case LOV_USER_MAGIC_COMP_V1: {
-			if (lump->lmm_magic !=
-			    cpu_to_le32(LOV_USER_MAGIC_COMP_V1))
-				lustre_swab_lov_comp_md_v1((struct lov_comp_md_v1 *)lump);
-			lum_size = le32_to_cpu(((struct lov_comp_md_v1 *)lump)->lcm_size);
+		case LOV_USER_MAGIC_COMP_V1:
+			lum_size = ((struct lov_comp_md_v1 *)lump)->lcm_size;
 			break;
-		}
-		case LMV_USER_MAGIC: {
+		case LMV_USER_MAGIC:
 			if (lump->lmm_magic != cpu_to_le32(LMV_USER_MAGIC))
 				lustre_swab_lmv_user_md((struct lmv_user_md *)lump);
 			lum_size = sizeof(struct lmv_user_md);
 			break;
-		}
 		case LOV_USER_MAGIC_SPECIFIC: {
 			struct lov_user_md_v3 *v3 =
-					(struct lov_user_md_v3 *)lump;
+				(struct lov_user_md_v3 *)lump;
 			if (v3->lmm_stripe_count > LOV_MAX_STRIPE_COUNT)
 				return -EINVAL;
-			if (lump->lmm_magic !=
-			    cpu_to_le32(LOV_USER_MAGIC_SPECIFIC)) {
-				lustre_swab_lov_user_md_v3(v3);
-				lustre_swab_lov_user_md_objects(v3->lmm_objects,
-						v3->lmm_stripe_count);
-			}
 			lum_size = lov_user_md_size(v3->lmm_stripe_count,
 						    LOV_USER_MAGIC_SPECIFIC);
 			break;
 		}
-		default: {
+		default:
 			CDEBUG(D_IOCTL,
 			       "bad userland LOV MAGIC: %#08x != %#08x nor %#08x\n",
 			       lump->lmm_magic, LOV_USER_MAGIC_V1,
 			       LOV_USER_MAGIC_V3);
 			return -EINVAL;
 		}
-		}
+
+		/*
+		 * This is coming from userspace, so should be in
+		 * local endian.  But the MDS would like it in little
+		 * endian, so we swab it before we send it.
+		 */
+		if ((__swab32(lump->lmm_magic) & le32_to_cpu(LOV_MAGIC_MASK)) ==
+		    le32_to_cpu(LOV_MAGIC_MAGIC))
+			lustre_swab_lov_user_md(lump);
 	} else {
 		lum_size = sizeof(struct lov_user_md_v1);
 	}
@@ -702,16 +688,11 @@ int ll_dir_getstripe(struct inode *inode, void **plmm, int *plmm_size,
 	/* We don't swab objects for directories */
 	switch (le32_to_cpu(lmm->lmm_magic)) {
 	case LOV_MAGIC_V1:
-		if (cpu_to_le32(LOV_MAGIC) != LOV_MAGIC)
-			lustre_swab_lov_user_md_v1((struct lov_user_md_v1 *)lmm);
-		break;
 	case LOV_MAGIC_V3:
-		if (cpu_to_le32(LOV_MAGIC) != LOV_MAGIC)
-			lustre_swab_lov_user_md_v3((struct lov_user_md_v3 *)lmm);
-		break;
 	case LOV_MAGIC_COMP_V1:
+	case LOV_USER_MAGIC_SPECIFIC:
 		if (cpu_to_le32(LOV_MAGIC) != LOV_MAGIC)
-			lustre_swab_lov_comp_md_v1((struct lov_comp_md_v1 *)lmm);
+			lustre_swab_lov_user_md((struct lov_user_md *)lmm);
 		break;
 	case LMV_MAGIC_V1:
 		if (cpu_to_le32(LMV_MAGIC) != LMV_MAGIC)
@@ -720,16 +701,6 @@ int ll_dir_getstripe(struct inode *inode, void **plmm, int *plmm_size,
 	case LMV_USER_MAGIC:
 		if (cpu_to_le32(LMV_USER_MAGIC) != LMV_USER_MAGIC)
 			lustre_swab_lmv_user_md((struct lmv_user_md *)lmm);
-		break;
-	case LOV_USER_MAGIC_SPECIFIC: {
-		struct lov_user_md_v3 *v3 = (struct lov_user_md_v3 *)lmm;
-
-		if (LOV_MAGIC != cpu_to_le32(LOV_MAGIC)) {
-			lustre_swab_lov_user_md_v3(v3);
-			lustre_swab_lov_user_md_objects(v3->lmm_objects,
-							v3->lmm_stripe_count);
-			}
-		}
 		break;
 	case LMV_MAGIC_FOREIGN: {
 		struct lmv_foreign_md *lfm = (struct lmv_foreign_md *)lmm;

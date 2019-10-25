@@ -2730,14 +2730,14 @@ ssize_t ll_copy_user_md(const struct lov_user_md __user *md,
 	if (lum_size < 0)
 		goto no_kbuf;
 
-	*kbuf = kzalloc(lum_size, GFP_NOFS);
+	*kbuf = kvzalloc(lum_size, GFP_NOFS);
 	if (!*kbuf) {
 		lum_size = -ENOMEM;
 		goto no_kbuf;
 	}
 
 	if (copy_from_user(*kbuf, md, lum_size) != 0) {
-		kfree(*kbuf);
+		kvfree(*kbuf);
 		*kbuf = NULL;
 		lum_size = -EFAULT;
 	}
