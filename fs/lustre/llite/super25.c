@@ -222,6 +222,14 @@ static int __init lustre_init(void)
 	if (!ll_file_data_slab)
 		goto out_cache;
 
+	pcc_inode_slab = kmem_cache_create("ll_pcc_inode",
+					   sizeof(struct pcc_inode), 0,
+					   SLAB_HWCACHE_ALIGN, NULL);
+	if (!pcc_inode_slab) {
+		rc = -ENOMEM;
+		goto out_cache;
+	}
+
 	rc = llite_tunables_register();
 	if (rc)
 		goto out_cache;
@@ -258,6 +266,7 @@ out_tunables:
 out_cache:
 	kmem_cache_destroy(ll_inode_cachep);
 	kmem_cache_destroy(ll_file_data_slab);
+	kmem_cache_destroy(pcc_inode_slab);
 	return rc;
 }
 
@@ -278,6 +287,7 @@ static void __exit lustre_exit(void)
 	rcu_barrier();
 	kmem_cache_destroy(ll_inode_cachep);
 	kmem_cache_destroy(ll_file_data_slab);
+	kmem_cache_destroy(pcc_inode_slab);
 }
 
 MODULE_AUTHOR("OpenSFS, Inc. <http://www.lustre.org/>");

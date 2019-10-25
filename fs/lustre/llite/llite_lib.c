@@ -128,6 +128,7 @@ static struct ll_sb_info *ll_init_sbi(void)
 	sbi->ll_squash.rsi_gid = 0;
 	INIT_LIST_HEAD(&sbi->ll_squash.rsi_nosquash_nids);
 	spin_lock_init(&sbi->ll_squash.rsi_lock);
+	pcc_super_init(&sbi->ll_pcc_super);
 
 	/* Per-filesystem file heat */
 	sbi->ll_heat_decay_weight = SBI_DEFAULT_HEAT_DECAY_WEIGHT;
@@ -139,13 +140,12 @@ static void ll_free_sbi(struct super_block *sb)
 {
 	struct ll_sb_info *sbi = ll_s2sbi(sb);
 
+	cfs_free_nidlist(&sbi->ll_squash.rsi_nosquash_nids);
 	if (sbi->ll_cache) {
-		if (!list_empty(&sbi->ll_squash.rsi_nosquash_nids))
-			cfs_free_nidlist(&sbi->ll_squash.rsi_nosquash_nids);
 		cl_cache_decref(sbi->ll_cache);
 		sbi->ll_cache = NULL;
 	}
-
+	pcc_super_fini(&sbi->ll_pcc_super);
 	kfree(sbi);
 }
 
@@ -214,7 +214,8 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
 				   OBD_CONNECT2_FLR |
 				   OBD_CONNECT2_LOCK_CONVERT |
 				   OBD_CONNECT2_LSOM |
-				   OBD_CONNECT2_ASYNC_DISCARD;
+				   OBD_CONNECT2_ASYNC_DISCARD |
+				   OBD_CONNECT2_PCC;
 
 	if (sbi->ll_flags & LL_SBI_LRU_RESIZE)
 		data->ocd_connect_flags |= OBD_CONNECT_LRU_RESIZE;
@@ -942,6 +943,8 @@ void ll_lli_init(struct ll_inode_info *lli)
 		spin_lock_init(&lli->lli_heat_lock);
 		obd_heat_clear(lli->lli_heat_instances, OBD_HEAT_COUNT);
 		lli->lli_heat_flags = 0;
+		mutex_init(&lli->lli_pcc_lock);
+		lli->lli_pcc_inode = NULL;
 	}
 	mutex_init(&lli->lli_layout_mutex);
 	memset(lli->lli_jobid, 0, sizeof(lli->lli_jobid));
@@ -1476,6 +1479,8 @@ void ll_clear_inode(struct inode *inode)
 		LASSERT(!lli->lli_opendir_key);
 		LASSERT(!lli->lli_sai);
 		LASSERT(lli->lli_opendir_pid == 0);
+	} else {
+		pcc_inode_free(inode);
 	}
 
 	md_null_inode(sbi->ll_md_exp, ll_inode2fid(inode));
@@ -1694,15 +1699,28 @@ int ll_setattr_raw(struct dentry *dentry, struct iattr *attr,
 	if (attr->ia_valid & (ATTR_SIZE | ATTR_ATIME | ATTR_ATIME_SET |
 			      ATTR_MTIME | ATTR_MTIME_SET | ATTR_CTIME) ||
 	    xvalid & OP_XVALID_CTIME_SET) {
-		/* For truncate and utimes sending attributes to OSTs, setting
-		 * mtime/atime to the past will be performed under PW [0:EOF]
-		 * extent lock (new_size:EOF for truncate).  It may seem
-		 * excessive to send mtime/atime updates to OSTs when not
-		 * setting times to past, but it is necessary due to possible
-		 * time de-synchronization between MDT inode and OST objects
-		 */
-		rc = cl_setattr_ost(ll_i2info(inode)->lli_clob,
+		bool cached = false;
+
+		rc = pcc_inode_setattr(inode, attr, &cached);
+		if (cached) {
+			if (rc) {
+				CERROR("%s: PCC inode "DFID" setattr failed: rc = %d\n",
+				       ll_i2sbi(inode)->ll_fsname,
+				       PFID(&lli->lli_fid), rc);
+				goto out;
+			}
+		} else {
+			/* For truncate and utimes sending attributes to OSTs,
+			 * setting mtime/atime to the past will be performed
+			 * under PW [0:EOF] extent lock (new_size:EOF for
+			 * truncate). It may seem excessive to send mtime/atime
+			 * updates to OSTs when not setting times to past, but
+			 * it is necessary due to possible time
+			 * de-synchronization between MDT inode and OST objects
+			 */
+			rc = cl_setattr_ost(ll_i2info(inode)->lli_clob,
 				    attr, xvalid, 0);
+		}
 	}
 
 	/*

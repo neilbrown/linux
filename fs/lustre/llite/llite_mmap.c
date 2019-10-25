@@ -504,6 +504,14 @@ int ll_file_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct inode *inode = file_inode(file);
 	int rc;
+	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
+
+	/* pcc cache path */
+	if (pcc_file) {
+		vma->vm_file = pcc_file;
+		return file_inode(pcc_file)->i_fop->mmap(pcc_file, vma);
+	}
 
 	if (ll_file_nolock(file))
 		return -EOPNOTSUPP;
