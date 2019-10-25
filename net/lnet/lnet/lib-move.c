@@ -3822,16 +3822,17 @@ int
 lnet_parse(struct lnet_ni *ni, struct lnet_hdr *hdr, lnet_nid_t from_nid,
 	   void *private, int rdma_req)
 {
-	int rc = 0;
-	int cpt;
-	int for_me;
+	struct lnet_peer_ni *lpni;
 	struct lnet_msg *msg;
+	u32 payload_length;
 	lnet_pid_t dest_pid;
 	lnet_nid_t dest_nid;
 	lnet_nid_t src_nid;
-	struct lnet_peer_ni *lpni;
-	u32 payload_length;
+	bool push = false;
+	int for_me;
 	u32 type;
+	int rc = 0;
+	int cpt;
 
 	LASSERT(!in_interrupt());
 
@@ -3889,10 +3890,15 @@ lnet_parse(struct lnet_ni *ni, struct lnet_hdr *hdr, lnet_nid_t from_nid,
 		lnet_ni_lock(ni);
 		ni->ni_last_alive = ktime_get_real_seconds();
 		if (ni->ni_status &&
-		    ni->ni_status->ns_status == LNET_NI_STATUS_DOWN)
+		    ni->ni_status->ns_status == LNET_NI_STATUS_DOWN) {
 			ni->ni_status->ns_status = LNET_NI_STATUS_UP;
+			push = true;
+		}
 		lnet_ni_unlock(ni);
 	}
+
+	if (push)
+		lnet_push_update_to_peers(1);
 
 	/*
 	 * Regard a bad destination NID as a protocol error.  Senders should
