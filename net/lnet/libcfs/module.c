@@ -792,6 +792,7 @@ static void libcfs_exit(void)
 
 	cfs_cpu_fini();
 
+	/* the below message is checked in test-framework.sh check_mem_leak() */
 	rc = libcfs_debug_cleanup();
 	if (rc)
 		pr_err("LustreError: libcfs_debug_cleanup: %d\n", rc);

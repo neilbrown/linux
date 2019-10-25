@@ -1735,14 +1735,14 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
 	u32 client_cksum = 0;
 
 	if (rc < 0 && rc != -EDQUOT) {
-		DEBUG_REQ(D_INFO, req, "Failed request with rc = %d\n", rc);
+		DEBUG_REQ(D_INFO, req, "Failed request: rc = %d", rc);
 		return rc;
 	}
 
 	LASSERTF(req->rq_repmsg, "rc = %d\n", rc);
 	body = req_capsule_server_get(&req->rq_pill, &RMF_OST_BODY);
 	if (!body) {
-		DEBUG_REQ(D_INFO, req, "Can't unpack body\n");
+		DEBUG_REQ(D_INFO, req, "cannot unpack body");
 		return -EPROTO;
 	}
 
@@ -1772,7 +1772,8 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
 
 	if (lustre_msg_get_opc(req->rq_reqmsg) == OST_WRITE) {
 		if (rc > 0) {
-			CERROR("Unexpected +ve rc %d\n", rc);
+			CERROR("%s: unexpected positive size %d\n",
+			       obd_name, rc);
 			return -EPROTO;
 		}
 		LASSERT(req->rq_bulk->bd_nob == aa->aa_requested_nob);
@@ -1814,7 +1815,7 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
 	}
 
 	if (req->rq_bulk && rc != req->rq_bulk->bd_nob_transferred) {
-		CERROR("Unexpected rc %d (%d transferred)\n",
+		CERROR("%s: unexpected size %d, transferred %d\n", obd_name,
 		       rc, req->rq_bulk->bd_nob_transferred);
 		return -EPROTO;
 	}
@@ -1919,8 +1920,9 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
 
 		cksum_missed++;
 		if ((cksum_missed & (-cksum_missed)) == cksum_missed)
-			CERROR("Checksum %u requested from %s but not sent\n",
-			       cksum_missed, libcfs_nid2str(peer->nid));
+			CERROR("%s checksum %u requested from %s but not sent\n",
+			       obd_name, cksum_missed,
+			       libcfs_nid2str(peer->nid));
 	} else {
 		rc = 0;
 	}
@@ -1939,6 +1941,7 @@ static int osc_brw_redo_request(struct ptlrpc_request *request,
 	struct osc_brw_async_args *new_aa;
 	struct osc_async_page *oap;
 
+	/* The below message is checked in replay-ost-single.sh test_8ae*/
 	DEBUG_REQ(rc == -EINPROGRESS ? D_RPCTRACE : D_ERROR, request,
 		  "redo for recoverable error %d", rc);
 
@@ -2349,7 +2352,7 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	}
 	spin_unlock(&cli->cl_loi_list_lock);
 
-	DEBUG_REQ(D_INODE, req, "%d pages, aa %p. now %ur/%dw in flight",
+	DEBUG_REQ(D_INODE, req, "%d pages, aa %p, now %ur/%dw in flight",
 		  page_count, aa, cli->cl_r_in_flight,
 		  cli->cl_w_in_flight);
 	OBD_FAIL_TIMEOUT(OBD_FAIL_OSC_DELAY_IO, cfs_fail_val);

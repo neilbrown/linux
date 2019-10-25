@@ -384,14 +384,16 @@ static int unpack_reply(struct ptlrpc_request *req)
 	if (SPTLRPC_FLVR_POLICY(req->rq_flvr.sf_rpc) != SPTLRPC_POLICY_NULL) {
 		rc = ptlrpc_unpack_rep_msg(req, req->rq_replen);
 		if (rc) {
-			DEBUG_REQ(D_ERROR, req, "unpack_rep failed: %d", rc);
+			DEBUG_REQ(D_ERROR, req, "unpack_rep failed: rc = %d",
+				  rc);
 			return -EPROTO;
 		}
 	}
 
 	rc = lustre_unpack_rep_ptlrpc_body(req, MSG_PTLRPC_BODY_OFF);
 	if (rc) {
-		DEBUG_REQ(D_ERROR, req, "unpack ptlrpc body failed: %d", rc);
+		DEBUG_REQ(D_ERROR, req, "unpack ptlrpc body failed: rc = %d",
+			  rc);
 		return -EPROTO;
 	}
 	return 0;
@@ -451,6 +453,8 @@ static int ptlrpc_at_recv_early_reply(struct ptlrpc_request *req)
 	req->rq_deadline = req->rq_sent + req->rq_timeout +
 			   ptlrpc_at_get_net_latency(req);
 
+	/* The below message is checked in replay-single.sh test_65{a,b} */
+	/* The below message is checked in sanity-{gss,krb5} test_8 */
 	DEBUG_REQ(D_ADAPTTO, req,
 		  "Early reply #%d, new deadline in %lds (%lds)",
 		  req->rq_early_count,
@@ -1123,18 +1127,18 @@ static int ptlrpc_import_delay_req(struct obd_import *imp,
 	if (req->rq_ctx_init || req->rq_ctx_fini) {
 		/* always allow ctx init/fini rpc go through */
 	} else if (imp->imp_state == LUSTRE_IMP_NEW) {
-		DEBUG_REQ(D_ERROR, req, "Uninitialized import.");
+		DEBUG_REQ(D_ERROR, req, "Uninitialized import");
 		*status = -EIO;
 	} else if (imp->imp_state == LUSTRE_IMP_CLOSED) {
 		/* pings may safely race with umount */
 		DEBUG_REQ(lustre_msg_get_opc(req->rq_reqmsg) == OBD_PING ?
-			  D_HA : D_ERROR, req, "IMP_CLOSED ");
+			  D_HA : D_ERROR, req, "IMP_CLOSED");
 		*status = -EIO;
 	} else if (ptlrpc_send_limit_expired(req)) {
 		/* probably doesn't need to be a D_ERROR after initial
 		 * testing
 		 */
-		DEBUG_REQ(D_HA, req, "send limit expired ");
+		DEBUG_REQ(D_HA, req, "send limit expired");
 		*status = -ETIMEDOUT;
 	} else if (req->rq_send_state == LUSTRE_IMP_CONNECTING &&
 		   imp->imp_state == LUSTRE_IMP_CONNECTING) {
@@ -1164,7 +1168,7 @@ static int ptlrpc_import_delay_req(struct obd_import *imp,
 			   imp->imp_state == LUSTRE_IMP_REPLAY_LOCKS ||
 			   imp->imp_state == LUSTRE_IMP_REPLAY_WAIT ||
 			   imp->imp_state == LUSTRE_IMP_RECOVER)) {
-			DEBUG_REQ(D_HA, req, "allow during recovery.\n");
+			DEBUG_REQ(D_HA, req, "allow during recovery");
 		} else {
 			delay = 1;
 		}
@@ -1218,9 +1222,9 @@ static bool ptlrpc_console_allow(struct ptlrpc_request *req)
  */
 static int ptlrpc_check_status(struct ptlrpc_request *req)
 {
-	int err;
+	int rc;
 
-	err = lustre_msg_get_status(req->rq_repmsg);
+	rc = lustre_msg_get_status(req->rq_repmsg);
 	if (lustre_msg_get_type(req->rq_repmsg) == PTL_RPC_MSG_ERR) {
 		struct obd_import *imp = req->rq_import;
 		lnet_nid_t nid = imp->imp_connection->c_peer.nid;
@@ -1228,22 +1232,19 @@ static int ptlrpc_check_status(struct ptlrpc_request *req)
 
 		/* -EAGAIN is normal when using POSIX flocks */
 		if (ptlrpc_console_allow(req) &&
-		    !(opc == LDLM_ENQUEUE && err == -EAGAIN))
+		    !(opc == LDLM_ENQUEUE && rc == -EAGAIN))
 			LCONSOLE_ERROR_MSG(0x011,
 					   "%s: operation %s to node %s failed: rc = %d\n",
 					   imp->imp_obd->obd_name,
 					   ll_opcode2str(opc),
-					   libcfs_nid2str(nid), err);
-		return err < 0 ? err : -EINVAL;
+					   libcfs_nid2str(nid), rc);
+		return rc < 0 ? rc : -EINVAL;
 	}
 
-	if (err < 0)
-		DEBUG_REQ(D_INFO, req, "status is %d", err);
-	else if (err > 0)
-		/* XXX: translate this error from net to host */
-		DEBUG_REQ(D_INFO, req, "status is %d", err);
+	if (rc)
+		DEBUG_REQ(D_INFO, req, "check status: rc = %d", rc);
 
-	return err;
+	return rc;
 }
 
 /**
@@ -1307,7 +1308,7 @@ static int after_reply(struct ptlrpc_request *req)
 	if (req->rq_reply_truncated) {
 		if (ptlrpc_no_resend(req)) {
 			DEBUG_REQ(D_ERROR, req,
-				  "reply buffer overflow, expected: %d, actual size: %d",
+				  "reply buffer overflow, expected=%d, actual size=%d",
 				  req->rq_nob_received, req->rq_repbuf_len);
 			return -EOVERFLOW;
 		}
@@ -1335,7 +1336,7 @@ static int after_reply(struct ptlrpc_request *req)
 	 */
 	rc = sptlrpc_cli_unwrap_reply(req);
 	if (rc) {
-		DEBUG_REQ(D_ERROR, req, "unwrap reply failed (%d):", rc);
+		DEBUG_REQ(D_ERROR, req, "unwrap reply failed: rc = %d", rc);
 		return rc;
 	}
 
@@ -1352,7 +1353,8 @@ static int after_reply(struct ptlrpc_request *req)
 	    ptlrpc_no_resend(req) == 0 && !req->rq_no_retry_einprogress) {
 		time64_t now = ktime_get_real_seconds();
 
-		DEBUG_REQ(D_RPCTRACE, req, "Resending request on EINPROGRESS");
+		DEBUG_REQ((req->rq_nr_resend % 8 == 1 ? D_WARNING : 0) |
+			  D_RPCTRACE, req, "resending request on EINPROGRESS");
 		spin_lock(&req->rq_lock);
 		req->rq_resend = 1;
 		spin_unlock(&req->rq_lock);
@@ -1594,7 +1596,8 @@ static int ptlrpc_send_new_req(struct ptlrpc_request *req)
 		return rc;
 	}
 	if (rc) {
-		DEBUG_REQ(D_HA, req, "send failed (%d); expect timeout", rc);
+		DEBUG_REQ(D_HA, req, "send failed, expect timeout: rc = %d",
+			  rc);
 		spin_lock(&req->rq_lock);
 		req->rq_net_err = 1;
 		spin_unlock(&req->rq_lock);
@@ -2818,7 +2821,7 @@ static int ptlrpc_replay_interpret(const struct lu_env *env,
 	if (!ptlrpc_client_replied(req) ||
 	    (req->rq_bulk &&
 	     lustre_msg_get_status(req->rq_repmsg) == -ETIMEDOUT)) {
-		DEBUG_REQ(D_ERROR, req, "request replay timed out.\n");
+		DEBUG_REQ(D_ERROR, req, "request replay timed out");
 		rc = -ETIMEDOUT;
 		goto out;
 	}
@@ -2833,7 +2836,7 @@ static int ptlrpc_replay_interpret(const struct lu_env *env,
 	/** VBR: check version failure */
 	if (lustre_msg_get_status(req->rq_repmsg) == -EOVERFLOW) {
 		/** replay was failed due to version mismatch */
-		DEBUG_REQ(D_WARNING, req, "Version mismatch during replay\n");
+		DEBUG_REQ(D_WARNING, req, "Version mismatch during replay");
 		spin_lock(&imp->imp_lock);
 		imp->imp_vbr_failed = 1;
 		spin_unlock(&imp->imp_lock);
@@ -2856,14 +2859,14 @@ static int ptlrpc_replay_interpret(const struct lu_env *env,
 	/* transaction number shouldn't be bigger than the latest replayed */
 	if (req->rq_transno > lustre_msg_get_transno(req->rq_reqmsg)) {
 		DEBUG_REQ(D_ERROR, req,
-			  "Reported transno %llu is bigger than the replayed one: %llu",
+			  "Reported transno=%llu is bigger than replayed=%llu",
 			  req->rq_transno,
 			  lustre_msg_get_transno(req->rq_reqmsg));
 		rc = -EINVAL;
 		goto out;
 	}
 
-	DEBUG_REQ(D_HA, req, "got rep");
+	DEBUG_REQ(D_HA, req, "got reply");
 
 	/* let the callback do fixups, possibly including in the request */
 	if (req->rq_replay_cb)

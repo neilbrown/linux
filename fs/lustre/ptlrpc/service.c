@@ -1072,6 +1072,7 @@ static int ptlrpc_at_send_early_reply(struct ptlrpc_request *req)
 		return 0;
 
 	if (olddl < 0) {
+		/* below message is checked in replay-ost-single.sh test_9 */
 		DEBUG_REQ(D_WARNING, req,
 			  "Already past deadline (%+llds), not sending early reply. Consider increasing at_early_margin (%d)?",
 			  (s64)olddl, at_early_margin);
@@ -1104,7 +1105,8 @@ static int ptlrpc_at_send_early_reply(struct ptlrpc_request *req)
 	 * we may be past adaptive_max
 	 */
 	if (req->rq_deadline >= newdl) {
-		DEBUG_REQ(D_WARNING, req, "Couldn't add any time (%ld/%lld), not sending early reply\n",
+		DEBUG_REQ(D_WARNING, req,
+			  "Could not add any time (%ld/%lld), not sending early reply",
 			  olddl, newdl - ktime_get_real_seconds());
 		return -ETIMEDOUT;
 	}
@@ -1140,10 +1142,10 @@ static int ptlrpc_at_send_early_reply(struct ptlrpc_request *req)
 	}
 
 	LASSERT(atomic_read(&req->rq_refcount));
-	/** if it is last refcount then early reply isn't needed */
+	/* if it is last refcount then early reply isn't needed */
 	if (atomic_read(&req->rq_refcount) == 1) {
 		DEBUG_REQ(D_ADAPTTO, reqcopy,
-			  "Normal reply already sent out, abort sending early reply\n");
+			  "Normal reply already sent, abort early reply");
 		rc = -EINVAL;
 		goto out;
 	}
@@ -1174,7 +1176,7 @@ static int ptlrpc_at_send_early_reply(struct ptlrpc_request *req)
 		req->rq_deadline = newdl;
 		req->rq_early_count++; /* number sent, server side */
 	} else {
-		DEBUG_REQ(D_ERROR, req, "Early reply send failed %d", rc);
+		DEBUG_REQ(D_ERROR, req, "Early reply send failed: rc = %d", rc);
 	}
 
 	/*
@@ -1628,7 +1630,7 @@ static int ptlrpc_server_handle_req_in(struct ptlrpc_service_part *svcpt,
 			rc = sptlrpc_target_export_check(req->rq_export, req);
 			if (rc)
 				DEBUG_REQ(D_ERROR, req,
-					  "DROPPING req with illegal security flavor,");
+					  "DROPPING req with illegal security flavor");
 		}
 
 		if (rc)
@@ -1747,7 +1749,7 @@ static int ptlrpc_server_handle_request(struct ptlrpc_service_part *svcpt,
 	 */
 	if (ktime_get_real_seconds() > request->rq_deadline) {
 		DEBUG_REQ(D_ERROR, request,
-			  "Dropping timed-out request from %s: deadline %lld:%llds ago\n",
+			  "Dropping timed-out request from %s: deadline %lld/%llds ago",
 			  libcfs_id2str(request->rq_peer),
 			  request->rq_deadline -
 			  request->rq_arrival_time.tv_sec,
@@ -1787,7 +1789,7 @@ static int ptlrpc_server_handle_request(struct ptlrpc_service_part *svcpt,
 put_conn:
 	if (unlikely(ktime_get_real_seconds() > request->rq_deadline)) {
 		DEBUG_REQ(D_WARNING, request,
-			  "Request took longer than estimated (%lld:%llds); client may timeout.",
+			  "Request took longer than estimated (%lld/%llds); client may timeout",
 			  (s64)request->rq_deadline -
 			       request->rq_arrival_time.tv_sec,
 			  (s64)ktime_get_real_seconds() - request->rq_deadline);
@@ -2061,12 +2063,14 @@ static void ptlrpc_watchdog_fire(struct work_struct *w)
 	u32 ms_frac = do_div(ms_lapse, MSEC_PER_SEC);
 
 	if (!__ratelimit(&watchdog_limit)) {
+		/* below message is checked in sanity-quota.sh test_6,18 */
 		LCONSOLE_WARN("%s: service thread pid %u was inactive for %llu.%.03u seconds. The thread might be hung, or it might only be slow and will resume later. Dumping the stack trace for debugging purposes:\n",
 			      thread->t_task->comm, thread->t_task->pid,
 			      ms_lapse, ms_frac);
 
 		libcfs_debug_dumpstack(thread->t_task);
 	} else {
+		/* below message is checked in sanity-quota.sh test_6,18 */
 		LCONSOLE_WARN("%s: service thread pid %u was inactive for %llu.%.03u seconds. Watchdog stack traces are limited to 3 per %u seconds, skipping this one.\n",
 			      thread->t_task->comm, thread->t_task->pid,
 			      ms_lapse, ms_frac, libcfs_watchdog_ratelimit);

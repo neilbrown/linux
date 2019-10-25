@@ -198,7 +198,8 @@ static inline void mdc_clear_replay_flag(struct ptlrpc_request *req, int rc)
 		spin_unlock(&req->rq_lock);
 	}
 	if (rc && req->rq_transno != 0) {
-		DEBUG_REQ(D_ERROR, req, "transno returned on error rc %d", rc);
+		DEBUG_REQ(D_ERROR, req, "transno returned on error: rc = %d",
+			  rc);
 		LBUG();
 	}
 }
@@ -687,7 +688,7 @@ static int mdc_finish_enqueue(struct obd_export *exp,
 	    (!it_disposition(it, DISP_OPEN_OPEN) || it->it_status != 0))
 		mdc_clear_replay_flag(req, it->it_status);
 
-	DEBUG_REQ(D_RPCTRACE, req, "op: %d disposition: %x, status: %d",
+	DEBUG_REQ(D_RPCTRACE, req, "op=%d disposition=%x, status=%d",
 		  it->it_op, it->it_disposition, it->it_status);
 
 	/* We know what to expect, so we do any byte flipping required here */
