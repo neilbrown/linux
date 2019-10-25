@@ -2139,11 +2139,14 @@ static int ptlrpc_main(void *arg)
 		rc = -ENOMEM;
 		goto out_srv_fini;
 	}
+	rc = lu_env_add(env);
+	if (rc)
+		goto out_env;
 
 	rc = lu_context_init(&env->le_ctx,
 			     svc->srv_ctx_tags | LCT_REMEMBER | LCT_NOREF);
 	if (rc)
-		goto out_srv_fini;
+		goto out_env_remove;
 
 	thread->t_env = env;
 	env->le_ctx.lc_thread = thread;
@@ -2156,14 +2159,14 @@ static int ptlrpc_main(void *arg)
 
 		CERROR("Failed to post rqbd for %s on CPT %d: %d\n",
 		       svc->srv_name, svcpt->scp_cpt, rc);
-		goto out_srv_fini;
+		goto out_ctx_fini;
 	}
 
 	/* Alloc reply state structure for this one */
 	rs = kvzalloc(svc->srv_max_reply_size, GFP_KERNEL);
 	if (!rs) {
 		rc = -ENOMEM;
-		goto out_srv_fini;
+		goto out_ctx_fini;
 	}
 
 	spin_lock(&svcpt->scp_lock);
@@ -2246,17 +2249,18 @@ static int ptlrpc_main(void *arg)
 
 	ptlrpc_watchdog_disable(&thread->t_watchdog);
 
+out_ctx_fini:
+	lu_context_fini(&env->le_ctx);
+out_env_remove:
+	lu_env_remove(env);
+out_env:
+	kfree(env);
 out_srv_fini:
 	/*
 	 * deconstruct service specific state created by ptlrpc_start_thread()
 	 */
 	if (svc->srv_ops.so_thr_done)
 		svc->srv_ops.so_thr_done(thread);
-
-	if (env) {
-		lu_context_fini(&env->le_ctx);
-		kfree(env);
-	}
 out:
 	CDEBUG(D_RPCTRACE, "service thread [ %p : %u ] %d exiting: rc %d\n",
 	       thread, thread->t_pid, thread->t_id, rc);

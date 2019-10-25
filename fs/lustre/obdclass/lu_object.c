@@ -1859,6 +1859,101 @@ static unsigned long lu_cache_shrink_scan(struct shrinker *sk,
 /**
  * Debugging printer function using printk().
  */
+
+struct lu_env_item {
+	struct task_struct *lei_task;	/* rhashtable key */
+	struct rhash_head lei_linkage;
+	struct lu_env *lei_env;
+};
+
+static const struct rhashtable_params lu_env_rhash_params = {
+	.key_len     = sizeof(struct task_struct *),
+	.key_offset  = offsetof(struct lu_env_item, lei_task),
+	.head_offset = offsetof(struct lu_env_item, lei_linkage),
+};
+
+struct rhashtable lu_env_rhash;
+
+struct lu_env_percpu {
+	struct task_struct *lep_task;
+	struct lu_env *lep_env ____cacheline_aligned_in_smp;
+};
+
+static struct lu_env_percpu lu_env_percpu[NR_CPUS];
+
+int lu_env_add(struct lu_env *env)
+{
+	struct lu_env_item *lei, *old;
+
+	LASSERT(env);
+
+	lei = kzalloc(sizeof(*lei), GFP_NOFS);
+	if (!lei)
+		return -ENOMEM;
+
+	lei->lei_task = current;
+	lei->lei_env = env;
+
+	old = rhashtable_lookup_get_insert_fast(&lu_env_rhash,
+						&lei->lei_linkage,
+						lu_env_rhash_params);
+	LASSERT(!old);
+
+	return 0;
+}
+EXPORT_SYMBOL(lu_env_add);
+
+void lu_env_remove(struct lu_env *env)
+{
+	struct lu_env_item *lei;
+	const void *task = current;
+	int i;
+
+	for_each_possible_cpu(i) {
+		if (lu_env_percpu[i].lep_env == env) {
+			LASSERT(lu_env_percpu[i].lep_task == task);
+			lu_env_percpu[i].lep_task = NULL;
+			lu_env_percpu[i].lep_env = NULL;
+		}
+	}
+
+	rcu_read_lock();
+	lei = rhashtable_lookup_fast(&lu_env_rhash, &task,
+				     lu_env_rhash_params);
+	if (lei && rhashtable_remove_fast(&lu_env_rhash, &lei->lei_linkage,
+					  lu_env_rhash_params) == 0)
+		kfree(lei);
+	rcu_read_unlock();
+}
+EXPORT_SYMBOL(lu_env_remove);
+
+struct lu_env *lu_env_find(void)
+{
+	struct lu_env *env = NULL;
+	struct lu_env_item *lei;
+	const void *task = current;
+	int i = get_cpu();
+
+	if (lu_env_percpu[i].lep_task == current) {
+		env = lu_env_percpu[i].lep_env;
+		put_cpu();
+		LASSERT(env);
+		return env;
+	}
+
+	lei = rhashtable_lookup_fast(&lu_env_rhash, &task,
+				     lu_env_rhash_params);
+	if (lei) {
+		env = lei->lei_env;
+		lu_env_percpu[i].lep_task = current;
+		lu_env_percpu[i].lep_env = env;
+	}
+	put_cpu();
+
+	return env;
+}
+EXPORT_SYMBOL(lu_env_find);
+
 static struct shrinker lu_site_shrinker = {
 	.count_objects		= lu_cache_shrink_count,
 	.scan_objects		= lu_cache_shrink_scan,
@@ -1905,6 +2000,11 @@ int lu_global_init(void)
 	 * lu_object/inode cache consuming all the memory.
 	 */
 	result = register_shrinker(&lu_site_shrinker);
+	if (result == 0) {
+		result = rhashtable_init(&lu_env_rhash, &lu_env_rhash_params);
+		if (result != 0)
+			unregister_shrinker(&lu_site_shrinker);
+	}
 	if (result != 0) {
 		/* Order explained in lu_global_fini(). */
 		lu_context_key_degister(&lu_global_key);
@@ -1917,7 +2017,7 @@ int lu_global_init(void)
 		return result;
 	}
 
-	return 0;
+	return result;
 }
 
 /**
@@ -1935,6 +2035,8 @@ void lu_global_fini(void)
 	down_write(&lu_sites_guard);
 	lu_env_fini(&lu_shrink_env);
 	up_write(&lu_sites_guard);
+
+	rhashtable_destroy(&lu_env_rhash);
 
 	lu_ref_global_fini();
 }

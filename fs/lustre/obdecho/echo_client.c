@@ -1506,6 +1506,7 @@ echo_client_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 		rc = -ENOMEM;
 		goto out;
 	}
+	lu_env_add(env);
 
 	switch (cmd) {
 	case OBD_IOC_CREATE:		/* may create echo object */
@@ -1572,6 +1573,7 @@ echo_client_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 	}
 
 out:
+	lu_env_remove(env);
 	lu_env_fini(env);
 	kfree(env);
 

@@ -284,7 +284,7 @@ typedef int (*ldlm_cancel_cbt)(struct ldlm_lock *lock);
 struct ldlm_valblock_ops {
 	int (*lvbo_init)(struct ldlm_resource *res);
 	int (*lvbo_update)(struct ldlm_resource *res, struct ldlm_lock *lock,
-			   struct ptlrpc_request *r,  int increase);
+			   struct ptlrpc_request *r, int increase);
 	int (*lvbo_free)(struct ldlm_resource *res);
 	/* Return size of lvb data appropriate RPC size can be reserved */
 	int (*lvbo_size)(struct ldlm_lock *lock);

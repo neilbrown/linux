@@ -846,8 +846,20 @@ static int ldlm_bl_thread_blwi(struct ldlm_bl_pool *blp,
  */
 static int ldlm_bl_thread_main(void *arg)
 {
+	struct lu_env *env;
 	struct ldlm_bl_pool *blp;
 	struct ldlm_bl_thread_data *bltd = arg;
+	int rc;
+
+	env = kzalloc(sizeof(*env), GFP_NOFS);
+	if (!env)
+		return -ENOMEM;
+	rc = lu_env_init(env, LCT_DT_THREAD);
+	if (rc)
+		goto out_env;
+	rc = lu_env_add(env);
+	if (rc)
+		goto out_env_fini;
 
 	blp = bltd->bltd_blp;
 
@@ -888,7 +900,13 @@ static int ldlm_bl_thread_main(void *arg)
 
 	atomic_dec(&blp->blp_num_threads);
 	complete(&blp->blp_comp);
-	return 0;
+
+	lu_env_remove(env);
+out_env_fini:
+	lu_env_fini(env);
+out_env:
+	kfree(env);
+	return rc;
 }
 
 static int ldlm_setup(void);
