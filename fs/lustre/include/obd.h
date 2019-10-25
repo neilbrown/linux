@@ -442,11 +442,10 @@ struct lmv_obd {
 	int			connected;
 	int			max_easize;
 	int			max_def_easize;
+	u32			lmv_statfs_start;
 
 	u32			tgts_size; /* size of tgts array */
 	struct lmv_tgt_desc	**tgts;
-	int			lmv_statfs_start;
-
 
 	struct obd_connect_data	conn_data;
 	struct kobject		*lmv_tgts_kobj;
