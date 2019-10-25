@@ -64,7 +64,8 @@ void lmv_activate_target(struct lmv_obd *lmv, struct lmv_tgt_desc *tgt,
 		return;
 
 	tgt->ltd_active = activate;
-	lmv->desc.ld_active_tgt_count += (activate ? 1 : -1);
+	lmv->lmv_mdt_descs.ltd_lmv_desc.ld_active_tgt_count +=
+		(activate ? 1 : -1);
 	tgt->ltd_exp->exp_obd->obd_inactive = !activate;
 }
 
@@ -330,11 +331,11 @@ static int lmv_connect_mdc(struct obd_device *obd, struct lmv_tgt_desc *tgt)
 
 	tgt->ltd_active = 1;
 	tgt->ltd_exp = mdc_exp;
-	lmv->desc.ld_active_tgt_count++;
+	lmv->lmv_mdt_descs.ltd_lmv_desc.ld_active_tgt_count++;
 
 	md_init_ea_size(tgt->ltd_exp, lmv->max_easize, lmv->max_def_easize);
 
-	rc = lqos_add_tgt(&lmv->lmv_qos, tgt);
+	rc = lu_qos_add_tgt(&lmv->lmv_qos, tgt);
 	if (rc) {
 		obd_disconnect(mdc_exp);
 		return rc;
@@ -357,8 +358,7 @@ static int lmv_connect_mdc(struct obd_device *obd, struct lmv_tgt_desc *tgt)
 static void lmv_del_target(struct lmv_obd *lmv, struct lu_tgt_desc *tgt)
 {
 	LASSERT(tgt);
-	lqos_del_tgt(&lmv->lmv_qos, tgt);
-	lu_tgt_descs_del(&lmv->lmv_mdt_descs, tgt);
+	ltd_del_tgt(&lmv->lmv_mdt_descs, tgt);
 	kfree(tgt);
 }
 
@@ -369,7 +369,6 @@ static int lmv_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
 	struct lmv_obd *lmv = &obd->u.lmv;
 	struct lmv_tgt_desc *tgt;
 	struct lu_tgt_descs *ltd = &lmv->lmv_mdt_descs;
-	int orig_tgt_count = 0;
 	int rc = 0;
 
 	CDEBUG(D_CONFIG, "Target uuid: %s. index %d\n", uuidp->uuid, index);
@@ -392,11 +391,7 @@ static int lmv_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
 	tgt->ltd_active = 0;
 
 	mutex_lock(&ltd->ltd_mutex);
-	rc = lu_tgt_descs_add(ltd, tgt);
-	if (!rc && index >= lmv->desc.ld_tgt_count) {
-		orig_tgt_count = lmv->desc.ld_tgt_count;
-		lmv->desc.ld_tgt_count = index + 1;
-	}
+	rc = ltd_add_tgt(ltd, tgt);
 	mutex_unlock(&ltd->ltd_mutex);
 
 	if (rc)
@@ -407,14 +402,10 @@ static int lmv_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
 		return rc;
 
 	rc = lmv_connect_mdc(obd, tgt);
-	if (rc) {
-		mutex_lock(&ltd->ltd_mutex);
-		lmv->desc.ld_tgt_count = orig_tgt_count;
-		memset(tgt, 0, sizeof(*tgt));
-		mutex_unlock(&ltd->ltd_mutex);
-	} else {
+	if (!rc) {
 		int easize = sizeof(struct lmv_stripe_md) +
-			     lmv->desc.ld_tgt_count * sizeof(struct lu_fid);
+			     lmv->lmv_mdt_count * sizeof(struct lu_fid);
+
 		lmv_init_ea_size(obd->obd_self_export, easize, 0);
 	}
 
@@ -441,7 +432,7 @@ static int lmv_check_connect(struct obd_device *obd)
 		goto unlock;
 	}
 
-	if (lmv->desc.ld_tgt_count == 0) {
+	if (!lmv->lmv_mdt_count) {
 		CERROR("%s: no targets configured: rc = -EINVAL\n",
 		       obd->obd_name);
 		rc = -EINVAL;
@@ -465,7 +456,7 @@ static int lmv_check_connect(struct obd_device *obd)
 	}
 
 	lmv->connected = 1;
-	easize = lmv_mds_md_size(lmv->desc.ld_tgt_count, LMV_MAGIC);
+	easize = lmv_mds_md_size(lmv->lmv_mdt_count, LMV_MAGIC);
 	lmv_init_ea_size(obd->obd_self_export, easize, 0);
 unlock:
 	mutex_unlock(&lmv->lmv_mdt_descs.ltd_mutex);
@@ -478,7 +469,7 @@ out_disc:
 		if (!tgt->ltd_exp)
 			continue;
 
-		--lmv->desc.ld_active_tgt_count;
+		--lmv->lmv_mdt_descs.ltd_lmv_desc.ld_active_tgt_count;
 		obd_disconnect(tgt->ltd_exp);
 	}
 
@@ -790,7 +781,7 @@ static int lmv_iocontrol(unsigned int cmd, struct obd_export *exp,
 	struct lmv_obd *lmv = &obddev->u.lmv;
 	struct lu_tgt_desc *tgt = NULL;
 	int set = 0;
-	u32 count = lmv->desc.ld_tgt_count;
+	u32 count = lmv->lmv_mdt_count;
 	int rc = 0;
 
 	if (count == 0)
@@ -804,7 +795,8 @@ static int lmv_iocontrol(unsigned int cmd, struct obd_export *exp,
 		u32 index;
 
 		memcpy(&index, data->ioc_inlbuf2, sizeof(u32));
-		if (index >= count)
+
+		if (index >= lmv->lmv_mdt_descs.ltd_tgts_size)
 			return -ENODEV;
 
 		tgt = lmv_tgt(lmv, index);
@@ -837,12 +829,7 @@ static int lmv_iocontrol(unsigned int cmd, struct obd_export *exp,
 		struct obd_quotactl *oqctl;
 
 		if (qctl->qc_valid == QC_MDTIDX) {
-			if (count <= qctl->qc_idx)
-				return -EINVAL;
-
 			tgt = lmv_tgt(lmv, qctl->qc_idx);
-			if (!tgt || !tgt->ltd_exp)
-				return -EINVAL;
 		} else if (qctl->qc_valid == QC_UUID) {
 			lmv_foreach_tgt(lmv, tgt) {
 				if (!obd_uuid_equals(&tgt->ltd_uuid,
@@ -858,10 +845,9 @@ static int lmv_iocontrol(unsigned int cmd, struct obd_export *exp,
 			return -EINVAL;
 		}
 
-		if (tgt->ltd_index >= count)
-			return -EAGAIN;
+		if (!tgt || !tgt->ltd_exp)
+			return -EINVAL;
 
-		LASSERT(tgt && tgt->ltd_exp);
 		oqctl = kzalloc(sizeof(*oqctl), GFP_KERNEL);
 		if (!oqctl)
 			return -ENOMEM;
@@ -1049,7 +1035,7 @@ static u32 lmv_placement_policy(struct obd_device *obd,
 	struct lmv_user_md *lum;
 	u32 mdt;
 
-	if (lmv->desc.ld_tgt_count == 1)
+	if (lmv->lmv_mdt_count == 1)
 		return 0;
 
 	lum = op_data->op_data;
@@ -1162,26 +1148,16 @@ static int lmv_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
 		return -EINVAL;
 	}
 
-	obd_str2uuid(&lmv->desc.ld_uuid, desc->ld_uuid.uuid);
-	lmv->desc.ld_tgt_count = 0;
-	lmv->desc.ld_active_tgt_count = 0;
-	lmv->desc.ld_qos_maxage = LMV_DESC_QOS_MAXAGE_DEFAULT;
+	obd_str2uuid(&lmv->lmv_mdt_descs.ltd_lmv_desc.ld_uuid,
+		     desc->ld_uuid.uuid);
+	lmv->lmv_mdt_descs.ltd_lmv_desc.ld_tgt_count = 0;
+	lmv->lmv_mdt_descs.ltd_lmv_desc.ld_active_tgt_count = 0;
+	lmv->lmv_mdt_descs.ltd_lmv_desc.ld_qos_maxage =
+		LMV_DESC_QOS_MAXAGE_DEFAULT;
 	lmv->max_def_easize = 0;
 	lmv->max_easize = 0;
 
 	spin_lock_init(&lmv->lmv_lock);
-
-	/* Set up allocation policy (QoS and RR) */
-	INIT_LIST_HEAD(&lmv->lmv_qos.lq_svr_list);
-	init_rwsem(&lmv->lmv_qos.lq_rw_sem);
-	lmv->lmv_qos.lq_dirty = 1;
-	lmv->lmv_qos.lq_reset = 1;
-	/* Default priority is toward free space balance */
-	lmv->lmv_qos.lq_prio_free = 232;
-	/* Default threshold for rr (roughly 17%) */
-	lmv->lmv_qos.lq_threshold_rr = 43;
-
-	lu_qos_rr_init(&lmv->lmv_qos.lq_rr);
 
 	/*
 	 * initialize rr_index to lower 32bit of netid, so that client
@@ -1204,7 +1180,7 @@ static int lmv_setup(struct obd_device *obd, struct lustre_cfg *lcfg)
 	if (rc)
 		CERROR("Can't init FLD, err %d\n", rc);
 
-	rc = lu_tgt_descs_init(&lmv->lmv_mdt_descs);
+	rc = lu_tgt_descs_init(&lmv->lmv_mdt_descs, true);
 	if (rc)
 		CWARN("%s: error initialize target table: rc = %d\n",
 		      obd->obd_name, rc);
@@ -1273,7 +1249,7 @@ static int lmv_select_statfs_mdt(struct lmv_obd *lmv, u32 flags)
 	if (flags & OBD_STATFS_FOR_MDT0)
 		return 0;
 
-	if (lmv->lmv_statfs_start || lmv->desc.ld_tgt_count == 1)
+	if (lmv->lmv_statfs_start || lmv->lmv_mdt_count == 1)
 		return lmv->lmv_statfs_start;
 
 	/* choose initial MDT for this client */
@@ -1287,8 +1263,8 @@ static int lmv_select_statfs_mdt(struct lmv_obd *lmv, u32 flags)
 			/* We dont need a full 64-bit modulus, just enough
 			 * to distribute the requests across MDTs evenly.
 			 */
-			lmv->lmv_statfs_start =
-				(u32)lnet_id.nid % lmv->desc.ld_tgt_count;
+			lmv->lmv_statfs_start = (u32)lnet_id.nid %
+						lmv->lmv_mdt_count;
 			break;
 		}
 	}
@@ -1314,8 +1290,8 @@ static int lmv_statfs(const struct lu_env *env, struct obd_export *exp,
 	/* distribute statfs among MDTs */
 	idx = lmv_select_statfs_mdt(lmv, flags);
 
-	for (i = 0; i < lmv->desc.ld_tgt_count; i++, idx++) {
-		idx = idx % lmv->desc.ld_tgt_count;
+	for (i = 0; i < lmv->lmv_mdt_descs.ltd_tgts_size; i++, idx++) {
+		idx = idx % lmv->lmv_mdt_descs.ltd_tgts_size;
 		tgt = lmv_tgt(lmv, idx);
 		if (!tgt || !tgt->ltd_exp)
 			continue;
@@ -1391,7 +1367,7 @@ int lmv_statfs_check_update(struct obd_device *obd, struct lmv_tgt_desc *tgt)
 	int rc;
 
 	if (ktime_get_seconds() - tgt->ltd_statfs_age <
-	    obd->u.lmv.desc.ld_qos_maxage)
+	    obd->u.lmv.lmv_mdt_descs.ltd_lmv_desc.ld_qos_maxage)
 		return 0;
 
 	rc = obd_statfs_async(tgt->ltd_exp, &oinfo, 0, NULL);
@@ -1507,19 +1483,17 @@ static struct lu_tgt_desc *lmv_locate_tgt_qos(struct lmv_obd *lmv, u32 *mdt)
 	u64 rand;
 	int rc;
 
-	if (!lqos_is_usable(&lmv->lmv_qos, lmv->desc.ld_active_tgt_count))
+	if (!ltd_qos_is_usable(&lmv->lmv_mdt_descs))
 		return ERR_PTR(-EAGAIN);
 
 	down_write(&lmv->lmv_qos.lq_rw_sem);
 
-	if (!lqos_is_usable(&lmv->lmv_qos, lmv->desc.ld_active_tgt_count)) {
+	if (!ltd_qos_is_usable(&lmv->lmv_mdt_descs)) {
 		tgt = ERR_PTR(-EAGAIN);
 		goto unlock;
 	}
 
-	rc = lqos_calc_penalties(&lmv->lmv_qos, &lmv->lmv_mdt_descs,
-				 lmv->desc.ld_active_tgt_count,
-				 lmv->desc.ld_qos_maxage, true);
+	rc = ltd_qos_penalties_calc(&lmv->lmv_mdt_descs);
 	if (rc) {
 		tgt = ERR_PTR(rc);
 		goto unlock;
@@ -1531,7 +1505,7 @@ static struct lu_tgt_desc *lmv_locate_tgt_qos(struct lmv_obd *lmv, u32 *mdt)
 			continue;
 
 		tgt->ltd_qos.ltq_usable = 1;
-		lqos_calc_weight(tgt);
+		lu_tgt_qos_weight_calc(tgt);
 		total_weight += tgt->ltd_qos.ltq_weight;
 	}
 
@@ -1546,9 +1520,7 @@ static struct lu_tgt_desc *lmv_locate_tgt_qos(struct lmv_obd *lmv, u32 *mdt)
 			continue;
 
 		*mdt = tgt->ltd_index;
-		lqos_recalc_weight(&lmv->lmv_qos, &lmv->lmv_mdt_descs, tgt,
-				   lmv->desc.ld_active_tgt_count,
-				   &total_weight);
+		ltd_qos_update(&lmv->lmv_mdt_descs, tgt, &total_weight);
 		rc = 0;
 		goto unlock;
 	}
@@ -1569,14 +1541,16 @@ static struct lu_tgt_desc *lmv_locate_tgt_rr(struct lmv_obd *lmv, u32 *mdt)
 	int index;
 
 	spin_lock(&lmv->lmv_qos.lq_rr.lqr_alloc);
-	for (i = 0; i < lmv->desc.ld_tgt_count; i++) {
-		index = (i + lmv->lmv_qos_rr_index) % lmv->desc.ld_tgt_count;
+	for (i = 0; i < lmv->lmv_mdt_descs.ltd_tgts_size; i++) {
+		index = (i + lmv->lmv_qos_rr_index) %
+			lmv->lmv_mdt_descs.ltd_tgts_size;
 		tgt = lmv_tgt(lmv, index);
 		if (!tgt || !tgt->ltd_exp || !tgt->ltd_active)
 			continue;
 
 		*mdt = tgt->ltd_index;
-		lmv->lmv_qos_rr_index = (*mdt + 1) % lmv->desc.ld_tgt_count;
+		lmv->lmv_qos_rr_index = (*mdt + 1) %
+					lmv->lmv_mdt_descs.ltd_tgts_size;
 		spin_unlock(&lmv->lmv_qos.lq_rr.lqr_alloc);
 
 		return tgt;
@@ -1774,7 +1748,7 @@ int lmv_create(struct obd_export *exp, struct md_op_data *op_data,
 	struct lmv_tgt_desc *tgt;
 	int rc;
 
-	if (!lmv->desc.ld_active_tgt_count)
+	if (!lmv->lmv_mdt_descs.ltd_lmv_desc.ld_active_tgt_count)
 		return -EIO;
 
 	if (lmv_dir_bad_hash(op_data->op_mea1))
@@ -2885,7 +2859,7 @@ static int lmv_get_info(const struct lu_env *env, struct obd_export *exp,
 			exp->exp_connect_data = *(struct obd_connect_data *)val;
 		return rc;
 	} else if (KEY_IS(KEY_TGT_COUNT)) {
-		*((int *)val) = lmv->desc.ld_tgt_count;
+		*((int *)val) = lmv->lmv_mdt_descs.ltd_tgts_size;
 		return 0;
 	}
 
@@ -2899,7 +2873,7 @@ static int lmv_rmfid(struct obd_export *exp, struct fid_array *fa,
 	struct obd_device *obddev = class_exp2obd(exp);
 	struct ptlrpc_request_set *set = _set;
 	struct lmv_obd *lmv = &obddev->u.lmv;
-	int tgt_count = lmv->desc.ld_tgt_count;
+	int tgt_count = lmv->lmv_mdt_count;
 	struct lu_tgt_desc *tgt;
 	struct fid_array *fat, **fas = NULL;
 	int i, rc, **rcs = NULL;
@@ -3280,8 +3254,8 @@ static enum ldlm_mode lmv_lock_match(struct obd_export *exp, u64 flags,
 	 * since this can be easily found, and only try others if that fails.
 	 */
 	for (i = 0, index = lmv_fid2tgt_index(lmv, fid);
-	     i < lmv->desc.ld_tgt_count;
-	     i++, index = (index + 1) % lmv->desc.ld_tgt_count) {
+	     i < lmv->lmv_mdt_descs.ltd_tgts_size;
+	     i++, index = (index + 1) % lmv->lmv_mdt_descs.ltd_tgts_size) {
 		if (index < 0) {
 			CDEBUG(D_HA, "%s: " DFID " is inaccessible: rc = %d\n",
 			       obd->obd_name, PFID(fid), index);

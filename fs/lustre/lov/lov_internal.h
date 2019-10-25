@@ -221,7 +221,7 @@ void lsm_free(struct lov_stripe_md *lsm);
 
 struct pool_desc {
 	char			 pool_name[LOV_MAXPOOLNAME + 1];
-	struct ost_pool		 pool_obds;
+	struct lu_tgt_pool	 pool_obds;
 	atomic_t		 pool_refcount;
 	struct rhash_head	 pool_hash;		/* access by poolname */
 	union {
@@ -322,12 +322,12 @@ extern struct lu_device_type lov_device_type;
 
 #define LOV_MDC_TGT_MAX 256
 
-/* ost_pool methods */
-int lov_ost_pool_init(struct ost_pool *op, unsigned int count);
-int lov_ost_pool_extend(struct ost_pool *op, unsigned int min_count);
-int lov_ost_pool_add(struct ost_pool *op, u32 idx, unsigned int min_count);
-int lov_ost_pool_remove(struct ost_pool *op, u32 idx);
-int lov_ost_pool_free(struct ost_pool *op);
+/* lu_tgt_pool methods */
+int lov_ost_pool_init(struct lu_tgt_pool *op, unsigned int count);
+int lov_ost_pool_extend(struct lu_tgt_pool *op, unsigned int min_count);
+int lov_ost_pool_add(struct lu_tgt_pool *op, u32 idx, unsigned int min_count);
+int lov_ost_pool_remove(struct lu_tgt_pool *op, u32 idx);
+int lov_ost_pool_free(struct lu_tgt_pool *op);
 
 /* high level pool methods */
 int lov_pool_new(struct obd_device *obd, char *poolname);

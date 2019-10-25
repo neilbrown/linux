@@ -231,7 +231,7 @@ static const struct file_operations pool_proc_operations = {
 };
 
 #define LOV_POOL_INIT_COUNT 2
-int lov_ost_pool_init(struct ost_pool *op, unsigned int count)
+int lov_ost_pool_init(struct lu_tgt_pool *op, unsigned int count)
 {
 	if (count == 0)
 		count = LOV_POOL_INIT_COUNT;
@@ -249,7 +249,7 @@ int lov_ost_pool_init(struct ost_pool *op, unsigned int count)
 }
 
 /* Caller must hold write op_rwlock */
-int lov_ost_pool_extend(struct ost_pool *op, unsigned int min_count)
+int lov_ost_pool_extend(struct lu_tgt_pool *op, unsigned int min_count)
 {
 	int new_count;
 	u32 *new;
@@ -273,7 +273,7 @@ int lov_ost_pool_extend(struct ost_pool *op, unsigned int min_count)
 	return 0;
 }
 
-int lov_ost_pool_add(struct ost_pool *op, u32 idx, unsigned int min_count)
+int lov_ost_pool_add(struct lu_tgt_pool *op, u32 idx, unsigned int min_count)
 {
 	int rc = 0, i;
 
@@ -298,7 +298,7 @@ out:
 	return rc;
 }
 
-int lov_ost_pool_remove(struct ost_pool *op, u32 idx)
+int lov_ost_pool_remove(struct lu_tgt_pool *op, u32 idx)
 {
 	int i;
 
@@ -318,7 +318,7 @@ int lov_ost_pool_remove(struct ost_pool *op, u32 idx)
 	return -EINVAL;
 }
 
-int lov_ost_pool_free(struct ost_pool *op)
+int lov_ost_pool_free(struct lu_tgt_pool *op)
 {
 	if (op->op_size == 0)
 		return 0;
