@@ -157,7 +157,7 @@ int lov_connect_osc(struct obd_device *obd, u32 index, int activate,
 		/* FIXME this is probably supposed to be
 		 * ptlrpc_set_import_active.  Horrible naming.
 		 */
-		ptlrpc_activate_import(imp);
+		ptlrpc_activate_import(imp, false);
 	}
 
 	rc = obd_register_observer(tgt_obd, obd);

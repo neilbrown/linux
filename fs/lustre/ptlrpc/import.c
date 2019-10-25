@@ -143,6 +143,17 @@ static void deuuidify(char *uuid, const char *prefix, char **uuid_start,
 		*uuid_len -= strlen(UUID_STR);
 }
 
+/* Must be called with imp_lock held! */
+static void ptlrpc_deactivate_import_nolock(struct obd_import *imp)
+{
+	assert_spin_locked(&imp->imp_lock);
+	CDEBUG(D_HA, "setting import %s INVALID\n", obd2cli_tgt(imp->imp_obd));
+	imp->imp_invalid = 1;
+	imp->imp_generation++;
+
+	ptlrpc_abort_inflight(imp);
+}
+
 /**
  * Returns true if import was FULL, false if import was already not
  * connected.
@@ -153,8 +164,10 @@ static void deuuidify(char *uuid, const char *prefix, char **uuid_start,
  *	     bulk requests) and if one has already caused a reconnection
  *	     (increasing the import->conn_cnt) the older failure should
  *	     not also cause a reconnection.  If zero it forces a reconnect.
+ * @invalid - set import invalid flag
  */
-int ptlrpc_set_import_discon(struct obd_import *imp, u32 conn_cnt)
+int ptlrpc_set_import_discon(struct obd_import *imp,
+			     u32 conn_cnt, bool invalid)
 {
 	int rc = 0;
 
@@ -164,10 +177,12 @@ int ptlrpc_set_import_discon(struct obd_import *imp, u32 conn_cnt)
 	    (conn_cnt == 0 || conn_cnt == imp->imp_conn_cnt)) {
 		char *target_start;
 		int   target_len;
+		bool  inact = false;
 
 		deuuidify(obd2cli_tgt(imp->imp_obd), NULL,
 			  &target_start, &target_len);
 
+		import_set_state_nolock(imp, LUSTRE_IMP_DISCON);
 		if (imp->imp_replayable) {
 			LCONSOLE_WARN("%s: Connection to %.*s (at %s) was lost; in progress operations using this service will wait for recovery to complete\n",
 				      imp->imp_obd->obd_name,
@@ -179,14 +194,25 @@ int ptlrpc_set_import_discon(struct obd_import *imp, u32 conn_cnt)
 					   imp->imp_obd->obd_name,
 					   target_len, target_start,
 					   obd_import_nid2str(imp));
+			if (invalid) {
+				CDEBUG(D_HA,
+				       "import %s@%s for %s not replayable, auto-deactivating\n",
+				       obd2cli_tgt(imp->imp_obd),
+				       imp->imp_connection->c_remote_uuid.uuid,
+				       imp->imp_obd->obd_name);
+				ptlrpc_deactivate_import_nolock(imp);
+				inact = true;
+			}
 		}
-		import_set_state_nolock(imp, LUSTRE_IMP_DISCON);
 		spin_unlock(&imp->imp_lock);
 
 		if (obd_dump_on_timeout)
 			libcfs_debug_dumplog();
 
 		obd_import_event(imp->imp_obd, imp, IMP_EVENT_DISCON);
+
+		if (inact)
+			obd_import_event(imp->imp_obd, imp, IMP_EVENT_INACTIVE);
 		rc = 1;
 	} else {
 		spin_unlock(&imp->imp_lock);
@@ -210,11 +236,9 @@ void ptlrpc_deactivate_import(struct obd_import *imp)
 	CDEBUG(D_HA, "setting import %s INVALID\n", obd2cli_tgt(imp->imp_obd));
 
 	spin_lock(&imp->imp_lock);
-	imp->imp_invalid = 1;
-	imp->imp_generation++;
+	ptlrpc_deactivate_import_nolock(imp);
 	spin_unlock(&imp->imp_lock);
 
-	ptlrpc_abort_inflight(imp);
 	obd_import_event(imp->imp_obd, imp, IMP_EVENT_INACTIVE);
 }
 EXPORT_SYMBOL(ptlrpc_deactivate_import);
@@ -378,17 +402,23 @@ void ptlrpc_invalidate_import(struct obd_import *imp)
 EXPORT_SYMBOL(ptlrpc_invalidate_import);
 
 /* unset imp_invalid */
-void ptlrpc_activate_import(struct obd_import *imp)
+void ptlrpc_activate_import(struct obd_import *imp, bool set_state_full)
 {
 	struct obd_device *obd = imp->imp_obd;
 
 	spin_lock(&imp->imp_lock);
 	if (imp->imp_deactive != 0) {
+		LASSERT(imp->imp_state != LUSTRE_IMP_FULL);
+		if (imp->imp_state != LUSTRE_IMP_DISCON)
+			import_set_state_nolock(imp, LUSTRE_IMP_DISCON);
 		spin_unlock(&imp->imp_lock);
 		return;
 	}
+	if (set_state_full)
+		import_set_state_nolock(imp, LUSTRE_IMP_FULL);
 
 	imp->imp_invalid = 0;
+
 	spin_unlock(&imp->imp_lock);
 	obd_import_event(obd, imp, IMP_EVENT_ACTIVE);
 }
@@ -412,18 +442,9 @@ void ptlrpc_fail_import(struct obd_import *imp, u32 conn_cnt)
 {
 	LASSERT(!imp->imp_dlm_fake);
 
-	if (ptlrpc_set_import_discon(imp, conn_cnt)) {
-		if (!imp->imp_replayable) {
-			CDEBUG(D_HA,
-			       "import %s@%s for %s not replayable, auto-deactivating\n",
-			       obd2cli_tgt(imp->imp_obd),
-			       imp->imp_connection->c_remote_uuid.uuid,
-			       imp->imp_obd->obd_name);
-			ptlrpc_deactivate_import(imp);
-		}
-
+	if (ptlrpc_set_import_discon(imp, conn_cnt, true))
 		ptlrpc_pinger_force(imp);
-	}
+
 }
 
 int ptlrpc_reconnect_import(struct obd_import *imp)
@@ -1058,12 +1079,10 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 		spin_lock(&imp->imp_lock);
 		if (msg_flags & MSG_CONNECT_REPLAYABLE) {
 			imp->imp_replayable = 1;
-			spin_unlock(&imp->imp_lock);
 			CDEBUG(D_HA, "connected to replayable target: %s\n",
 			       obd2cli_tgt(imp->imp_obd));
 		} else {
 			imp->imp_replayable = 0;
-			spin_unlock(&imp->imp_lock);
 		}
 
 		/* if applies, adjust the imp->imp_msg_magic here
@@ -1080,10 +1099,11 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 		if (msg_flags & MSG_CONNECT_RECOVERING) {
 			CDEBUG(D_HA, "connect to %s during recovery\n",
 			       obd2cli_tgt(imp->imp_obd));
-			import_set_state(imp, LUSTRE_IMP_REPLAY_LOCKS);
+			import_set_state_nolock(imp, LUSTRE_IMP_REPLAY_LOCKS);
+			spin_unlock(&imp->imp_lock);
 		} else {
-			import_set_state(imp, LUSTRE_IMP_FULL);
-			ptlrpc_activate_import(imp);
+			spin_unlock(&imp->imp_lock);
+			ptlrpc_activate_import(imp, true);
 		}
 
 		rc = 0;
@@ -1217,31 +1237,33 @@ finish:
 	}
 
 out:
-	spin_lock(&imp->imp_lock);
-	imp->imp_connected = 0;
-	imp->imp_connect_tried = 1;
-	spin_unlock(&imp->imp_lock);
-
 	if (exp)
 		class_export_put(exp);
 
-	if (rc != 0) {
-		import_set_state(imp, LUSTRE_IMP_DISCON);
+	spin_lock(&imp->imp_lock);
+	imp->imp_connected = 0;
+	imp->imp_connect_tried = 1;
+
+	if (rc) {
+		bool inact = false;
+
+		import_set_state_nolock(imp, LUSTRE_IMP_DISCON);
 		if (rc == -EACCES) {
 			/*
 			 * Give up trying to reconnect
 			 * EACCES means client has no permission for connection
 			 */
 			imp->imp_obd->obd_no_recov = 1;
-			ptlrpc_deactivate_import(imp);
-		}
-
-		if (rc == -EPROTO) {
+			ptlrpc_deactivate_import_nolock(imp);
+			inact = true;
+		} else if (rc == -EPROTO) {
 			struct obd_connect_data *ocd;
 
 			/* reply message might not be ready */
-			if (!request->rq_repmsg)
+			if (!request->rq_repmsg) {
+				spin_unlock(&imp->imp_lock);
 				return -EPROTO;
+			}
 
 			ocd = req_capsule_server_get(&request->rq_pill,
 						     &RMF_CONNECT_DATA);
@@ -1261,17 +1283,26 @@ out:
 						   OBD_OCD_VERSION_PATCH(ocd->ocd_version),
 						   OBD_OCD_VERSION_FIX(ocd->ocd_version),
 						   LUSTRE_VERSION_STRING);
-				ptlrpc_deactivate_import(imp);
-				import_set_state(imp, LUSTRE_IMP_CLOSED);
+				ptlrpc_deactivate_import_nolock(imp);
+				import_set_state_nolock(imp, LUSTRE_IMP_CLOSED);
+				inact = true;
 			}
-			return -EPROTO;
 		}
+		spin_unlock(&imp->imp_lock);
+
+		if (inact)
+			obd_import_event(imp->imp_obd, imp, IMP_EVENT_INACTIVE);
+
+		if (rc == -EPROTO)
+			return rc;
 
 		ptlrpc_maybe_ping_import_soon(imp);
 
 		CDEBUG(D_HA, "recovery of %s on %s failed (%d)\n",
 		       obd2cli_tgt(imp->imp_obd),
 		       (char *)imp->imp_connection->c_remote_uuid.uuid, rc);
+	} else {
+		spin_unlock(&imp->imp_lock);
 	}
 
 	wake_up_all(&imp->imp_recovery_waitq);
@@ -1468,8 +1499,7 @@ int ptlrpc_import_recovery_state_machine(struct obd_import *imp)
 		rc = ptlrpc_resend(imp);
 		if (rc)
 			goto out;
-		import_set_state(imp, LUSTRE_IMP_FULL);
-		ptlrpc_activate_import(imp);
+		ptlrpc_activate_import(imp, true);
 
 		deuuidify(obd2cli_tgt(imp->imp_obd), NULL,
 			  &target_start, &target_len);
@@ -1676,6 +1706,7 @@ int ptlrpc_disconnect_and_idle_import(struct obd_import *imp)
 		return 0;
 
 	spin_lock(&imp->imp_lock);
+
 	if (imp->imp_state != LUSTRE_IMP_FULL) {
 		spin_unlock(&imp->imp_lock);
 		return 0;

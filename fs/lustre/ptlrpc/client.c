@@ -2976,7 +2976,7 @@ void ptlrpc_abort_inflight(struct obd_import *imp)
 	 * ptlrpc_{queue,set}_wait must (and does) hold imp_lock while testing
 	 * this flag and then putting requests on sending_list or delayed_list.
 	 */
-	spin_lock(&imp->imp_lock);
+	assert_spin_locked(&imp->imp_lock);
 
 	/*
 	 * XXX locking?  Maybe we should remove each request with the list
@@ -3014,7 +3014,6 @@ void ptlrpc_abort_inflight(struct obd_import *imp)
 	if (imp->imp_replayable)
 		ptlrpc_free_committed(imp);
 
-	spin_unlock(&imp->imp_lock);
 }
 
 /**
