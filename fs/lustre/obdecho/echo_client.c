@@ -444,10 +444,16 @@ static int echo_object_init(const struct lu_env *env, struct lu_object *obj,
 	return 0;
 }
 
-static void echo_object_free(const struct lu_env *env, struct lu_object *obj)
+static void echo_object_delete(const struct lu_env *env, struct lu_object *obj)
 {
 	struct echo_object *eco = cl2echo_obj(lu2cl(obj));
-	struct echo_client_obd *ec = eco->eo_dev->ed_ec;
+	struct echo_client_obd *ec;
+
+	/* object delete called unconditolally - layer init or not */
+	if (!eco->eo_dev)
+		return;
+
+	ec = eco->eo_dev->ed_ec;
 
 	LASSERT(atomic_read(&eco->eo_npages) == 0);
 
@@ -455,10 +461,16 @@ static void echo_object_free(const struct lu_env *env, struct lu_object *obj)
 	list_del_init(&eco->eo_obj_chain);
 	spin_unlock(&ec->ec_lock);
 
+	kfree(eco->eo_oinfo);
+}
+
+static void echo_object_free(const struct lu_env *env, struct lu_object *obj)
+{
+	struct echo_object *eco    = cl2echo_obj(lu2cl(obj));
+
 	lu_object_fini(obj);
 	lu_object_header_fini(obj->lo_header);
 
-	kfree(eco->eo_oinfo);
 	kmem_cache_free(echo_object_kmem, eco);
 }
 
@@ -472,7 +484,7 @@ static int echo_object_print(const struct lu_env *env, void *cookie,
 
 static const struct lu_object_operations echo_lu_obj_ops = {
 	.loo_object_init	= echo_object_init,
-	.loo_object_delete	= NULL,
+	.loo_object_delete	= echo_object_delete,
 	.loo_object_release	= NULL,
 	.loo_object_free	= echo_object_free,
 	.loo_object_print	= echo_object_print,
