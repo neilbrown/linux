@@ -210,7 +210,6 @@ static int lov_init_raid0(const struct lu_env *env, struct lov_device *dev,
 
 	spin_lock_init(&r0->lo_sub_lock);
 	r0->lo_nr = lse->lsme_stripe_count;
-	LASSERT(r0->lo_nr <= lov_targets_nr(dev));
 
 	r0->lo_sub = kcalloc(r0->lo_nr, sizeof(r0->lo_sub[0]),
 			     GFP_KERNEL);
