@@ -1545,7 +1545,7 @@ static int class_config_parse_rec(struct llog_rec_hdr *rec, char *buf,
 		char nidstr[LNET_NIDSTR_SIZE];
 
 		libcfs_nid2str_r(lcfg->lcfg_nid, nidstr, sizeof(nidstr));
-		ptr += snprintf(ptr, end - ptr, "nid=%s(%#llx)\n     ",
+		ptr += snprintf(ptr, end - ptr, "nid=%s(%#llx)    ",
 				nidstr, lcfg->lcfg_nid);
 	}
 
