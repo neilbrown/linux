@@ -3904,8 +3904,10 @@ int ll_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	struct ptlrpc_request *req;
 	int rc, err;
 
-	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID "(%p)\n",
-	       PFID(ll_inode2fid(inode)), inode);
+	CDEBUG(D_VFSTRACE,
+	       "VFS Op:inode=" DFID "(%p), start %lld, end %lld, datasync %d\n",
+	       PFID(ll_inode2fid(inode)), inode, start, end, datasync);
+
 	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FSYNC, 1);
 
 
