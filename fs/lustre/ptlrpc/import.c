@@ -567,6 +567,7 @@ static int import_select_connection(struct obd_import *imp)
 		imp->imp_conn_current = imp_conn;
 	}
 
+	/* The below message is checked in conf-sanity.sh test_35[ab] */
 	CDEBUG(D_HA, "%s: import %p using connection %s/%s\n",
 	       imp->imp_obd->obd_name, imp, imp_conn->oic_uuid.uuid,
 	       libcfs_nid2str(imp_conn->oic_conn->c_peer.nid));
@@ -1196,6 +1197,7 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 		   !imp->imp_invalid) {
 
 		obd_import_event(imp->imp_obd, imp, IMP_EVENT_INVALIDATE);
+		/* The below message is checked in recovery-small.sh test_106 */
 		DEBUG_REQ(D_HA, request, "%s: lwp recover",
 			  imp->imp_obd->obd_name);
 		imp->imp_remote_handle =
@@ -1216,10 +1218,18 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 
 	if (lustre_msg_get_last_committed(request->rq_repmsg) > 0 &&
 	    lustre_msg_get_last_committed(request->rq_repmsg) <
-	    aa->pcaa_peer_committed)
-		CERROR("%s went back in time (transno %lld was previously committed, server now claims %lld)!  See https://bugzilla.lustre.org/show_bug.cgi?id=9646\n",
+	    aa->pcaa_peer_committed) {
+		static bool printed;
+
+		/* The below message is checked in recovery-small.sh test_54 */
+		CERROR("%s: went back in time (transno %lld was previously committed, server now claims %lld)!\n",
 		       obd2cli_tgt(imp->imp_obd), aa->pcaa_peer_committed,
 		       lustre_msg_get_last_committed(request->rq_repmsg));
+		if (!printed) {
+			CERROR("For further information, see http://doc.lustre.org/lustre_manual.xhtml#went_back_in_time\n");
+			printed = true;
+		}
+	}
 
 finish:
 	ptlrpc_prepare_replay(imp);
@@ -1661,7 +1671,7 @@ static int ptlrpc_disconnect_idle_interpret(const struct lu_env *env,
 	struct obd_import *imp = req->rq_import;
 	int connect = 0;
 
-	DEBUG_REQ(D_HA, req, "inflight=%d, refcount=%d: rc = %d ",
+	DEBUG_REQ(D_HA, req, "inflight=%d, refcount=%d: rc = %d",
 		  atomic_read(&imp->imp_inflight),
 		  refcount_read(&imp->imp_refcount), rc);
 

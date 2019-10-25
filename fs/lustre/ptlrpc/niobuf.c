@@ -542,7 +542,7 @@ int ptl_send_rpc(struct ptlrpc_request *request, int noreply)
 
 		lustre_msg_set_last_xid(request->rq_reqmsg, min_xid);
 		DEBUG_REQ(D_RPCTRACE, request,
-			  "Allocating new xid for resend on EINPROGRESS");
+			  "Allocating new XID for resend on EINPROGRESS");
 	}
 
 	if (request->rq_bulk) {
@@ -553,7 +553,7 @@ int ptl_send_rpc(struct ptlrpc_request *request, int noreply)
 	if (list_empty(&request->rq_unreplied_list) ||
 	    request->rq_xid <= imp->imp_known_replied_xid) {
 		DEBUG_REQ(D_ERROR, request,
-			  "xid: %llu, replied: %llu, list_empty:%d\n",
+			  "xid=%llu, replied=%llu, list_empty=%d",
 			  request->rq_xid, imp->imp_known_replied_xid,
 			  list_empty(&request->rq_unreplied_list));
 		LBUG();
@@ -693,7 +693,7 @@ int ptl_send_rpc(struct ptlrpc_request *request, int noreply)
 
 	ptlrpc_pinger_sending_on_import(imp);
 
-	DEBUG_REQ(D_INFO, request, "send flg=%x",
+	DEBUG_REQ(D_INFO, request, "send flags=%x",
 		  lustre_msg_get_flags(request->rq_reqmsg));
 	rc = ptl_send_buf(&request->rq_req_md_h,
 			  request->rq_reqbuf, request->rq_reqdata_len,

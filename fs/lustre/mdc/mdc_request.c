@@ -439,6 +439,7 @@ static int mdc_getxattr(struct obd_export *exp, const struct lu_fid *fid,
 	LASSERT(obd_md_valid == OBD_MD_FLXATTR ||
 		obd_md_valid == OBD_MD_FLXATTRLS);
 
+	/* The below message is checked in sanity-selinux.sh test_20d */
 	CDEBUG(D_INFO, "%s: get xattr '%s' for "DFID"\n",
 	       exp->exp_obd->obd_name, name, PFID(fid));
 	rc = mdc_xattr_common(exp, &RQF_MDS_GETXATTR, fid, MDS_GETXATTR,
@@ -629,7 +630,7 @@ void mdc_replay_open(struct ptlrpc_request *req)
 
 	if (!mod) {
 		DEBUG_REQ(D_ERROR, req,
-			  "Can't properly replay without open data.");
+			  "cannot properly replay without open data");
 		return;
 	}
 
@@ -728,7 +729,7 @@ int mdc_set_open_replay_data(struct obd_export *exp,
 		mod = obd_mod_alloc();
 		if (!mod) {
 			DEBUG_REQ(D_ERROR, open_req,
-				  "Can't allocate md_open_data");
+				  "cannot allocate md_open_data");
 			return 0;
 		}
 
@@ -782,7 +783,7 @@ static void mdc_free_open(struct md_open_data *mod)
 	 * The worst thing is eviction if the client gets open lock
 	 */
 	DEBUG_REQ(D_RPCTRACE, mod->mod_open_req,
-		  "free open request rq_replay = %d\n",
+		  "free open request, rq_replay=%d\n",
 		   mod->mod_open_req->rq_replay);
 
 	ptlrpc_request_committed(mod->mod_open_req, committed);
@@ -927,7 +928,7 @@ static int mdc_close(struct obd_export *exp, struct md_op_data *op_data,
 	mdc_put_mod_rpc_slot(req, NULL);
 
 	if (!req->rq_repmsg) {
-		CDEBUG(D_RPCTRACE, "request failed to send: %p, %d\n", req,
+		CDEBUG(D_RPCTRACE, "request %p failed to send: rc = %d\n", req,
 		       req->rq_status);
 		if (rc == 0)
 			rc = req->rq_status ?: -EIO;
@@ -937,7 +938,7 @@ static int mdc_close(struct obd_export *exp, struct md_op_data *op_data,
 		rc = lustre_msg_get_status(req->rq_repmsg);
 		if (lustre_msg_get_type(req->rq_repmsg) == PTL_RPC_MSG_ERR) {
 			DEBUG_REQ(D_ERROR, req,
-				  "type == PTL_RPC_MSG_ERR, err = %d", rc);
+				  "type = PTL_RPC_MSG_ERR: rc = %d", rc);
 			if (rc > 0)
 				rc = -rc;
 		}
@@ -1996,7 +1997,7 @@ static int mdc_quotactl(struct obd_device *unused, struct obd_export *exp,
 		if (oqc) {
 			*oqctl = *oqc;
 		} else if (!rc) {
-			CERROR("Can't unpack obd_quotactl\n");
+			CERROR("Can'tj unpack obd_quotactl\n");
 			rc = -EPROTO;
 		}
 	} else if (!rc) {

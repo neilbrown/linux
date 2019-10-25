@@ -2704,6 +2704,7 @@ void ll_dirty_page_discard_warn(struct page *page, int ioret)
 			path = dentry_path_raw(dentry, buf, PAGE_SIZE);
 	}
 
+	/* The below message is checked in recovery-small.sh test_24b */
 	CDEBUG(D_WARNING,
 	       "%s: dirty page discard: %s/fid: " DFID "/%s may get corrupted (rc %d)\n",
 	       ll_i2sbi(inode)->ll_fsname,

@@ -1834,7 +1834,7 @@ int req_capsule_server_pack(struct req_capsule *pill)
 			       pill->rc_area[RCL_SERVER], NULL);
 	if (rc != 0) {
 		DEBUG_REQ(D_ERROR, pill->rc_req,
-			  "Cannot pack %d fields in format `%s': ",
+			  "Cannot pack %d fields in format '%s'",
 			  count, fmt->rf_name);
 	}
 	return rc;
@@ -1997,7 +1997,7 @@ static void *__req_capsule_get(struct req_capsule *pill,
 
 	if (!value) {
 		DEBUG_REQ(D_ERROR, pill->rc_req,
-			  "Wrong buffer for field `%s' (%u of %u) in format `%s': %u vs. %u (%s)\n",
+			  "Wrong buffer for field '%s' (%u of %u) in format '%s', %u vs. %u (%s)",
 			  field->rmf_name, offset, lustre_msg_bufcount(msg),
 			  fmt->rf_name, lustre_msg_buflen(msg, offset), len,
 			  rcl_names[loc]);
