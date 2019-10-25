@@ -1213,6 +1213,10 @@ int lu_env_init(struct lu_env *env, u32 tags);
 void lu_env_fini(struct lu_env *env);
 int lu_env_refill(struct lu_env *env);
 
+struct lu_env *lu_env_find(void);
+int lu_env_add(struct lu_env *env);
+void lu_env_remove(struct lu_env *env);
+
 /** @} lu_context */
 
 /**
