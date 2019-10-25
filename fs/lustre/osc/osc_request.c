@@ -2843,7 +2843,7 @@ static int osc_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 {
 	struct obd_device *obd = exp->exp_obd;
 	struct obd_ioctl_data *data = karg;
-	int err = 0;
+	int rc = 0;
 
 	if (!try_module_get(THIS_MODULE)) {
 		CERROR("%s: cannot get module '%s'\n", obd->obd_name,
@@ -2852,27 +2852,24 @@ static int osc_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 	}
 	switch (cmd) {
 	case OBD_IOC_CLIENT_RECOVER:
-		err = ptlrpc_recover_import(obd->u.cli.cl_import,
-					    data->ioc_inlbuf1, 0);
-		if (err > 0)
-			err = 0;
+		rc = ptlrpc_recover_import(obd->u.cli.cl_import,
+					   data->ioc_inlbuf1, 0);
+		if (rc > 0)
+			rc = 0;
 		goto out;
 	case IOC_OSC_SET_ACTIVE:
-		err = ptlrpc_set_import_active(obd->u.cli.cl_import,
-					       data->ioc_offset);
-		goto out;
-	case OBD_IOC_PING_TARGET:
-		err = ptlrpc_obd_ping(obd);
+		rc = ptlrpc_set_import_active(obd->u.cli.cl_import,
+					      data->ioc_offset);
 		goto out;
 	default:
-		CDEBUG(D_INODE, "unrecognised ioctl %#x by %s\n",
-		       cmd, current->comm);
-		err = -ENOTTY;
+		CDEBUG(D_INODE, "%s: unrecognised ioctl %#x by %s\n",
+		       obd->obd_name, cmd, current->comm);
+		rc = -ENOTTY;
 		goto out;
 	}
 out:
 	module_put(THIS_MODULE);
-	return err;
+	return rc;
 }
 
 int osc_set_info_async(const struct lu_env *env, struct obd_export *exp,
