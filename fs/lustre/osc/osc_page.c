@@ -302,6 +302,7 @@ EXPORT_SYMBOL(osc_page_init);
 void osc_page_submit(const struct lu_env *env, struct osc_page *opg,
 		     enum cl_req_type crt, int brw_flags)
 {
+	struct osc_io *oio = osc_env_io(env);
 	struct osc_async_page *oap = &opg->ops_oap;
 
 	LASSERTF(oap->oap_magic == OAP_MAGIC,
@@ -313,9 +314,9 @@ void osc_page_submit(const struct lu_env *env, struct osc_page *opg,
 	oap->oap_cmd = crt == CRT_WRITE ? OBD_BRW_WRITE : OBD_BRW_READ;
 	oap->oap_page_off = opg->ops_from;
 	oap->oap_count = opg->ops_to - opg->ops_from;
-	oap->oap_brw_flags = brw_flags | OBD_BRW_SYNC;
+	oap->oap_brw_flags = OBD_BRW_SYNC | brw_flags;
 
-	if (capable(CAP_SYS_RESOURCE)) {
+	if (oio->oi_cap_sys_resource) {
 		oap->oap_brw_flags |= OBD_BRW_NOQUOTA;
 		oap->oap_cmd |= OBD_BRW_NOQUOTA;
 	}
