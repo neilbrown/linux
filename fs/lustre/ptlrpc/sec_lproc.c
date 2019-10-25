@@ -131,6 +131,78 @@ out:
 
 LPROC_SEQ_FOPS_RO(sptlrpc_ctxs_lprocfs);
 
+static ssize_t
+lprocfs_wr_sptlrpc_sepol(struct file *file, const char __user *buffer,
+			 size_t count, void *data)
+{
+	struct seq_file	*seq = file->private_data;
+	struct obd_device *dev = seq->private;
+	struct client_obd *cli = &dev->u.cli;
+	struct obd_import *imp = cli->cl_import;
+	struct sepol_downcall_data *param;
+	int size = sizeof(*param);
+	int rc = 0;
+
+	if (count < size) {
+		CERROR("%s: invalid data count = %lu, size = %d\n",
+		       dev->obd_name, (unsigned long) count, size);
+		return -EINVAL;
+	}
+
+	param = kzalloc(size, GFP_KERNEL);
+	if (!param)
+		return -ENOMEM;
+
+	if (copy_from_user(param, buffer, size)) {
+		CERROR("%s: bad sepol data\n", dev->obd_name);
+		rc = -EFAULT;
+		goto out;
+	}
+
+	if (param->sdd_magic != SEPOL_DOWNCALL_MAGIC) {
+		CERROR("%s: sepol downcall bad params\n",
+		       dev->obd_name);
+		rc = -EINVAL;
+		goto out;
+	}
+
+	if (param->sdd_sepol_len == 0 ||
+	    param->sdd_sepol_len >= sizeof(imp->imp_sec->ps_sepol)) {
+		CERROR("%s: invalid sepol data returned\n",
+		       dev->obd_name);
+		rc = -EINVAL;
+		goto out;
+	}
+	rc = param->sdd_sepol_len; /* save sdd_sepol_len */
+	kfree(param);
+	size = offsetof(struct sepol_downcall_data,
+			sdd_sepol[rc]);
+
+	/* alloc again with real size */
+	rc = 0;
+	param = kzalloc(size, GFP_KERNEL);
+	if (!param)
+		return -ENOMEM;
+
+	if (copy_from_user(param, buffer, size)) {
+		CERROR("%s: bad sepol data\n", dev->obd_name);
+		rc = -EFAULT;
+		goto out;
+	}
+
+	spin_lock(&imp->imp_sec->ps_lock);
+	snprintf(imp->imp_sec->ps_sepol, param->sdd_sepol_len + 1, "%s",
+		 param->sdd_sepol);
+	imp->imp_sec->ps_sepol_mtime = param->sdd_sepol_mtime;
+	spin_unlock(&imp->imp_sec->ps_lock);
+
+out:
+	kfree(param);
+
+	return rc ? rc : count;
+}
+LPROC_SEQ_FOPS_WR_ONLY(srpc, sptlrpc_sepol);
+
 int sptlrpc_lprocfs_cliobd_attach(struct obd_device *dev)
 {
 	if (strcmp(dev->obd_type->typ_name, LUSTRE_OSC_NAME) != 0 &&
@@ -145,6 +217,8 @@ int sptlrpc_lprocfs_cliobd_attach(struct obd_device *dev)
 			    &sptlrpc_info_lprocfs_fops);
 	debugfs_create_file("srpc_contexts", 0444, dev->obd_debugfs_entry, dev,
 			    &sptlrpc_ctxs_lprocfs_fops);
+	debugfs_create_file("srpc_contexts", 0444, dev->obd_debugfs_entry, dev,
+			    &srpc_sptlrpc_sepol_fops);
 
 	return 0;
 }
