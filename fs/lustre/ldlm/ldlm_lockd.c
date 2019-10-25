@@ -193,7 +193,7 @@ static void ldlm_handle_cp_callback(struct ptlrpc_request *req,
 
 		while (to > 0) {
 			schedule_timeout_interruptible(to);
-			if (lock->l_granted_mode == lock->l_req_mode ||
+			if (ldlm_is_granted(lock) ||
 			    ldlm_is_destroyed(lock))
 				break;
 		}
@@ -236,7 +236,7 @@ static void ldlm_handle_cp_callback(struct ptlrpc_request *req,
 	}
 
 	if (ldlm_is_destroyed(lock) ||
-	    lock->l_granted_mode == lock->l_req_mode) {
+	    ldlm_is_granted(lock)) {
 		/* bug 11300: the lock has already been granted */
 		unlock_res_and_lock(lock);
 		LDLM_DEBUG(lock, "Double grant race happened");

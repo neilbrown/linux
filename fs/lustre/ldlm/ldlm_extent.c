@@ -151,7 +151,7 @@ void ldlm_extent_add_lock(struct ldlm_resource *res,
 	struct ldlm_interval_tree *tree;
 	int idx;
 
-	LASSERT(lock->l_granted_mode == lock->l_req_mode);
+	LASSERT(ldlm_is_granted(lock));
 
 	LASSERT(RB_EMPTY_NODE(&lock->l_rb));
 

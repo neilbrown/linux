@@ -105,7 +105,7 @@ static int osc_lock_invariant(struct osc_lock *ols)
 		return 0;
 
 	if (!ergo(ols->ols_state == OLS_GRANTED,
-		  olock && olock->l_req_mode == olock->l_granted_mode &&
+		  olock && ldlm_is_granted(olock) &&
 		  ols->ols_hold))
 		return 0;
 	return 1;
@@ -227,7 +227,7 @@ static void osc_lock_granted(const struct lu_env *env, struct osc_lock *oscl,
 
 	/* Lock must have been granted. */
 	lock_res_and_lock(dlmlock);
-	if (dlmlock->l_granted_mode == dlmlock->l_req_mode) {
+	if (ldlm_is_granted(dlmlock)) {
 		struct ldlm_extent *ext = &dlmlock->l_policy_data.l_extent;
 		struct cl_lock_descr *descr = &oscl->ols_cl.cls_lock->cll_descr;
 
@@ -336,7 +336,7 @@ static int osc_lock_upcall_speculative(void *cookie,
 	LASSERT(dlmlock);
 
 	lock_res_and_lock(dlmlock);
-	LASSERT(dlmlock->l_granted_mode == dlmlock->l_req_mode);
+	LASSERT(ldlm_is_granted(dlmlock));
 
 	/* there is no osc_lock associated with speculative lock */
 	osc_lock_lvb_update(env, osc, dlmlock, NULL);
@@ -401,7 +401,7 @@ static int __osc_dlm_blocking_ast(const struct lu_env *env,
 	LASSERT(flag == LDLM_CB_CANCELING);
 
 	lock_res_and_lock(dlmlock);
-	if (dlmlock->l_granted_mode != dlmlock->l_req_mode) {
+	if (!ldlm_is_granted(dlmlock)) {
 		dlmlock->l_ast_data = NULL;
 		unlock_res_and_lock(dlmlock);
 		return 0;
