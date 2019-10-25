@@ -407,12 +407,12 @@ ll_read_ahead_pages(const struct lu_env *env, struct cl_io *io,
 		} else if (stride_ria) {
 			/* If it is not in the read-ahead window, and it is
 			 * read-ahead mode, then check whether it should skip
-			 * the stride gap
+			 * the stride gap.
 			 */
 			pgoff_t offset;
-			/* FIXME: This assertion only is valid when it is for
-			 * forward read-ahead, it will be fixed when backward
-			 * read-ahead is implemented
+			/* NOTE: This assertion only is valid when it is for
+			 * forward read-ahead, must adjust if backward
+			 * readahead is implemented.
 			 */
 			LASSERTF(page_idx >= ria->ria_stoff,
 				 "Invalid page_idx %lu rs %lu re %lu ro %lu rl %lu rp %lu\n",
@@ -421,10 +421,11 @@ ll_read_ahead_pages(const struct lu_env *env, struct cl_io *io,
 				 ria->ria_length, ria->ria_pages);
 			offset = page_idx - ria->ria_stoff;
 			offset = offset % (ria->ria_length);
-			if (offset > ria->ria_pages) {
-				page_idx += ria->ria_length - offset;
-				CDEBUG(D_READA, "i %lu skip %lu\n", page_idx,
-				       ria->ria_length - offset);
+			if (offset >= ria->ria_pages) {
+				page_idx += ria->ria_length - offset - 1;
+				CDEBUG(D_READA,
+				       "Stride: jump %lu pages to %lu\n",
+				       ria->ria_length - offset, page_idx);
 				continue;
 			}
 		}
