@@ -1499,6 +1499,93 @@ static int lmv_close(struct obd_export *exp, struct md_op_data *op_data,
 	return md_close(tgt->ltd_exp, op_data, mod, request);
 }
 
+static struct lu_tgt_desc *lmv_locate_tgt_qos(struct lmv_obd *lmv, u32 *mdt)
+{
+	struct lu_tgt_desc *tgt;
+	u64 total_weight = 0;
+	u64 cur_weight = 0;
+	u64 rand;
+	int rc;
+
+	if (!lqos_is_usable(&lmv->lmv_qos, lmv->desc.ld_active_tgt_count))
+		return ERR_PTR(-EAGAIN);
+
+	down_write(&lmv->lmv_qos.lq_rw_sem);
+
+	if (!lqos_is_usable(&lmv->lmv_qos, lmv->desc.ld_active_tgt_count)) {
+		tgt = ERR_PTR(-EAGAIN);
+		goto unlock;
+	}
+
+	rc = lqos_calc_penalties(&lmv->lmv_qos, &lmv->lmv_mdt_descs,
+				 lmv->desc.ld_active_tgt_count,
+				 lmv->desc.ld_qos_maxage, true);
+	if (rc) {
+		tgt = ERR_PTR(rc);
+		goto unlock;
+	}
+
+	lmv_foreach_tgt(lmv, tgt) {
+		tgt->ltd_qos.ltq_usable = 0;
+		if (!tgt->ltd_exp || !tgt->ltd_active)
+			continue;
+
+		tgt->ltd_qos.ltq_usable = 1;
+		lqos_calc_weight(tgt);
+		total_weight += tgt->ltd_qos.ltq_weight;
+	}
+
+	rand = lu_prandom_u64_max(total_weight);
+
+	lmv_foreach_connected_tgt(lmv, tgt) {
+		if (!tgt->ltd_qos.ltq_usable)
+			continue;
+
+		cur_weight += tgt->ltd_qos.ltq_weight;
+		if (cur_weight < rand)
+			continue;
+
+		*mdt = tgt->ltd_index;
+		lqos_recalc_weight(&lmv->lmv_qos, &lmv->lmv_mdt_descs, tgt,
+				   lmv->desc.ld_active_tgt_count,
+				   &total_weight);
+		rc = 0;
+		goto unlock;
+	}
+
+	/* no proper target found */
+	tgt = ERR_PTR(-EAGAIN);
+	goto unlock;
+unlock:
+	up_write(&lmv->lmv_qos.lq_rw_sem);
+
+	return tgt;
+}
+
+static struct lu_tgt_desc *lmv_locate_tgt_rr(struct lmv_obd *lmv, u32 *mdt)
+{
+	struct lu_tgt_desc *tgt;
+	int i;
+	int index;
+
+	spin_lock(&lmv->lmv_qos.lq_rr.lqr_alloc);
+	for (i = 0; i < lmv->desc.ld_tgt_count; i++) {
+		index = (i + lmv->lmv_qos_rr_index) % lmv->desc.ld_tgt_count;
+		tgt = lmv_tgt(lmv, index);
+		if (!tgt || !tgt->ltd_exp || !tgt->ltd_active)
+			continue;
+
+		*mdt = tgt->ltd_index;
+		lmv->lmv_qos_rr_index = (*mdt + 1) % lmv->desc.ld_tgt_count;
+		spin_unlock(&lmv->lmv_qos.lq_rr.lqr_alloc);
+
+		return tgt;
+	}
+	spin_unlock(&lmv->lmv_qos.lq_rr.lqr_alloc);
+
+	return ERR_PTR(-ENODEV);
+}
+
 static struct lmv_tgt_desc *
 lmv_locate_tgt_by_name(struct lmv_obd *lmv, struct lmv_stripe_md *lsm,
 		       const char *name, int namelen, struct lu_fid *fid,

@@ -1442,6 +1442,13 @@ struct lu_qos {
 void lu_qos_rr_init(struct lu_qos_rr *lqr);
 int lqos_add_tgt(struct lu_qos *qos, struct lu_tgt_desc *ltd);
 int lqos_del_tgt(struct lu_qos *qos, struct lu_tgt_desc *ltd);
+bool lqos_is_usable(struct lu_qos *qos, u32 active_tgt_nr);
+int lqos_calc_penalties(struct lu_qos *qos, struct lu_tgt_descs *ltd,
+			u32 active_tgt_nr, u32 maxage, bool is_mdt);
+void lqos_calc_weight(struct lu_tgt_desc *tgt);
+int lqos_recalc_weight(struct lu_qos *qos, struct lu_tgt_descs *ltd,
+		       struct lu_tgt_desc *tgt, u32 active_tgt_nr,
+		       u64 *total_wt);
 u64 lu_prandom_u64_max(u64 ep_ro);
 
 int lu_tgt_descs_init(struct lu_tgt_descs *ltd);
