@@ -149,9 +149,6 @@ void ldlm_handle_bl_callback(struct ldlm_namespace *ns,
 	}
 	ldlm_set_cbpending(lock);
 
-	if (ldlm_is_cancel_on_block(lock))
-		ldlm_set_cancel(lock);
-
 	do_ast = !lock->l_readers && !lock->l_writers;
 	unlock_res_and_lock(lock);
 
