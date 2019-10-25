@@ -427,55 +427,6 @@ lnet_add_route(u32 net, u32 hops, lnet_nid_t gateway,
 }
 
 int
-lnet_check_routes(void)
-{
-	struct lnet_remotenet *rnet;
-	struct lnet_route *route;
-	struct lnet_route *route2;
-	int cpt;
-	struct list_head *rn_list;
-	int i;
-
-	cpt = lnet_net_lock_current();
-
-	for (i = 0; i < LNET_REMOTE_NETS_HASH_SIZE; i++) {
-		rn_list = &the_lnet.ln_remote_nets_hash[i];
-		list_for_each_entry(rnet, rn_list, lrn_list) {
-			route2 = NULL;
-			list_for_each_entry(route, &rnet->lrn_routes, lr_list) {
-				lnet_nid_t nid1;
-				lnet_nid_t nid2;
-				int net;
-
-				if (!route2) {
-					route2 = route;
-					continue;
-				}
-
-				if (route->lr_gateway->lpni_net ==
-				    route2->lr_gateway->lpni_net)
-					continue;
-
-				nid1 = route->lr_gateway->lpni_nid;
-				nid2 = route2->lr_gateway->lpni_nid;
-				net = rnet->lrn_net;
-
-				lnet_net_unlock(cpt);
-
-				CERROR("Routes to %s via %s and %s not supported\n",
-				       libcfs_net2str(net),
-				       libcfs_nid2str(nid1),
-				       libcfs_nid2str(nid2));
-				return -EINVAL;
-			}
-		}
-	}
-
-	lnet_net_unlock(cpt);
-	return 0;
-}
-
-int
 lnet_del_route(u32 net, lnet_nid_t gw_nid)
 {
 	struct lnet_peer_ni *gateway;
