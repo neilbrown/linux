@@ -1127,6 +1127,8 @@ static inline int ldlm_res_lvbo_update(struct ldlm_resource *res,
 	return ldlm_lvbo_update(res, NULL, req, increase);
 }
 
+int is_granted_or_cancelled_nolock(struct ldlm_lock *lock);
+
 int ldlm_error2errno(enum ldlm_error error);
 
 #if LUSTRE_TRACKS_LOCK_EXP_REFS

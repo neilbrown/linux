@@ -2306,7 +2306,12 @@ static int ptlrpc_hr_main(void *arg)
 	struct ptlrpc_hr_thread	*hrt = arg;
 	struct ptlrpc_hr_partition *hrp = hrt->hrt_partition;
 	LIST_HEAD(replies);
+	struct lu_env *env;
 	int rc;
+
+	env = kzalloc(sizeof(*env), GFP_NOFS);
+	if (!env)
+		return -ENOMEM;
 
 	rc = cfs_cpt_bind(ptlrpc_hr.hr_cpt_table, hrp->hrp_cpt);
 	if (rc != 0) {
@@ -2317,6 +2322,15 @@ static int ptlrpc_hr_main(void *arg)
 		CWARN("Failed to bind %s on CPT %d of CPT table %p: rc = %d\n",
 		      threadname, hrp->hrp_cpt, ptlrpc_hr.hr_cpt_table, rc);
 	}
+
+	rc = lu_context_init(&env->le_ctx, LCT_MD_THREAD | LCT_DT_THREAD |
+			     LCT_REMEMBER | LCT_NOREF);
+	if (rc)
+		goto out_env;
+
+	rc = lu_env_add(env);
+	if (rc)
+		goto out_ctx_fini;
 
 	atomic_inc(&hrp->hrp_nstarted);
 	wake_up(&ptlrpc_hr.hr_waitq);
@@ -2331,13 +2345,22 @@ static int ptlrpc_hr_main(void *arg)
 					     struct ptlrpc_reply_state,
 					     rs_list);
 			list_del_init(&rs->rs_list);
+			/* refill keys if needed */
+			lu_env_refill(env);
+			lu_context_enter(&env->le_ctx);
 			ptlrpc_handle_rs(rs);
+			lu_context_exit(&env->le_ctx);
 		}
 	}
 
 	atomic_inc(&hrp->hrp_nstopped);
 	wake_up(&ptlrpc_hr.hr_waitq);
 
+	lu_env_remove(env);
+out_ctx_fini:
+	lu_context_fini(&env->le_ctx);
+out_env:
+	kfree(env);
 	return 0;
 }
 
