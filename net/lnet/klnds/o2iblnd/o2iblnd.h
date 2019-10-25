@@ -176,6 +176,7 @@ struct kib_hca_dev {
 	int			ibh_page_size;	/* page size of current HCA */
 	u64			ibh_page_mask;	/* page mask of current HCA */
 	u64			ibh_mr_size;	/* size of MR */
+	int			ibh_max_qp_wr;	/* maximum work requests size */
 	struct ib_pd		*ibh_pd;	/* PD */
 	struct kib_dev		*ibh_dev;	/* owner */
 	atomic_t		ibh_ref;	/* refcount */
