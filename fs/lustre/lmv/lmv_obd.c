@@ -1166,7 +1166,7 @@ static u32 lmv_placement_policy(struct obd_device *obd,
 		mdt = le32_to_cpu(lum->lum_stripe_offset);
 	} else if (op_data->op_code == LUSTRE_OPC_MKDIR &&
 		   !lmv_dir_striped(op_data->op_mea1) &&
-		   lmv_dir_space_hashed(op_data->op_default_mea1)) {
+		   lmv_dir_qos_mkdir(op_data->op_default_mea1)) {
 		mdt = op_data->op_mds;
 	} else if (op_data->op_code == LUSTRE_OPC_MKDIR &&
 		   op_data->op_default_mea1 &&
@@ -1698,7 +1698,7 @@ lmv_locate_tgt(struct lmv_obd *lmv, struct md_op_data *op_data)
 
 		tgt = lmv_get_target(lmv, oinfo->lmo_mds, NULL);
 	} else if (op_data->op_code == LUSTRE_OPC_MKDIR &&
-		   lmv_dir_space_hashed(op_data->op_default_mea1) &&
+		   lmv_dir_qos_mkdir(op_data->op_default_mea1) &&
 		   !lmv_dir_striped(lsm)) {
 		tgt = lmv_locate_tgt_qos(lmv, &op_data->op_mds);
 		if (tgt == ERR_PTR(-EAGAIN))

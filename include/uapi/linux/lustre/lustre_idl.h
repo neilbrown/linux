@@ -1995,16 +1995,6 @@ struct lmv_foreign_md {
 #define LMV_MAGIC_STRIPE 0x0CD40CD0	/* magic for dir sub_stripe */
 #define LMV_MAGIC_FOREIGN 0x0CD50CD0 /* magic for lmv foreign */
 
-/*
- *Right now only the lower part(0-16bits) of lmv_hash_type is being used,
- * and the higher part will be the flag to indicate the status of object,
- * for example the object is being migrated. And the hash function
- * might be interpreted differently with different flags.
- */
-#define LMV_HASH_TYPE_MASK		0x0000ffff
-
-#define LMV_HASH_FLAG_MIGRATION		0x80000000
-#define LMV_HASH_FLAG_DEAD		0x40000000
 
 /**
  * The FNV-1a hash algorithm is as follows:
