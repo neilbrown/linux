@@ -617,7 +617,7 @@ struct ksock_tx *ksocknal_alloc_tx_noop(u64 cookie, int nonblk);
 void ksocknal_next_tx_carrier(struct ksock_conn *conn);
 void ksocknal_queue_tx_locked(struct ksock_tx *tx, struct ksock_conn *conn);
 void ksocknal_txlist_done(struct lnet_ni *ni, struct list_head *txlist, int error);
-void ksocknal_notify(struct lnet_ni *ni, lnet_nid_t gw_nid, int alive);
+void ksocknal_notify(lnet_nid_t gw_nid);
 void ksocknal_query(struct lnet_ni *ni, lnet_nid_t nid, time64_t *when);
 int ksocknal_thread_start(int (*fn)(void *arg), void *arg, char *name);
 void ksocknal_thread_fini(void);

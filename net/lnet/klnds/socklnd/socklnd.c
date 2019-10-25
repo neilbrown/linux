@@ -1495,8 +1495,8 @@ ksocknal_peer_failed(struct ksock_peer *peer_ni)
 	read_unlock(&ksocknal_data.ksnd_global_lock);
 
 	if (notify)
-		lnet_notify(peer_ni->ksnp_ni, peer_ni->ksnp_id.nid, 0,
-			    last_alive);
+		lnet_notify(peer_ni->ksnp_ni, peer_ni->ksnp_id.nid,
+			    false, false, last_alive);
 }
 
 void
@@ -1760,7 +1760,7 @@ ksocknal_close_matching_conns(struct lnet_process_id id, u32 ipaddr)
 }
 
 void
-ksocknal_notify(struct lnet_ni *ni, lnet_nid_t gw_nid, int alive)
+ksocknal_notify_gw_down(lnet_nid_t gw_nid)
 {
 	/*
 	 * The router is telling me she's been notified of a change in
@@ -1771,17 +1771,14 @@ ksocknal_notify(struct lnet_ni *ni, lnet_nid_t gw_nid, int alive)
 	id.nid = gw_nid;
 	id.pid = LNET_PID_ANY;
 
-	CDEBUG(D_NET, "gw %s %s\n", libcfs_nid2str(gw_nid),
-	       alive ? "up" : "down");
+	CDEBUG(D_NET, "gw %s down\n", libcfs_nid2str(gw_nid));
 
-	if (!alive) {
-		/* If the gateway crashed, close all open connections... */
-		ksocknal_close_matching_conns(id, 0);
-		return;
-	}
+	/* If the gateway crashed, close all open connections... */
+	ksocknal_close_matching_conns(id, 0);
+	return;
 
 	/*
-	 * ...otherwise do nothing.  We can only establish new connections
+	 * We can only establish new connections
 	 * if we have autroutes, and these connect on demand.
 	 */
 }
@@ -2765,7 +2762,7 @@ static const struct lnet_lnd the_ksocklnd = {
 	.lnd_query	= ksocknal_query,
 	.lnd_send	= ksocknal_send,
 	.lnd_recv	= ksocknal_recv,
-	.lnd_notify	= ksocknal_notify,
+	.lnd_notify_peer_down	= ksocknal_notify_gw_down,
 	.lnd_accept	= ksocknal_accept,
 };
 
