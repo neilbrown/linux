@@ -803,6 +803,7 @@ struct ptlrpc_body_v2 {
 						 * locks
 						 */
 #define OBD_CONNECT2_LOCK_CONVERT	0x80ULL /* IBITS lock convert support */
+#define OBD_CONNECT2_INC_XID		0x200ULL /* Increasing xid */
 #define OBD_CONNECT2_SELINUX_POLICY	0x400ULL /* has client SELinux policy */
 #define OBD_CONNECT2_SELINUX_POLICY	0x400ULL /* has client SELinux policy */
 #define OBD_CONNECT2_LSOM		0x800ULL /* LSOM support */
