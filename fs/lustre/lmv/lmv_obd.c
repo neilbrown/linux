@@ -3392,25 +3392,28 @@ static int lmv_intent_getattr_async(struct obd_export *exp,
 	struct md_op_data *op_data = &minfo->mi_data;
 	struct obd_device *obd = exp->exp_obd;
 	struct lmv_obd *lmv = &obd->u.lmv;
-	struct lmv_tgt_desc *tgt = NULL;
+	struct lmv_tgt_desc *ptgt = NULL;
+	struct lmv_tgt_desc *ctgt;
 
 	if (!fid_is_sane(&op_data->op_fid2))
 		return -EINVAL;
 
-	tgt = lmv_find_target(lmv, &op_data->op_fid1);
-	if (IS_ERR(tgt))
-		return PTR_ERR(tgt);
+	ptgt = lmv_locate_tgt(lmv, op_data);
+	if (IS_ERR(ptgt))
+		return PTR_ERR(ptgt);
+
+	ctgt = lmv_find_target(lmv, &op_data->op_fid2);
+	if (IS_ERR(ctgt))
+		return PTR_ERR(ctgt);
 
 	/*
-	 * no special handle for remote dir, which needs to fetch both LOOKUP
-	 * lock on parent, and then UPDATE lock on child MDT, which makes all
-	 * complicated because this is done async. So only LOOKUP lock is
-	 * fetched for remote dir, but considering remote dir is rare case,
-	 * and not supporting it in statahead won't cause any issue, just leave
-	 * it as is.
+	 * remote object needs two RPCs to lookup and getattr, considering the
+	 * complexity don't support statahead for now.
 	 */
+	if (ctgt != ptgt)
+		return -EREMOTE;
 
-	return md_intent_getattr_async(tgt->ltd_exp, minfo);
+	return md_intent_getattr_async(ptgt->ltd_exp, minfo);
 }
 
 static int lmv_revalidate_lock(struct obd_export *exp, struct lookup_intent *it,
