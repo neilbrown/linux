@@ -141,7 +141,8 @@ srpc_alloc_bulk(int cpt, unsigned int bulk_off, unsigned int bulk_npg,
 		struct page *pg;
 		int nob;
 
-		pg = alloc_pages_node(cfs_cpt_spread_node(lnet_cpt_table(), cpt),
+		pg = alloc_pages_node(cfs_cpt_spread_node(lnet_cpt_table(),
+							  cpt),
 				      GFP_KERNEL, 0);
 		if (!pg) {
 			CERROR("Can't allocate page %d of %d\n", i, bulk_npg);
@@ -386,7 +387,8 @@ srpc_post_passive_rdma(int portal, int local, u64 matchbits, void *buf,
 		return -ENOMEM;
 	}
 
-	CDEBUG(D_NET, "Posted passive RDMA: peer %s, portal %d, matchbits %#llx\n",
+	CDEBUG(D_NET,
+	       "Posted passive RDMA: peer %s, portal %d, matchbits %#llx\n",
 	       libcfs_id2str(peer), portal, matchbits);
 	return 0;
 }
@@ -440,7 +442,8 @@ srpc_post_active_rdma(int portal, u64 matchbits, void *buf, int len,
 		rc = LNetMDUnlink(*mdh);
 		LASSERT(!rc);
 	} else {
-		CDEBUG(D_NET, "Posted active RDMA: peer %s, portal %u, matchbits %#llx\n",
+		CDEBUG(D_NET,
+		       "Posted active RDMA: peer %s, portal %u, matchbits %#llx\n",
 		       libcfs_id2str(peer), portal, matchbits);
 	}
 	return 0;
@@ -515,7 +518,8 @@ __must_hold(&scd->scd_lock)
 void
 srpc_add_buffer(struct swi_workitem *wi)
 {
-	struct srpc_service_cd *scd = container_of(wi, struct srpc_service_cd, scd_buf_wi);
+	struct srpc_service_cd *scd = container_of(wi, struct srpc_service_cd,
+						   scd_buf_wi);
 	struct srpc_buffer *buf;
 	int rc = 0;
 
@@ -662,7 +666,8 @@ srpc_finish_service(struct srpc_service *sv)
 		spin_lock(&scd->scd_lock);
 
 		if (scd->scd_buf_nposted > 0) {
-			CDEBUG(D_NET, "waiting for %d posted buffers to unlink\n",
+			CDEBUG(D_NET,
+			       "waiting for %d posted buffers to unlink\n",
 			       scd->scd_buf_nposted);
 			spin_unlock(&scd->scd_lock);
 			return 0;
@@ -960,7 +965,8 @@ srpc_server_rpc_done(struct srpc_server_rpc *rpc, int status)
 void
 srpc_handle_rpc(struct swi_workitem *wi)
 {
-	struct srpc_server_rpc *rpc = container_of(wi, struct srpc_server_rpc, srpc_wi);
+	struct srpc_server_rpc *rpc = container_of(wi, struct srpc_server_rpc,
+						   srpc_wi);
 	struct srpc_service_cd *scd = rpc->srpc_scd;
 	struct srpc_service *sv = scd->scd_svc;
 	struct srpc_event *ev = &rpc->srpc_ev;
@@ -1398,7 +1404,9 @@ srpc_send_reply(struct srpc_server_rpc *rpc)
 	return rc;
 }
 
-/* when in kernel always called with lnet_net_lock() held, and in thread context */
+/* when in kernel always called with lnet_net_lock() held,
+ * and in thread context
+ */
 static void
 srpc_lnet_ev_handler(struct lnet_event *ev)
 {
@@ -1451,7 +1459,8 @@ srpc_lnet_ev_handler(struct lnet_event *ev)
 			       rpcev, crpc, &crpc->crpc_reqstev,
 			       &crpc->crpc_replyev, &crpc->crpc_bulkev);
 			CERROR("Bad event: status %d, type %d, lnet %d\n",
-			       rpcev->ev_status, rpcev->ev_type, rpcev->ev_lnet);
+			       rpcev->ev_status, rpcev->ev_type,
+			       rpcev->ev_lnet);
 			LBUG();
 		}
 
