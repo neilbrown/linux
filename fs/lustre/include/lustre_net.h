@@ -2054,6 +2054,7 @@ u32 lustre_msg_get_conn_cnt(struct lustre_msg *msg);
 u32 lustre_msg_get_magic(struct lustre_msg *msg);
 u32 lustre_msg_get_timeout(struct lustre_msg *msg);
 u32 lustre_msg_get_service_time(struct lustre_msg *msg);
+char *lustre_msg_get_jobid(struct lustre_msg *msg);
 u32 lustre_msg_get_cksum(struct lustre_msg *msg);
 u32 lustre_msg_calc_cksum(struct lustre_msg *msg);
 void lustre_msg_set_handle(struct lustre_msg *msg,
