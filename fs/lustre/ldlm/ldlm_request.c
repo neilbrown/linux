@@ -138,6 +138,19 @@ static void ldlm_expired_completion_wait(struct ldlm_lock *lock, u32 conn_cnt)
 		   obd2cli_tgt(obd), imp->imp_connection->c_remote_uuid.uuid);
 }
 
+int is_granted_or_cancelled_nolock(struct ldlm_lock *lock)
+{
+	int ret = 0;
+
+	check_res_locked(lock->l_resource);
+	if (ldlm_is_granted(lock) && !ldlm_is_cp_reqd(lock))
+		ret = 1;
+	else if (ldlm_is_failed(lock) || ldlm_is_cancel(lock))
+		ret = 1;
+	return ret;
+}
+EXPORT_SYMBOL(is_granted_or_cancelled_nolock);
+
 /**
  * Calculate the Completion timeout (covering enqueue, BL AST, data flush,
  * lock cancel, and their replies). Used for lock completion timeout on the
