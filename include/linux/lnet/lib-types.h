@@ -516,20 +516,20 @@ struct lnet_peer_ni {
 	struct list_head	 lpni_hashlist;
 	/* messages blocking for tx credits */
 	struct list_head	 lpni_txq;
-	/* messages blocking for router credits */
-	struct list_head	 lpni_rtrq;
-	/* chain on router list */
-	struct list_head	 lpni_rtr_list;
 	/* statistics kept on each peer NI */
 	struct lnet_element_stats lpni_stats;
 	struct lnet_health_remote_stats lpni_hstats;
-	/* spin lock protecting credits and lpni_txq / lpni_rtrq */
+	/* spin lock protecting credits and lpni_txq */
 	spinlock_t		 lpni_lock;
 	/* # tx credits available */
 	int			 lpni_txcredits;
 	struct lnet_peer_net	*lpni_peer_net;
 	/* low water mark */
 	int			 lpni_mintxcredits;
+	/*
+	 * Each peer_ni in a gateway maintains its own credits. This
+	 * allows more traffic to gateways that have multiple interfaces.
+	 */
 	/* # router credits */
 	int			 lpni_rtrcredits;
 	/* low water mark */
@@ -542,18 +542,12 @@ struct lnet_peer_ni {
 	bool			 lpni_notifylnd;
 	/* some thread is handling notification */
 	bool			 lpni_notifying;
-	/* SEND event outstanding from ping */
-	unsigned int		 lpni_ping_notsent;
 	/* # times router went dead<->alive */
 	int			 lpni_alive_count;
 	/* ytes queued for sending */
 	long			 lpni_txqnob;
 	/* time of last aliveness news */
 	time64_t		 lpni_timestamp;
-	/* time of last ping attempt */
-	time64_t		 lpni_ping_timestamp;
-	/* != 0 if ping reply expected */
-	time64_t		 lpni_ping_deadline;
 	/* when I was last alive */
 	time64_t		 lpni_last_alive;
 	/* when lpni_ni was queried last time */
@@ -572,18 +566,12 @@ struct lnet_peer_ni {
 	int			 lpni_cpt;
 	/* state flags -- protected by lpni_lock */
 	unsigned int		 lpni_state;
-	/* # refs from lnet_route::lr_gateway */
-	int			 lpni_rtr_refcount;
 	/* sequence number used to round robin over peer nis within a net */
 	u32			 lpni_seq;
 	/* sequence number used to round robin over gateways */
 	u32			 lpni_gw_seq;
-	/* health flag */
-	bool			 lpni_healthy;
 	/* returned RC ping features. Protected with lpni_lock */
 	unsigned int		 lpni_ping_feats;
-	/* routers on this peer */
-	struct list_head	 lpni_routes;
 	/* preferred local nids: if only one, use lpni_pref.nid */
 	union lpni_pref {
 		lnet_nid_t	 nid;
@@ -614,6 +602,9 @@ struct lnet_peer {
 	/* list of messages pending discovery*/
 	struct list_head	lp_dc_pendq;
 
+	/* chain on router list */
+	struct list_head	lp_rtr_list;
+
 	/* primary NID of the peer */
 	lnet_nid_t		lp_primary_nid;
 
@@ -623,10 +614,22 @@ struct lnet_peer {
 	/* number of NIDs on this peer */
 	int			lp_nnis;
 
+	/* # refs from lnet_route_t::lr_gateway */
+	int			lp_rtr_refcount;
+
+	/* messages blocking for router credits */
+	struct list_head	lp_rtrq;
+
+	/* routes on this peer */
+	struct list_head	lp_routes;
+
+	/* time of last router check attempt */
+	time64_t		lp_rtrcheck_timestamp;
+
 	/* reference count */
 	atomic_t		lp_refcount;
 
-	/* lock protecting peer state flags */
+	/* lock protecting peer state flags and lpni_rtrq */
 	spinlock_t		lp_lock;
 
 	/* peer state flags */
@@ -790,9 +793,11 @@ struct lnet_route {
 	/* chain on gateway */
 	struct list_head	lr_gwlist;
 	/* router node */
-	struct lnet_peer_ni    *lr_gateway;
+	struct lnet_peer       *lr_gateway;
 	/* remote network number */
 	u32			lr_net;
+	/* local network number */
+	u32			lr_lnet;
 	/* sequence for round-robin */
 	int			lr_seq;
 	/* number of down NIs */
