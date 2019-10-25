@@ -53,7 +53,8 @@ static int ll_readlink_internal(struct inode *inode,
 		int print_limit = min_t(int, PAGE_SIZE - 128, symlen);
 
 		*symname = lli->lli_symlink_name;
-		/* If the total CDEBUG() size is larger than a page, it
+		/*
+		 * If the total CDEBUG() size is larger than a page, it
 		 * will print a warning to the console, avoid this by
 		 * printing just the last part of the symlink.
 		 */
@@ -96,11 +97,10 @@ static int ll_readlink_internal(struct inode *inode,
 	}
 
 	*symname = req_capsule_server_get(&(*request)->rq_pill, &RMF_MDT_MD);
-	if (!*symname ||
-	    strnlen(*symname, symlen) != symlen - 1) {
+	if (!*symname || strnlen(*symname, symlen) != symlen - 1) {
 		/* not full/NULL terminated */
-		CERROR("inode %lu: symlink not NULL terminated string of length %d\n",
-		       inode->i_ino, symlen - 1);
+		CERROR("%s: inode "DFID": symlink not NULL terminated stringof length %d\n",
+		       sbi->ll_fsname, PFID(ll_inode2fid(inode)), symlen - 1);
 		rc = -EPROTO;
 		goto failed;
 	}
@@ -142,7 +142,8 @@ static const char *ll_get_link(struct dentry *dentry,
 		return ERR_PTR(rc);
 	}
 
-	/* symname may contain a pointer to the request message buffer,
+	/*
+	 * symname may contain a pointer to the request message buffer,
 	 * we delay request releasing then.
 	 */
 	set_delayed_call(done, ll_put_link, request);
