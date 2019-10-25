@@ -234,9 +234,10 @@ again:
 
 	rc = mdc_getattr_common(exp, req);
 	if (rc) {
-		if (rc == -ERANGE &&
-		    acl_bufsize != imp->imp_connect_data.ocd_max_easize) {
-			acl_bufsize = imp->imp_connect_data.ocd_max_easize;
+		if (rc == -ERANGE) {
+			acl_bufsize = min_t(u32,
+					    imp->imp_connect_data.ocd_max_easize,
+					    XATTR_SIZE_MAX);
 			mdc_reset_acl_req(req);
 			goto again;
 		}
@@ -289,9 +290,10 @@ again:
 
 	rc = mdc_getattr_common(exp, req);
 	if (rc) {
-		if (rc == -ERANGE &&
-		    acl_bufsize != imp->imp_connect_data.ocd_max_easize) {
-			acl_bufsize = imp->imp_connect_data.ocd_max_easize;
+		if (rc == -ERANGE) {
+			acl_bufsize = min_t(u32,
+					    imp->imp_connect_data.ocd_max_easize,
+					    XATTR_SIZE_MAX);
 			mdc_reset_acl_req(req);
 			goto again;
 		}
