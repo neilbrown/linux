@@ -60,6 +60,8 @@ static inline u32 lustre_msg_hdr_size_v2(u32 count)
 
 u32 lustre_msg_hdr_size(u32 magic, u32 count)
 {
+	LASSERT(count > 0);
+
 	switch (magic) {
 	case LUSTRE_MSG_MAGIC_V2:
 		return lustre_msg_hdr_size_v2(count);
@@ -102,6 +104,7 @@ u32 lustre_msg_size_v2(int count, u32 *lengths)
 	u32 size;
 	int i;
 
+	LASSERT(count > 0);
 	size = lustre_msg_hdr_size_v2(count);
 	for (i = 0; i < count; i++)
 		size += cfs_size_round(lengths[i]);
@@ -158,6 +161,8 @@ void lustre_init_msg_v2(struct lustre_msg_v2 *msg, int count, u32 *lens,
 {
 	char *ptr;
 	int i;
+
+	LASSERT(count > 0);
 
 	msg->lm_bufcount = count;
 	/* XXX: lm_secflvr uninitialized here */
@@ -291,6 +296,7 @@ int lustre_pack_reply_v2(struct ptlrpc_request *req, int count,
 	int msg_len, rc;
 
 	LASSERT(!req->rq_reply_state);
+	LASSERT(count > 0);
 
 	if ((flags & LPRFL_EARLY_REPLY) == 0) {
 		spin_lock(&req->rq_lock);
@@ -365,6 +371,9 @@ EXPORT_SYMBOL(lustre_pack_reply);
 void *lustre_msg_buf_v2(struct lustre_msg_v2 *m, u32 n, u32 min_size)
 {
 	u32 i, offset, buflen, bufcount;
+
+	LASSERT(m);
+	LASSERT(m->lm_bufcount > 0);
 
 	bufcount = m->lm_bufcount;
 	if (unlikely(n >= bufcount)) {
@@ -479,7 +488,7 @@ void lustre_free_reply_state(struct ptlrpc_reply_state *rs)
 
 static int lustre_unpack_msg_v2(struct lustre_msg_v2 *m, int len)
 {
-	int swabbed, required_len, i;
+	int swabbed, required_len, i, buflen;
 
 	/* Now we know the sender speaks my language. */
 	required_len = lustre_msg_hdr_size_v2(0);
@@ -502,6 +511,10 @@ static int lustre_unpack_msg_v2(struct lustre_msg_v2 *m, int len)
 		BUILD_BUG_ON(offsetof(typeof(*m), lm_padding_3) == 0);
 	}
 
+	if (m->lm_bufcount == 0 || m->lm_bufcount > PTLRPC_MAX_BUFCOUNT) {
+		CERROR("message bufcount %d is not valid\n", m->lm_bufcount);
+		return -EINVAL;
+	}
 	required_len = lustre_msg_hdr_size_v2(m->lm_bufcount);
 	if (len < required_len) {
 		/* didn't receive all the buffer lengths */
@@ -513,12 +526,16 @@ static int lustre_unpack_msg_v2(struct lustre_msg_v2 *m, int len)
 	for (i = 0; i < m->lm_bufcount; i++) {
 		if (swabbed)
 			__swab32s(&m->lm_buflens[i]);
-		required_len += cfs_size_round(m->lm_buflens[i]);
+		buflen = cfs_size_round(m->lm_buflens[i]);
+		if (buflen < 0 || buflen > PTLRPC_MAX_BUFLEN) {
+			CERROR("buffer %d length %d is not valid\n", i, buflen);
+			return -EINVAL;
+		}
+		required_len += buflen;
 	}
-
-	if (len < required_len) {
-		CERROR("len: %d, required_len %d\n", len, required_len);
-		CERROR("bufcount: %d\n", m->lm_bufcount);
+	if (len < required_len || required_len > PTLRPC_MAX_BUFLEN) {
+		CERROR("len: %d, required_len %d, bufcount: %d\n",
+		       len, required_len, m->lm_bufcount);
 		for (i = 0; i < m->lm_bufcount; i++)
 			CERROR("buffer %d length %d\n", i, m->lm_buflens[i]);
 		return -EINVAL;

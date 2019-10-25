@@ -238,6 +238,34 @@
  *
  */
 
+/**
+ * This is the size of a maximum REINT_SETXATTR request:
+ *
+ *   lustre_msg		 56 (32 + 4 x 5 + 4)
+ *   ptlrpc_body	184
+ *   mdt_rec_setxattr	136
+ *   lustre_capa	120
+ *   name		256 (XATTR_NAME_MAX)
+ *   value	      65536 (XATTR_SIZE_MAX)
+ */
+#define MDS_EA_MAXREQSIZE	66288
+
+/**
+ * These are the maximum request and reply sizes (rounded up to 1 KB
+ * boundaries) for the "regular" MDS_REQUEST_PORTAL and MDS_REPLY_PORTAL.
+ */
+#define MDS_REG_MAXREQSIZE	(((max(MDS_EA_MAXREQSIZE, \
+				       MDS_LOV_MAXREQSIZE) + 1023) >> 10) << 10)
+#define MDS_REG_MAXREPSIZE	MDS_REG_MAXREQSIZE
+
+/**
+ * The update request includes all of updates from the create, which might
+ * include linkea (4K maxim), together with other updates, we set it to 1000K:
+ * lustre_msg + ptlrpc_body + OUT_UPDATE_BUFFER_SIZE_MAX
+ */
+#define OUT_MAXREQSIZE	(1000 * 1024)
+#define OUT_MAXREPSIZE	MDS_MAXREPSIZE
+
  /*
   * LDLM threads constants:
   *
@@ -290,6 +318,12 @@
 				 sizeof(struct niobuf_remote) * \
 				 (DT_MAX_BRW_PAGES - 1))
 
+/**
+ * MDS incoming request with LOV EA
+ * 24 = sizeof(struct lov_ost_data), i.e: replay of opencreate
+ */
+#define MDS_LOV_MAXREQSIZE	max(MDS_MAXREQSIZE, \
+				    362 + LOV_MAX_STRIPE_COUNT * 24)
 /**
  * FIEMAP request can be 4K+ for now
  */
@@ -1997,6 +2031,12 @@ int ptlrpc_reconnect_import(struct obd_import *imp);
  *
  * @{
  */
+#define PTLRPC_MAX_BUFCOUNT \
+	(sizeof(((struct ptlrpc_request *)0)->rq_req_swab_mask) * 8)
+#define MD_MAX_BUFLEN		(MDS_REG_MAXREQSIZE > OUT_MAXREQSIZE ? \
+				 MDS_REG_MAXREQSIZE : OUT_MAXREQSIZE)
+#define PTLRPC_MAX_BUFLEN	(OST_IO_MAXREQSIZE > MD_MAX_BUFLEN ? \
+				 OST_IO_MAXREQSIZE : MD_MAX_BUFLEN)
 bool ptlrpc_buf_need_swab(struct ptlrpc_request *req, const int inout,
 			  u32 index);
 void ptlrpc_buf_set_swabbed(struct ptlrpc_request *req, const int inout,
