@@ -2414,10 +2414,10 @@ ksocknal_debug_peerhash(struct lnet_ni *ni)
 		if (peer_ni->ksnp_ni != ni)
 			continue;
 
-		CWARN("Active peer_ni on shutdown: %s, ref %d, scnt %d, closing %d, accepting %d, err %d, zcookie %llu, txq %d, zc_req %d\n",
+		CWARN("Active peer_ni on shutdown: %s, ref %d, closing %d, accepting %d, err %d, zcookie %llu, txq %d, zc_req %d\n",
 		      libcfs_id2str(peer_ni->ksnp_id),
 		      refcount_read(&peer_ni->ksnp_refcount),
-		      peer_ni->ksnp_sharecount, peer_ni->ksnp_closing,
+		      peer_ni->ksnp_closing,
 		      peer_ni->ksnp_accepting, peer_ni->ksnp_error,
 		      peer_ni->ksnp_zc_next_cookie,
 		      !list_empty(&peer_ni->ksnp_tx_queue),
