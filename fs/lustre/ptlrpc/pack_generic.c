@@ -91,21 +91,9 @@ bool ptlrpc_buf_need_swab(struct ptlrpc_request *req, const int inout,
 /* early reply size */
 u32 lustre_msg_early_size(void)
 {
-	static u32 size;
+	u32 pblen = sizeof(struct ptlrpc_body);
 
-	if (!size) {
-		/* Always reply old ptlrpc_body_v2 to keep interoperability
-		 * with the old client (< 2.3) which doesn't have pb_jobid
-		 * in the ptlrpc_body.
-		 *
-		 * XXX Remove this whenever we drop interoperability with such
-		 *     client.
-		 */
-		u32 pblen = sizeof(struct ptlrpc_body_v2);
-
-		size = lustre_msg_size(LUSTRE_MSG_MAGIC_V2, 1, &pblen);
-	}
-	return size;
+	return lustre_msg_size(LUSTRE_MSG_MAGIC_V2, 1, &pblen);
 }
 EXPORT_SYMBOL(lustre_msg_early_size);
 
