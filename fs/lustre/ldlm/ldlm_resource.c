@@ -443,7 +443,7 @@ struct ldlm_resource *ldlm_resource_getref(struct ldlm_resource *res)
 static unsigned int ldlm_res_hop_hash(struct cfs_hash *hs,
 				      const void *key, unsigned int mask)
 {
-	const struct ldlm_res_id *id  = key;
+	const struct ldlm_res_id *id = key;
 	unsigned int val = 0;
 	unsigned int i;
 
@@ -627,7 +627,7 @@ struct ldlm_namespace *ldlm_namespace_new(struct obd_device *obd, char *name,
 		return NULL;
 	}
 
-	for (idx = 0;; idx++) {
+	for (idx = 0; ; idx++) {
 		nsd = &ldlm_ns_hash_defs[idx];
 		if (nsd->nsd_type == LDLM_NS_TYPE_UNKNOWN) {
 			CERROR("Unknown type %d for ns %s\n", ns_type, name);
@@ -770,7 +770,8 @@ static void cleanup_resource(struct ldlm_resource *res, struct list_head *q,
 			ldlm_set_local_only(lock);
 
 		if (local_only && (lock->l_readers || lock->l_writers)) {
-			/* This is a little bit gross, but much better than the
+			/*
+			 * This is a little bit gross, but much better than the
 			 * alternative: pretend that we got a blocking AST from
 			 * the server, so that when the lock is decref'd, it
 			 * will go away ...
