@@ -156,7 +156,7 @@ EXPORT_SYMBOL(lnet_sock_read);
 
 static int
 lnet_sock_create(struct socket **sockp, int *fatal, u32 local_ip,
-		 int local_port)
+		 int local_port, struct net *ns)
 {
 	struct sockaddr_in locaddr;
 	struct socket *sock;
@@ -166,7 +166,7 @@ lnet_sock_create(struct socket **sockp, int *fatal, u32 local_ip,
 	/* All errors are fatal except bind failure if the port is in use */
 	*fatal = 1;
 
-	rc = sock_create_kern(&init_net, PF_INET, SOCK_STREAM, 0, &sock);
+	rc = sock_create_kern(ns, PF_INET, SOCK_STREAM, 0, &sock);
 	*sockp = sock;
 	if (rc) {
 		CERROR("Can't create socket: %d\n", rc);
@@ -282,12 +282,12 @@ EXPORT_SYMBOL(lnet_sock_getbuf);
 
 int
 lnet_sock_listen(struct socket **sockp, u32 local_ip, int local_port,
-		 int backlog)
+		 int backlog, struct net *ns)
 {
 	int fatal;
 	int rc;
 
-	rc = lnet_sock_create(sockp, &fatal, local_ip, local_port);
+	rc = lnet_sock_create(sockp, &fatal, local_ip, local_port, ns);
 	if (rc) {
 		if (!fatal)
 			CERROR("Can't create socket: port %d already in use\n",
@@ -306,12 +306,13 @@ lnet_sock_listen(struct socket **sockp, u32 local_ip, int local_port,
 
 int
 lnet_sock_connect(struct socket **sockp, int *fatal, u32 local_ip,
-		  int local_port, u32 peer_ip, int peer_port)
+		  int local_port, u32 peer_ip, int peer_port,
+		  struct net *ns)
 {
 	struct sockaddr_in srvaddr;
 	int rc;
 
-	rc = lnet_sock_create(sockp, fatal, local_ip, local_port);
+	rc = lnet_sock_create(sockp, fatal, local_ip, local_port, ns);
 	if (rc)
 		return rc;
 

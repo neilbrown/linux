@@ -614,7 +614,7 @@ void lnet_register_lnd(const struct lnet_lnd *lnd);
 void lnet_unregister_lnd(const struct lnet_lnd *lnd);
 
 int lnet_connect(struct socket **sockp, lnet_nid_t peer_nid,
-		 u32 local_ip, u32 peer_ip, int peer_port);
+		 u32 local_ip, u32 peer_ip, int peer_port, struct net *ns);
 void lnet_connect_console_error(int rc, lnet_nid_t peer_nid,
 				u32 peer_ip, int port);
 int lnet_count_acceptor_nets(void);
@@ -635,18 +635,19 @@ struct lnet_inetdev {
 	char	li_name[IFNAMSIZ];
 };
 
-int lnet_inet_enumerate(struct lnet_inetdev **dev_list);
+int lnet_inet_enumerate(struct lnet_inetdev **dev_list, struct net *ns);
 int lnet_sock_setbuf(struct socket *socket, int txbufsize, int rxbufsize);
 int lnet_sock_getbuf(struct socket *socket, int *txbufsize, int *rxbufsize);
 int lnet_sock_getaddr(struct socket *socket, bool remote, u32 *ip, int *port);
 int lnet_sock_write(struct socket *sock, void *buffer, int nob, int timeout);
 int lnet_sock_read(struct socket *sock, void *buffer, int nob, int timeout);
 
-int lnet_sock_listen(struct socket **sockp, u32 ip, int port, int backlog);
+int lnet_sock_listen(struct socket **sockp, u32 ip, int port, int backlog,
+		     struct net *ns);
 int lnet_sock_accept(struct socket **newsockp, struct socket *sock);
 int lnet_sock_connect(struct socket **sockp, int *fatal,
 		      u32 local_ip, int local_port,
-		      u32 peer_ip, int peer_port);
+		      u32 peer_ip, int peer_port, struct net *ns);
 void libcfs_sock_release(struct socket *sock);
 
 int lnet_peers_start_down(void);

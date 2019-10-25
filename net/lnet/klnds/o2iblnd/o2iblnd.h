@@ -107,10 +107,9 @@ extern struct kib_tunables  kiblnd_tunables;
 					IBLND_CREDIT_HIGHWATER_V1 : \
 					t->lnd_peercredits_hiw)
 
-#define kiblnd_rdma_create_id(cb, dev, ps, qpt) rdma_create_id(current->nsproxy->net_ns, \
-							       cb, dev, \
-							       ps, qpt)
-
+# define kiblnd_rdma_create_id(ns, cb, dev, ps, qpt) rdma_create_id(ns, cb, \
+								    dev, ps, \
+								    qpt)
 /* 2 OOB shall suffice for 1 keepalive and 1 returning credits */
 #define IBLND_OOB_CAPABLE(v)	((v) != IBLND_MSG_VERSION_1)
 #define IBLND_OOB_MSGS(v)	(IBLND_OOB_CAPABLE(v) ? 2 : 0)
@@ -1015,7 +1014,7 @@ int kiblnd_alloc_pages(struct kib_pages **pp, int cpt, int npages);
 int kiblnd_cm_callback(struct rdma_cm_id *cmid,
 		       struct rdma_cm_event *event);
 
-int kiblnd_dev_failover(struct kib_dev *dev);
+int kiblnd_dev_failover(struct kib_dev *dev, struct net *ns);
 int kiblnd_create_peer(struct lnet_ni *ni, struct kib_peer_ni **peerp,
 		       lnet_nid_t nid);
 void kiblnd_destroy_peer(struct kib_peer_ni *peer_ni);
