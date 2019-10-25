@@ -246,8 +246,6 @@ void ll_lock_cancel_bits(struct ldlm_lock *lock, u64 to_cancel)
 	}
 
 	if (bits & MDS_INODELOCK_XATTR) {
-		if (S_ISDIR(inode->i_mode))
-			ll_i2info(inode)->lli_def_stripe_offset = -1;
 		ll_xattr_cache_destroy(inode);
 		bits &= ~MDS_INODELOCK_XATTR;
 	}
@@ -1156,17 +1154,13 @@ again:
 			from_kuid(&init_user_ns, current_fsuid()),
 			from_kgid(&init_user_ns, current_fsgid()),
 			current_cap(), rdev, &request);
-	if (err < 0 && err != -EREMOTE)
-		goto err_exit;
-
+#if LUSTRE_VERSION_CODE < OBD_OCD_VERSION(2, 14, 58, 0)
 	/*
-	 * If the client doesn't know where to create a subdirectory (or
-	 * in case of a race that sends the RPC to the wrong MDS), the
-	 * MDS will return -EREMOTE and the client will fetch the layout
-	 * of the directory, then create the directory on the right MDT.
+	 * server < 2.12.58 doesn't pack default LMV in intent_getattr reply,
+	 * fetch default LMV here.
 	 */
 	if (unlikely(err == -EREMOTE)) {
-		struct ll_inode_info *lli = ll_i2info(dir);
+		struct ll_inode_info	*lli = ll_i2info(dir);
 		struct lmv_user_md *lum;
 		int lumsize, err2;
 
@@ -1175,26 +1169,58 @@ again:
 
 		err2 = ll_dir_getstripe(dir, (void **)&lum, &lumsize, &request,
 					OBD_MD_DEFAULT_MEA);
+		ll_finish_md_op_data(op_data);
+		op_data = NULL;
 		if (!err2) {
-			/* Update stripe_offset and retry */
-			lli->lli_def_stripe_offset = lum->lum_stripe_offset;
-		} else if (err2 == -ENODATA &&
-			   lli->lli_def_stripe_offset != -1) {
+			struct lustre_md md = { NULL };
+
+			md.body = req_capsule_server_get(&request->rq_pill,
+							 &RMF_MDT_BODY);
+			if (!md.body) {
+				err = -EPROTO;
+				goto err_exit;
+			}
+
+			md.default_lmv = kzalloc(sizeof(*md.default_lmv),
+						 GFP_NOFS);
+			if (!md.default_lmv) {
+				err = -ENOMEM;
+				goto err_exit;
+			}
+
+			md.default_lmv->lsm_md_magic = lum->lum_magic;
+			md.default_lmv->lsm_md_stripe_count =
+				lum->lum_stripe_count;
+			md.default_lmv->lsm_md_master_mdt_index =
+				lum->lum_stripe_offset;
+			md.default_lmv->lsm_md_hash_type = lum->lum_hash_type;
+
+			err = ll_update_inode(dir, &md);
+			md_free_lustre_md(sbi->ll_md_exp, &md);
+			if (err)
+				goto err_exit;
+		} else if (err2 == -ENODATA && lli->lli_default_lsm_md) {
 			/*
 			 * If there are no default stripe EA on the MDT, but the
 			 * client has default stripe, then it probably means
 			 * default stripe EA has just been deleted.
 			 */
-			lli->lli_def_stripe_offset = -1;
+			down_write(&lli->lli_lsm_sem);
+			kfree(lli->lli_default_lsm_md);
+			lli->lli_default_lsm_md = NULL;
+			up_write(&lli->lli_lsm_sem);
 		} else {
 			goto err_exit;
 		}
 
 		ptlrpc_req_finished(request);
 		request = NULL;
-		ll_finish_md_op_data(op_data);
 		goto again;
 	}
+#endif
+
+	if (err < 0)
+		goto err_exit;
 
 	ll_update_times(request, dir);
 

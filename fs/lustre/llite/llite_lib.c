@@ -927,7 +927,6 @@ void ll_lli_init(struct ll_inode_info *lli)
 		spin_lock_init(&lli->lli_sa_lock);
 		lli->lli_opendir_pid = 0;
 		lli->lli_sa_enabled = 0;
-		lli->lli_def_stripe_offset = -1;
 		init_rwsem(&lli->lli_lsm_sem);
 	} else {
 		mutex_init(&lli->lli_size_mutex);
@@ -1206,6 +1205,11 @@ void ll_dir_clear_lsm_md(struct inode *inode)
 		lmv_free_memmd(lli->lli_lsm_md);
 		lli->lli_lsm_md = NULL;
 	}
+
+	if (lli->lli_default_lsm_md) {
+		lmv_free_memmd(lli->lli_default_lsm_md);
+		lli->lli_default_lsm_md = NULL;
+	}
 }
 
 static struct inode *ll_iget_anon_dir(struct super_block *sb,
@@ -1304,6 +1308,46 @@ static int ll_init_lsm_md(struct inode *inode, struct lustre_md *md)
 	return 0;
 }
 
+static void ll_update_default_lsm_md(struct inode *inode, struct lustre_md *md)
+{
+	struct ll_inode_info *lli = ll_i2info(inode);
+
+	if (!md->default_lmv) {
+		/* clear default lsm */
+		if (lli->lli_default_lsm_md) {
+			down_write(&lli->lli_lsm_sem);
+			if (lli->lli_default_lsm_md) {
+				lmv_free_memmd(lli->lli_default_lsm_md);
+				lli->lli_default_lsm_md = NULL;
+			}
+			up_write(&lli->lli_lsm_sem);
+		}
+	} else if (lli->lli_default_lsm_md) {
+		/* update default lsm if it changes */
+		down_read(&lli->lli_lsm_sem);
+		if (lli->lli_default_lsm_md &&
+		    !lsm_md_eq(lli->lli_default_lsm_md, md->default_lmv)) {
+			up_read(&lli->lli_lsm_sem);
+			down_write(&lli->lli_lsm_sem);
+			if (lli->lli_default_lsm_md)
+				lmv_free_memmd(lli->lli_default_lsm_md);
+			lli->lli_default_lsm_md = md->default_lmv;
+			lsm_md_dump(D_INODE, md->default_lmv);
+			md->default_lmv = NULL;
+			up_write(&lli->lli_lsm_sem);
+		} else {
+			up_read(&lli->lli_lsm_sem);
+		}
+	} else {
+		/* init default lsm */
+		down_write(&lli->lli_lsm_sem);
+		lli->lli_default_lsm_md = md->default_lmv;
+		lsm_md_dump(D_INODE, md->default_lmv);
+		md->default_lmv = NULL;
+		up_write(&lli->lli_lsm_sem);
+	}
+}
+
 static int ll_update_lsm_md(struct inode *inode, struct lustre_md *md)
 {
 	struct ll_inode_info *lli = ll_i2info(inode);
@@ -1313,6 +1357,10 @@ static int ll_update_lsm_md(struct inode *inode, struct lustre_md *md)
 	LASSERT(S_ISDIR(inode->i_mode));
 	CDEBUG(D_INODE, "update lsm %p of " DFID "\n", lli->lli_lsm_md,
 	       PFID(ll_inode2fid(inode)));
+
+	/* update default LMV */
+	if (md->default_lmv)
+		ll_update_default_lsm_md(inode, md);
 
 	/*
 	 * no striped information from request, lustre_md from req does not
@@ -2301,6 +2349,7 @@ int ll_prep_inode(struct inode **inode, struct ptlrpc_request *req,
 {
 	struct ll_sb_info *sbi = NULL;
 	struct lustre_md md = { NULL };
+	bool default_lmv_deleted = false;
 	int rc;
 
 	LASSERT(*inode || sb);
@@ -2309,6 +2358,15 @@ int ll_prep_inode(struct inode **inode, struct ptlrpc_request *req,
 			      sbi->ll_md_exp, &md);
 	if (rc)
 		goto out;
+
+	/*
+	 * clear default_lmv only if intent_getattr reply doesn't contain it.
+	 * but it needs to be done after iget, check this early because
+	 * ll_update_lsm_md() may change md.
+	 */
+	if (it && (it->it_op & (IT_LOOKUP | IT_GETATTR)) &&
+	    S_ISDIR(md.body->mbo_mode) && !md.default_lmv)
+		default_lmv_deleted = true;
 
 	if (*inode) {
 		rc = ll_update_inode(*inode, &md);
@@ -2370,9 +2428,12 @@ int ll_prep_inode(struct inode **inode, struct ptlrpc_request *req,
 		LDLM_LOCK_PUT(lock);
 	}
 
+	if (default_lmv_deleted)
+		ll_update_default_lsm_md(*inode, &md);
 out:
 	/* cleanup will be done if necessary */
 	md_free_lustre_md(sbi->ll_md_exp, &md);
+
 	if (rc != 0 && it && it->it_op & IT_OPEN)
 		ll_open_cleanup(sb ? sb : (*inode)->i_sb, req);
 
@@ -2455,7 +2516,8 @@ void ll_unlock_md_op_lsm(struct md_op_data *op_data)
 struct md_op_data *ll_prep_md_op_data(struct md_op_data *op_data,
 				      struct inode *i1, struct inode *i2,
 				      const char *name, size_t namelen,
-				      u32 mode, u32 opc, void *data)
+				      u32 mode, enum md_op_code opc,
+				      void *data)
 {
 	if (!name) {
 		/* Do not reuse namelen for something else. */
@@ -2477,15 +2539,13 @@ struct md_op_data *ll_prep_md_op_data(struct md_op_data *op_data,
 
 	ll_i2gids(op_data->op_suppgids, i1, i2);
 	op_data->op_fid1 = *ll_inode2fid(i1);
-	op_data->op_default_stripe_offset = -1;
+	op_data->op_code = opc;
 
 	if (S_ISDIR(i1->i_mode)) {
 		down_read(&ll_i2info(i1)->lli_lsm_sem);
 		op_data->op_mea1_sem = &ll_i2info(i1)->lli_lsm_sem;
 		op_data->op_mea1 = ll_i2info(i1)->lli_lsm_md;
-		if (opc == LUSTRE_OPC_MKDIR)
-			op_data->op_default_stripe_offset =
-				ll_i2info(i1)->lli_def_stripe_offset;
+		op_data->op_default_mea1 = ll_i2info(i1)->lli_default_lsm_md;
 	}
 
 	if (i2) {

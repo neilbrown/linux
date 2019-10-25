@@ -726,6 +726,14 @@ enum md_cli_flags {
 	CLI_MIGRATE		= BIT(4),
 };
 
+enum md_op_code {
+	LUSTRE_OPC_MKDIR	= 0,
+	LUSTRE_OPC_SYMLINK	= 1,
+	LUSTRE_OPC_MKNOD	= 2,
+	LUSTRE_OPC_CREATE	= 3,
+	LUSTRE_OPC_ANY		= 5,
+};
+
 /**
  * GETXATTR is not included as only a couple of fields in the reply body
  * is filled, but not FID which is needed for common intent handling in
@@ -743,6 +751,7 @@ struct md_op_data {
 	struct lu_fid		op_fid4; /* to the operation locks. */
 	u32			op_mds;  /* what mds server open will go to */
 	u32			op_mode;
+	enum md_op_code		op_code;
 	struct lustre_handle	op_open_handle;
 	s64			op_mod_time;
 	const char	       *op_name;
@@ -751,6 +760,7 @@ struct md_op_data {
 	struct rw_semaphore	*op_mea2_sem;
 	struct lmv_stripe_md   *op_mea1;
 	struct lmv_stripe_md   *op_mea2;
+	struct lmv_stripe_md	*op_default_mea1;	/* default LMV */
 	u32			op_suppgids[2];
 	u32			op_fsuid;
 	u32			op_fsgid;
@@ -787,9 +797,6 @@ struct md_op_data {
 	u32			op_file_secctx_name_size;
 	void		       *op_file_secctx;
 	u32			op_file_secctx_size;
-
-	/* default stripe offset */
-	u32			op_default_stripe_offset;
 
 	u32			op_projid;
 
@@ -930,6 +937,7 @@ struct lustre_md {
 		struct lmv_stripe_md		*lmv;
 		struct lmv_foreign_md   *lfm;
 	};
+	struct lmv_stripe_md    *default_lmv;
 #ifdef CONFIG_LUSTRE_FS_POSIX_ACL
 	struct posix_acl		*posix_acl;
 #endif
