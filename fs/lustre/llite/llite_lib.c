@@ -1719,17 +1719,15 @@ int ll_setattr(struct dentry *de, struct iattr *attr)
 int ll_statfs_internal(struct ll_sb_info *sbi, struct obd_statfs *osfs,
 		       u32 flags)
 {
-	struct obd_statfs obd_osfs;
+	struct obd_statfs obd_osfs = { 0 };
 	time64_t max_age;
 	int rc;
 
 	max_age = ktime_get_seconds() - OBD_STATFS_CACHE_SECONDS;
 
 	rc = obd_statfs(NULL, sbi->ll_md_exp, osfs, max_age, flags);
-	if (rc) {
-		CERROR("md_statfs fails: rc = %d\n", rc);
+	if (rc)
 		return rc;
-	}
 
 	osfs->os_type = LL_SUPER_MAGIC;
 
@@ -1745,8 +1743,9 @@ int ll_statfs_internal(struct ll_sb_info *sbi, struct obd_statfs *osfs,
 
 	rc = obd_statfs(NULL, sbi->ll_dt_exp, &obd_osfs, max_age, flags);
 	if (rc) {
-		CERROR("obd_statfs fails: rc = %d\n", rc);
-		return rc;
+		/* Possibly a filesystem with no OSTs.  Report MDT totals. */
+		rc = 0;
+		goto out;
 	}
 
 	CDEBUG(D_SUPER, "OSC blocks %llu/%llu objects %llu/%llu\n",
@@ -1758,13 +1757,14 @@ int ll_statfs_internal(struct ll_sb_info *sbi, struct obd_statfs *osfs,
 	osfs->os_bfree = obd_osfs.os_bfree;
 	osfs->os_bavail = obd_osfs.os_bavail;
 
-	/* If we don't have as many objects free on the OST as inodes
-	 * on the MDS, we reduce the total number of inodes to
-	 * compensate, so that the "inodes in use" number is correct.
+	/* If we have _some_ OSTs, but don't have as many free objects on the
+	 * OSTs as inodes on the MDTs, reduce the reported number of inodes
+	 * to compensate, so that the "inodes in use" number is correct.
+	 * This should be kept in sync with lod_statfs() behaviour.
 	 */
-	if (obd_osfs.os_ffree < osfs->os_ffree) {
+	if (obd_osfs.os_files && obd_osfs.os_ffree < osfs->os_ffree) {
 		osfs->os_files = (osfs->os_files - osfs->os_ffree) +
-			obd_osfs.os_ffree;
+				 obd_osfs.os_ffree;
 		osfs->os_ffree = obd_osfs.os_ffree;
 	}
 
