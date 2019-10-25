@@ -335,7 +335,8 @@ static const struct req_msg_field *obd_connect_client[] = {
 	&RMF_TGTUUID,
 	&RMF_CLUUID,
 	&RMF_CONN,
-	&RMF_CONNECT_DATA
+	&RMF_CONNECT_DATA,
+	&RMF_SELINUX_POL,
 };
 
 static const struct req_msg_field *obd_connect_server[] = {
@@ -1077,6 +1078,10 @@ struct req_msg_field RMF_LAYOUT_INTENT =
 		    sizeof(struct layout_intent), lustre_swab_layout_intent,
 		    NULL);
 EXPORT_SYMBOL(RMF_LAYOUT_INTENT);
+
+struct req_msg_field RMF_SELINUX_POL =
+	DEFINE_MSGF("selinux_pol", RMF_F_STRING, -1, NULL, NULL);
+EXPORT_SYMBOL(RMF_SELINUX_POL);
 
 /*
  * OST request field.
