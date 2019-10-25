@@ -789,8 +789,6 @@ static struct lprocfs_vars lprocfs_osc_obd_vars[] = {
 	{ NULL }
 };
 
-#define pct(a, b) (b ? a * 100 / b : 0)
-
 static int osc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 {
 	struct timespec64 now;
@@ -829,7 +827,7 @@ static int osc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 
 		read_cum += r;
 		write_cum += w;
-		seq_printf(seq, "%d:\t\t%10lu %3lu %3lu   | %10lu %3lu %3lu\n",
+		seq_printf(seq, "%d:\t\t%10lu %3u %3u   | %10lu %3u %3u\n",
 			   1 << i, r, pct(r, read_tot),
 			   pct(read_cum, read_tot), w,
 			   pct(w, write_tot),
@@ -853,7 +851,7 @@ static int osc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 
 		read_cum += r;
 		write_cum += w;
-		seq_printf(seq, "%d:\t\t%10lu %3lu %3lu   | %10lu %3lu %3lu\n",
+		seq_printf(seq, "%d:\t\t%10lu %3u %3u   | %10lu %3u %3u\n",
 			   i, r, pct(r, read_tot),
 			   pct(read_cum, read_tot), w,
 			   pct(w, write_tot),
@@ -877,7 +875,7 @@ static int osc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 
 		read_cum += r;
 		write_cum += w;
-		seq_printf(seq, "%d:\t\t%10lu %3lu %3lu   | %10lu %3lu %3lu\n",
+		seq_printf(seq, "%d:\t\t%10lu %3u %3u   | %10lu %3u %3u\n",
 			   (i == 0) ? 0 : 1 << (i - 1),
 			   r, pct(r, read_tot), pct(read_cum, read_tot),
 			   w, pct(w, write_tot), pct(write_cum, write_tot));
@@ -889,8 +887,6 @@ static int osc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 
 	return 0;
 }
-
-#undef pct
 
 static ssize_t osc_rpc_stats_seq_write(struct file *file,
 				       const char __user *buf,

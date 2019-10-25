@@ -58,6 +58,11 @@ struct lprocfs_vars {
 	umode_t				proc_mode;
 };
 
+static inline u32 pct(s64 a, s64 b)
+{
+	return b ? a * 100 / b : 0;
+}
+
 struct lprocfs_static_vars {
 	struct lprocfs_vars		*obd_vars;
 	const struct attribute_group	*sysfs_vars;
