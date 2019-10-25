@@ -2491,29 +2491,32 @@ LNetNIInit(lnet_pid_t requested_pid)
 
 	lnet_ping_target_update(pbuf, ping_mdh);
 
-	rc = lnet_monitor_thr_start();
+	rc = lnet_push_target_init();
 	if (rc)
 		goto err_stop_ping;
-
-	rc = lnet_push_target_init();
-	if (rc != 0)
-		goto err_stop_monitor_thr;
 
 	rc = lnet_peer_discovery_start();
 	if (rc != 0)
 		goto err_destroy_push_target;
+
+	rc = lnet_monitor_thr_start();
+	if (rc != 0)
+		goto err_stop_discovery_thr;
 
 	lnet_fault_init();
 	lnet_router_debugfs_init();
 
 	mutex_unlock(&the_lnet.ln_api_mutex);
 
+	/* wait for all routers to start */
+	lnet_wait_router_start();
+
 	return 0;
 
+err_stop_discovery_thr:
+	lnet_peer_discovery_stop();
 err_destroy_push_target:
 	lnet_push_target_fini();
-err_stop_monitor_thr:
-	lnet_monitor_thr_stop();
 err_stop_ping:
 	lnet_ping_target_fini();
 err_acceptor_stop:
@@ -2561,9 +2564,9 @@ LNetNIFini(void)
 
 		lnet_fault_fini();
 		lnet_router_debugfs_fini();
+		lnet_monitor_thr_stop();
 		lnet_peer_discovery_stop();
 		lnet_push_target_fini();
-		lnet_monitor_thr_stop();
 		lnet_ping_target_fini();
 
 		/* Teardown fns that use my own API functions BEFORE here */
