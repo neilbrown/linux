@@ -1275,7 +1275,7 @@ enum {
  */
 struct ptlrpc_thread {
 	/**
-	 * List of active threads in svc->srv_threads
+	 * List of active threads in svcpt->scp_threads
 	 */
 	struct list_head		t_link;
 	/**
@@ -1435,8 +1435,6 @@ struct ptlrpc_service {
 	char				*srv_name;
 	/** only statically allocated strings here; we don't clean them */
 	char				*srv_thread_name;
-	/** service thread list */
-	struct list_head		srv_threads;
 	/** threads # should be created for each partition on initializing */
 	int				srv_nthrs_cpt_init;
 	/** limit of threads number for each partition */
