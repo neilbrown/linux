@@ -3174,7 +3174,7 @@ fail_error:
 
 static void
 lnet_handle_recovery_reply(struct lnet_mt_event_info *ev_info,
-			   int status)
+			   int status, bool unlink_event)
 {
 	lnet_nid_t nid = ev_info->mt_nid;
 
@@ -3206,7 +3206,8 @@ lnet_handle_recovery_reply(struct lnet_mt_event_info *ev_info,
 		 * carry forward too much information.
 		 * In the peer case, it'll naturally be incremented
 		 */
-		lnet_inc_healthv(&ni->ni_healthv);
+		if (!unlink_event)
+			lnet_inc_healthv(&ni->ni_healthv);
 	} else {
 		struct lnet_peer_ni *lpni;
 		int cpt;
@@ -3251,14 +3252,14 @@ lnet_mt_event_handler(struct lnet_event *event)
 		       libcfs_nid2str(ev_info->mt_nid));
 		/* fall-through */
 	case LNET_EVENT_REPLY:
-		lnet_handle_recovery_reply(ev_info, event->status);
+		lnet_handle_recovery_reply(ev_info, event->status,
+					   event->type == LNET_EVENT_UNLINK);
 		break;
 	case LNET_EVENT_SEND:
 		CDEBUG(D_NET, "%s recovery message sent %s:%d\n",
 		       libcfs_nid2str(ev_info->mt_nid),
 		       (event->status) ? "unsuccessfully" :
 		       "successfully", event->status);
-		lnet_handle_recovery_reply(ev_info, event->status);
 		break;
 	default:
 		CERROR("Unexpected event: %d\n", event->type);
