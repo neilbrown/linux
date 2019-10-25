@@ -41,6 +41,7 @@
 #include <obd_class.h>
 #include <obd_support.h>
 #include <lustre_import.h>
+#include <lustre_disk.h>
 #include <uapi/linux/lustre/lustre_param.h>
 #include <lustre_sec.h>
 
@@ -577,13 +578,44 @@ static int sptlrpc_conf_merge_rule(struct sptlrpc_conf *conf,
  * find one through the target name in the record inside conf_lock;
  * otherwise means caller already hold conf_lock.
  */
-static int __sptlrpc_process_config(struct lustre_cfg *lcfg,
+static int __sptlrpc_process_config(char *target, const char *fsname,
+				    struct sptlrpc_rule *rule,
 				    struct sptlrpc_conf *conf)
 {
-	char *target, *param;
+	int rc;
+
+	if (!conf) {
+		if (!fsname)
+			return -ENODEV;
+
+		mutex_lock(&sptlrpc_conf_lock);
+		conf = sptlrpc_conf_get(fsname, 0);
+		if (!conf) {
+			CERROR("can't find conf\n");
+			rc = -ENOMEM;
+		} else {
+			rc = sptlrpc_conf_merge_rule(conf, target, rule);
+		}
+		mutex_unlock(&sptlrpc_conf_lock);
+	} else {
+		LASSERT(mutex_is_locked(&sptlrpc_conf_lock));
+		rc = sptlrpc_conf_merge_rule(conf, target, rule);
+	}
+
+	if (!rc)
+		conf->sc_modified++;
+
+	return rc;
+}
+
+int sptlrpc_process_config(struct lustre_cfg *lcfg)
+{
 	char fsname[MTI_NAME_MAXLEN];
 	struct sptlrpc_rule rule;
+	char *target, *param;
 	int rc;
+
+	print_lustre_cfg(lcfg);
 
 	target = lustre_cfg_string(lcfg, 1);
 	if (!target) {
@@ -597,45 +629,34 @@ static int __sptlrpc_process_config(struct lustre_cfg *lcfg,
 		return -EINVAL;
 	}
 
-	CDEBUG(D_SEC, "processing rule: %s.%s\n", target, param);
-
 	/* parse rule to make sure the format is correct */
-	if (strncmp(param, PARAM_SRPC_FLVR, sizeof(PARAM_SRPC_FLVR) - 1) != 0) {
+	if (strncmp(param, PARAM_SRPC_FLVR,
+		    sizeof(PARAM_SRPC_FLVR) - 1) != 0) {
 		CERROR("Invalid sptlrpc parameter: %s\n", param);
 		return -EINVAL;
 	}
 	param += sizeof(PARAM_SRPC_FLVR) - 1;
 
+	CDEBUG(D_SEC, "processing rule: %s.%s\n", target, param);
+
+	/*
+	 * Three types of targets exist for sptlrpc using conf_param
+	 * 1.	'_mgs' which targets mgc srpc settings. Treat it as
+	 *	as a special file system name.
+	 * 2.	target is a device which can be fsname-MDTXXXX or
+	 *	fsname-OSTXXXX. This can be verified by the function
+	 *	server_name2fsname.
+	 * 3.	If both above conditions are not meet then the target
+	 *	is a actual filesystem.
+	 */
+	if (server_name2fsname(target, fsname, NULL))
+		strlcpy(fsname, target, sizeof(target));
+
 	rc = sptlrpc_parse_rule(param, &rule);
 	if (rc)
-		return -EINVAL;
+		return rc;
 
-	if (!conf) {
-		target2fsname(target, fsname, sizeof(fsname));
-
-		mutex_lock(&sptlrpc_conf_lock);
-		conf = sptlrpc_conf_get(fsname, 0);
-		if (!conf) {
-			CERROR("can't find conf\n");
-			rc = -ENOMEM;
-		} else {
-			rc = sptlrpc_conf_merge_rule(conf, target, &rule);
-		}
-		mutex_unlock(&sptlrpc_conf_lock);
-	} else {
-		LASSERT(mutex_is_locked(&sptlrpc_conf_lock));
-		rc = sptlrpc_conf_merge_rule(conf, target, &rule);
-	}
-
-	if (rc == 0)
-		conf->sc_modified++;
-
-	return rc;
-}
-
-int sptlrpc_process_config(struct lustre_cfg *lcfg)
-{
-	return __sptlrpc_process_config(lcfg, NULL);
+	return __sptlrpc_process_config(target, fsname, &rule, NULL);
 }
 EXPORT_SYMBOL(sptlrpc_process_config);
 
