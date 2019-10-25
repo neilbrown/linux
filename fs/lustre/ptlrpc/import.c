@@ -103,7 +103,7 @@ do {									\
 
 static int ptlrpc_connect_interpret(const struct lu_env *env,
 				    struct ptlrpc_request *request,
-				    void *data, int rc);
+				    void *args, int rc);
 
 /* Only this function is allowed to change the import state when it is
  * CLOSED. I would rather refcount the import and free it after
@@ -1262,11 +1262,10 @@ out:
  */
 static int completed_replay_interpret(const struct lu_env *env,
 				      struct ptlrpc_request *req,
-				      void *data, int rc)
+				      void *args, int rc)
 {
 	atomic_dec(&req->rq_import->imp_replay_inflight);
-	if (req->rq_status == 0 &&
-	    !req->rq_import->imp_vbr_failed) {
+	if (req->rq_status == 0 && !req->rq_import->imp_vbr_failed) {
 		ptlrpc_import_recovery_state_machine(req->rq_import);
 	} else {
 		if (req->rq_import->imp_vbr_failed) {
@@ -1604,7 +1603,7 @@ static void ptlrpc_reset_reqs_generation(struct obd_import *imp)
 
 static int ptlrpc_disconnect_idle_interpret(const struct lu_env *env,
 					    struct ptlrpc_request *req,
-					    void *data, int rc)
+					    void *args, int rc)
 {
 	struct obd_import *imp = req->rq_import;
 	int connect = 0;

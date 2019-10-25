@@ -2819,9 +2819,9 @@ EXPORT_SYMBOL(ptlrpc_queue_wait);
  */
 static int ptlrpc_replay_interpret(const struct lu_env *env,
 				   struct ptlrpc_request *req,
-				   void *data, int rc)
+				   void *args, int rc)
 {
-	struct ptlrpc_replay_async_args *aa = data;
+	struct ptlrpc_replay_async_args *aa = args;
 	struct obd_import *imp = req->rq_import;
 
 	atomic_dec(&imp->imp_replay_inflight);
@@ -2940,10 +2940,7 @@ int ptlrpc_replay_req(struct ptlrpc_request *req)
 	/* Re-adjust the timeout for current conditions */
 	ptlrpc_at_set_req_timeout(req);
 
-	/*
-	 * Tell server the net_latency, so the server can calculate how long
-	 * it should wait for next replay
-	 */
+	/* Tell server net_latency to calculate how long to wait for reply. */
 	lustre_msg_set_service_time(req->rq_reqmsg,
 				    ptlrpc_at_get_net_latency(req));
 	DEBUG_REQ(D_HA, req, "REPLAY");
@@ -3199,9 +3196,9 @@ static void ptlrpcd_add_work_req(struct ptlrpc_request *req)
 }
 
 static int work_interpreter(const struct lu_env *env,
-			    struct ptlrpc_request *req, void *data, int rc)
+			    struct ptlrpc_request *req, void *args, int rc)
 {
-	struct ptlrpc_work_async_args *arg = data;
+	struct ptlrpc_work_async_args *arg = args;
 
 	LASSERT(ptlrpcd_check_work(req));
 

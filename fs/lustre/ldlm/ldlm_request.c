@@ -825,8 +825,9 @@ EXPORT_SYMBOL(ldlm_cli_enqueue);
  */
 static int lock_convert_interpret(const struct lu_env *env,
 				  struct ptlrpc_request *req,
-				  struct ldlm_async_args *aa, int rc)
+				  void *args, int rc)
 {
+	struct ldlm_async_args *aa = args;
 	struct ldlm_lock *lock;
 	struct ldlm_reply *reply;
 
@@ -1008,7 +1009,7 @@ int ldlm_cli_convert(struct ldlm_lock *lock, u32 *flags)
 
 	aa = ptlrpc_req_async_args(aa, req);
 	ldlm_lock2handle(lock, &aa->lock_handle);
-	req->rq_interpret_reply = (ptlrpc_interpterer_t)lock_convert_interpret;
+	req->rq_interpret_reply = lock_convert_interpret;
 
 	ptlrpcd_add_req(req);
 	return 0;
@@ -2115,9 +2116,9 @@ static int ldlm_chain_lock_for_replay(struct ldlm_lock *lock, void *closure)
 }
 
 static int replay_lock_interpret(const struct lu_env *env,
-				 struct ptlrpc_request *req,
-				 struct ldlm_async_args *aa, int rc)
+				 struct ptlrpc_request *req, void *args, int rc)
 {
+	struct ldlm_async_args *aa = args;
 	struct ldlm_lock *lock;
 	struct ldlm_reply *reply;
 	struct obd_export *exp;
@@ -2232,7 +2233,7 @@ static int replay_one_lock(struct obd_import *imp, struct ldlm_lock *lock)
 	atomic_inc(&req->rq_import->imp_replay_inflight);
 	aa = ptlrpc_req_async_args(aa, req);
 	aa->lock_handle = body->lock_handle[0];
-	req->rq_interpret_reply = (ptlrpc_interpterer_t)replay_lock_interpret;
+	req->rq_interpret_reply = replay_lock_interpret;
 	ptlrpcd_add_req(req);
 
 	return 0;
