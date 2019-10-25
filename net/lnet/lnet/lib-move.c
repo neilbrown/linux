@@ -1848,7 +1848,8 @@ lnet_handle_spec_router_dst(struct lnet_send_data *sd)
 }
 
 struct lnet_ni *
-lnet_find_best_ni_on_local_net(struct lnet_peer *peer, int md_cpt)
+lnet_find_best_ni_on_local_net(struct lnet_peer *peer, int md_cpt,
+			       bool discovery)
 {
 	struct lnet_peer_net *peer_net = NULL;
 	struct lnet_ni *best_ni = NULL;
@@ -1871,6 +1872,14 @@ lnet_find_best_ni_on_local_net(struct lnet_peer *peer, int md_cpt)
 		best_ni = lnet_find_best_ni_on_spec_net(best_ni, peer,
 							peer_net, md_cpt,
 							false);
+
+		/*
+		 * if this is a discovery message and lp_disc_net_id is
+		 * specified then use that net to send the discovery on.
+		 */
+		if (peer->lp_disc_net_id == peer_net->lpn_net_id &&
+		    discovery)
+			break;
 	}
 
 	if (best_ni)
@@ -2036,7 +2045,8 @@ lnet_handle_any_mr_dsta(struct lnet_send_data *sd)
 	 * networks.
 	 */
 	sd->sd_best_ni = lnet_find_best_ni_on_local_net(sd->sd_peer,
-							sd->sd_md_cpt);
+					sd->sd_md_cpt,
+					lnet_msg_discovery(sd->sd_msg));
 	if (sd->sd_best_ni) {
 		sd->sd_best_lpni =
 		  lnet_find_best_lpni_on_net(sd, sd->sd_peer,
@@ -3128,9 +3138,14 @@ lnet_monitor_thread(void *arg)
 		 * if we wake up every 1 second? Although, we've seen
 		 * cases where we get a complaint that an idle thread
 		 * is waking up unnecessarily.
+		 *
+		 * Take into account the current net_count when you wake
+		 * up for alive router checking, since we need to check
+		 * possibly as many networks as we have configured.
 		 */
 		interval = min(lnet_recovery_interval,
-			       min((unsigned int)alive_router_check_interval,
+			       min((unsigned int)alive_router_check_interval /
+					lnet_current_net_count,
 				   lnet_transaction_timeout / 2));
 		wait_event_interruptible_timeout(the_lnet.ln_mt_waitq,
 						 false, HZ * interval);
