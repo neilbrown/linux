@@ -56,6 +56,11 @@ struct split_param {
 	u16		sp_mirror_id;
 };
 
+struct pcc_param {
+	u64	pa_data_version;
+	u32	pa_archive_id;
+};
+
 static int
 ll_put_grouplock(struct inode *inode, struct file *file, unsigned long arg);
 
@@ -70,6 +75,8 @@ static struct ll_file_data *ll_file_data_get(void)
 	if (!fd)
 		return NULL;
 	fd->fd_write_failed = false;
+	pcc_file_init(&fd->fd_pcc_file);
+
 	return fd;
 }
 
@@ -189,6 +196,17 @@ static int ll_close_inode_openhandle(struct inode *inode,
 		op_data->op_data = &ioc->lil_ids[0];
 		op_data->op_data_size =
 			ioc->lil_count * sizeof(ioc->lil_ids[0]);
+		break;
+	}
+
+	case MDS_PCC_ATTACH: {
+		struct pcc_param *param = data;
+
+		LASSERT(data);
+		op_data->op_bias |= MDS_HSM_RELEASE | MDS_PCC_ATTACH;
+		op_data->op_archive_id = param->pa_archive_id;
+		op_data->op_data_version = param->pa_data_version;
+		op_data->op_lease_handle = och->och_lease_handle;
 		break;
 	}
 
@@ -377,6 +395,8 @@ int ll_file_release(struct inode *inode, struct file *file)
 		ll_file_data_put(fd);
 		return 0;
 	}
+
+	pcc_file_release(inode, file);
 
 	if (!S_ISDIR(inode->i_mode)) {
 		if (lli->lli_clob)
@@ -833,6 +853,10 @@ restart:
 		if (rc)
 			goto out_och_free;
 	}
+	rc = pcc_file_open(inode, file);
+	if (rc)
+		goto out_och_free;
+
 	mutex_unlock(&lli->lli_och_mutex);
 	fd = NULL;
 
@@ -858,6 +882,7 @@ out_och_free:
 out_openerr:
 		if (lli->lli_opendir_key == fd)
 			ll_deauthorize_statahead(inode, fd);
+
 		if (fd)
 			ll_file_data_put(fd);
 	} else {
@@ -1632,6 +1657,22 @@ static ssize_t ll_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	ssize_t result;
 	u16 refcheck;
 	ssize_t rc2;
+	bool cached = false;
+
+	/**
+	 * Currently when PCC read failed, we do not fall back to the
+	 * normal read path, just return the error.
+	 * The resaon is that: for RW-PCC, the file data may be modified
+	 * in the PCC and inconsistent with the data on OSTs (or file
+	 * data has been removed from the Lustre file system), at this
+	 * time, fallback to the normal read path may read the wrong
+	 * data.
+	 * TODO: for RO-PCC (readonly PCC), fall back to normal read
+	 * path: read data from data copy on OSTs.
+	 */
+	result = pcc_file_read_iter(iocb, to, &cached);
+	if (cached)
+		return result;
 
 	ll_ras_enter(iocb->ki_filp);
 
@@ -1725,6 +1766,21 @@ static ssize_t ll_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct vvp_io_args *args;
 	ssize_t rc_tiny = 0, rc_normal;
 	u16 refcheck;
+	bool cached = false;
+	int result;
+
+	/**
+	 * When PCC write failed, we do not fall back to the normal
+	 * write path, just return the error. The reason is that:
+	 * PCC is actually a HSM device, and HSM does not handle the
+	 * failure especially -ENOSPC due to space used out; Moreover,
+	 * the fallback to normal I/O path for ENOSPC failure, needs
+	 * to restore the file data to OSTs first and redo the write
+	 * again, making the logic of PCC very complex.
+	 */
+	result = pcc_file_write_iter(iocb, from, &cached);
+	if (cached)
+		return result;
 
 	/* NB: we can't do direct IO for tiny writes because they use the page
 	 * cache, we can't do sync writes because tiny writes can't flush
@@ -2976,13 +3032,15 @@ static long ll_file_unlock_lease(struct file *file, struct ll_ioc_lease *ioc,
 	struct ll_inode_info *lli = ll_i2info(inode);
 	struct obd_client_handle *och = NULL;
 	struct split_param sp;
-	bool lease_broken;
+	struct pcc_param param;
+	bool lease_broken = false;
 	fmode_t fmode = 0;
 	enum mds_op_bias bias = 0;
 	struct file *layout_file = NULL;
 	void *data = NULL;
 	size_t data_size = 0;
-	long rc;
+	bool attached = false;
+	long rc, rc2 = 0;
 
 	mutex_lock(&lli->lli_och_mutex);
 	if (fd->fd_lease_och) {
@@ -2991,10 +3049,8 @@ static long ll_file_unlock_lease(struct file *file, struct ll_ioc_lease *ioc,
 	}
 	mutex_unlock(&lli->lli_och_mutex);
 
-	if (!och) {
-		rc = -ENOLCK;
-		goto out;
-	}
+	if (!och)
+		return -ENOLCK;
 
 	fmode = och->och_flags;
 
@@ -3002,19 +3058,19 @@ static long ll_file_unlock_lease(struct file *file, struct ll_ioc_lease *ioc,
 	case LL_LEASE_RESYNC_DONE:
 		if (ioc->lil_count > IOC_IDS_MAX) {
 			rc = -EINVAL;
-			goto out;
+			goto out_lease_close;
 		}
 
 		data_size = offsetof(typeof(*ioc), lil_ids[ioc->lil_count]);
 		data = kzalloc(data_size, GFP_KERNEL);
 		if (!data) {
 			rc = -ENOMEM;
-			goto out;
+			goto out_lease_close;
 		}
 
 		if (copy_from_user(data, (void __user *)arg, data_size)) {
 			rc = -EFAULT;
-			goto out;
+			goto out_lease_close;
 		}
 
 		bias = MDS_CLOSE_RESYNC_DONE;
@@ -3024,25 +3080,25 @@ static long ll_file_unlock_lease(struct file *file, struct ll_ioc_lease *ioc,
 
 		if (ioc->lil_count != 1) {
 			rc = -EINVAL;
-			goto out;
+			goto out_lease_close;
 		}
 
 		arg += sizeof(*ioc);
 		if (copy_from_user(&fd, (void __user *)arg, sizeof(u32))) {
 			rc = -EFAULT;
-			goto out;
+			goto out_lease_close;
 		}
 
 		layout_file = fget(fd);
 		if (!layout_file) {
 			rc = -EBADF;
-			goto out;
+			goto out_lease_close;
 		}
 
 		if ((file->f_flags & O_ACCMODE) == O_RDONLY ||
 		    (layout_file->f_flags & O_ACCMODE) == O_RDONLY) {
 			rc = -EPERM;
-			goto out;
+			goto out_lease_close;
 		}
 
 		data = file_inode(layout_file);
@@ -3055,26 +3111,26 @@ static long ll_file_unlock_lease(struct file *file, struct ll_ioc_lease *ioc,
 
 		if (ioc->lil_count != 2) {
 			rc = -EINVAL;
-			goto out;
+			goto out_lease_close;
 		}
 
 		arg += sizeof(*ioc);
 		if (copy_from_user(&fdv, (void __user *)arg, sizeof(u32))) {
 			rc = -EFAULT;
-			goto out;
+			goto out_lease_close;
 		}
 
 		arg += sizeof(u32);
 		if (copy_from_user(&mirror_id, (void __user *)arg,
 				   sizeof(u32))) {
 			rc = -EFAULT;
-			goto out;
+			goto out_lease_close;
 		}
 
 		layout_file = fget(fdv);
 		if (!layout_file) {
 			rc = -EBADF;
-			goto out;
+			goto out_lease_close;
 		}
 
 		sp.sp_inode = file_inode(layout_file);
@@ -3083,11 +3139,37 @@ static long ll_file_unlock_lease(struct file *file, struct ll_ioc_lease *ioc,
 		bias = MDS_CLOSE_LAYOUT_SPLIT;
 		break;
 	}
+	case LL_LEASE_PCC_ATTACH:
+		if (ioc->lil_count != 1)
+			return -EINVAL;
+
+		arg += sizeof(*ioc);
+		if (copy_from_user(&param.pa_archive_id, (void __user *)arg,
+				   sizeof(u32))) {
+			rc2 = -EFAULT;
+			goto out_lease_close;
+		}
+
+		rc2 = pcc_readwrite_attach(file, inode, param.pa_archive_id);
+		if (rc2)
+			goto out_lease_close;
+
+		attached = true;
+		/* Grab latest data version */
+		rc2 = ll_data_version(inode, &param.pa_data_version,
+				     LL_DV_WR_FLUSH);
+		if (rc2)
+			goto out_lease_close;
+
+		data = &param;
+		bias = MDS_PCC_ATTACH;
+		break;
 	default:
 		/* without close intent */
 		break;
 	}
 
+out_lease_close:
 	rc = ll_lease_close_intent(och, inode, &lease_broken, bias, data);
 	if (rc < 0)
 		goto out;
@@ -3108,6 +3190,12 @@ out:
 	case LL_LEASE_LAYOUT_SPLIT:
 		if (layout_file)
 			fput(layout_file);
+		break;
+	case LL_LEASE_PCC_ATTACH:
+		if (!rc)
+			rc = rc2;
+		rc = pcc_readwrite_attach_fini(file, inode, lease_broken,
+					       rc, attached);
 		break;
 	}
 
@@ -3630,6 +3718,33 @@ out_ladvise:
 		rc = ll_heat_set(inode, flags);
 		return rc;
 	}
+	case LL_IOC_PCC_STATE: {
+		struct lu_pcc_state __user *ustate =
+			(struct lu_pcc_state __user *)arg;
+		struct lu_pcc_state *state;
+
+		state = kzalloc(sizeof(*state), GFP_KERNEL);
+		if (!state)
+			return -ENOMEM;
+
+		if (copy_from_user(state, ustate, sizeof(*state))) {
+			rc = -EFAULT;
+			goto out_state;
+		}
+
+		rc = pcc_ioctl_state(inode, state);
+		if (rc)
+			goto out_state;
+
+		if (copy_to_user(ustate, state, sizeof(*state))) {
+			rc = -EFAULT;
+			goto out_state;
+		}
+
+out_state:
+		kfree(state);
+		return rc;
+	}
 	default:
 		return obd_iocontrol(cmd, ll_i2dtexp(inode), 0, NULL,
 				     (void __user *)arg);
@@ -3737,12 +3852,19 @@ int ll_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 {
 	struct inode *inode = file_inode(file);
 	struct ll_inode_info *lli = ll_i2info(inode);
+	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
 	struct ptlrpc_request *req;
+	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
 	int rc, err;
 
 	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID "(%p)\n",
 	       PFID(ll_inode2fid(inode)), inode);
 	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_FSYNC, 1);
+
+	/* pcc cache path */
+	if (pcc_file)
+		return file_inode(pcc_file)->i_fop->fsync(pcc_file,
+					start, end, datasync);
 
 	rc = file_write_and_wait_range(file, start, end);
 	inode_lock(inode);
@@ -4276,21 +4398,25 @@ static int ll_merge_md_attr(struct inode *inode)
 	return 0;
 }
 
-int ll_getattr(const struct path *path, struct kstat *stat,
-	       u32 request_mask, unsigned int flags)
+int ll_getattr_dentry(struct dentry *de, struct kstat *stat)
 {
-	struct inode *inode = d_inode(path->dentry);
+	struct inode *inode = de->d_inode;
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
 	struct ll_inode_info *lli = ll_i2info(inode);
 	int rc;
 
 	ll_stats_ops_tally(sbi, LPROC_LL_GETATTR, 1);
 
-	rc = ll_inode_revalidate(path->dentry, IT_GETATTR);
+	rc = ll_inode_revalidate(de, IT_GETATTR);
 	if (rc < 0)
 		return rc;
 
 	if (S_ISREG(inode->i_mode)) {
+		bool cached = false;
+
+		rc = pcc_inode_getattr(inode, &cached);
+		if (cached && rc < 0)
+			return rc;
 		/* In case of restore, the MDT has the right size and has
 		 * already send it back without granting the layout lock,
 		 * inode is up-to-date so glimpse is useless.
@@ -4298,7 +4424,8 @@ int ll_getattr(const struct path *path, struct kstat *stat,
 		 * restore the MDT holds the layout lock so the glimpse will
 		 * block up to the end of restore (getattr will block)
 		 */
-		if (!test_bit(LLIF_FILE_RESTORING, &lli->lli_flags)) {
+		if (!cached && !test_bit(LLIF_FILE_RESTORING,
+					 &lli->lli_flags)) {
 			rc = ll_glimpse_size(inode);
 			if (rc < 0)
 				return rc;
@@ -4343,6 +4470,14 @@ int ll_getattr(const struct path *path, struct kstat *stat,
 	stat->blocks = inode->i_blocks;
 
 	return 0;
+}
+
+int ll_getattr(const struct path *path, struct kstat *stat,
+	       u32 request_mask, unsigned int flags)
+{
+	struct dentry *de = path->dentry;
+
+	return ll_getattr_dentry(de, stat);
 }
 
 static int ll_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
