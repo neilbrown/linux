@@ -80,10 +80,10 @@ MODULE_PARM_DESC(lnet_numa_range,
 
 /*
  * lnet_health_sensitivity determines by how much we decrement the health
- * value on sending error. The value defaults to 0, which means health
- * checking is turned off by default.
+ * value on sending error. The value defaults to 100, which means health
+ * interface health is decremented by 100 points every failure.
  */
-unsigned int lnet_health_sensitivity = 0;
+unsigned int lnet_health_sensitivity = 100;
 static int sensitivity_set(const char *val, const struct kernel_param *kp);
 static struct kernel_param_ops param_ops_health_sensitivity = {
 	.set = sensitivity_set,
@@ -141,14 +141,18 @@ module_param(lnet_drop_asym_route, drop_asym_route, 0644);
 MODULE_PARM_DESC(lnet_drop_asym_route,
 		 "Set to 1 to drop asymmetrical route messages.");
 
-unsigned int lnet_transaction_timeout = 50;
+#define LNET_TRANSACTION_TIMEOUT_NO_HEALTH_DEFAULT 50
+#define LNET_TRANSACTION_TIMEOUT_HEALTH_DEFAULT 10
+
+unsigned int lnet_transaction_timeout = LNET_TRANSACTION_TIMEOUT_HEALTH_DEFAULT;
 static int transaction_to_set(const char *val, const struct kernel_param *kp);
 module_param_call(lnet_transaction_timeout, transaction_to_set, param_get_int,
 		  &lnet_transaction_timeout, 0444);
 MODULE_PARM_DESC(lnet_transaction_timeout,
 		 "Maximum number of seconds to wait for a peer response.");
 
-unsigned int lnet_retry_count = 0;
+#define LNET_RETRY_COUNT_HEALTH_DEFAULT 3
+unsigned int lnet_retry_count = LNET_RETRY_COUNT_HEALTH_DEFAULT;
 static int retry_count_set(const char *val, const struct kernel_param *kp);
 static struct kernel_param_ops param_ops_retry_count = {
 	.set = retry_count_set,
@@ -197,16 +201,29 @@ sensitivity_set(const char *val, const struct kernel_param *kp)
 	 */
 	mutex_lock(&the_lnet.ln_api_mutex);
 
-	if (the_lnet.ln_state != LNET_STATE_RUNNING) {
-		mutex_unlock(&the_lnet.ln_api_mutex);
-		return 0;
-	}
-
 	if (value > LNET_MAX_HEALTH_VALUE) {
 		mutex_unlock(&the_lnet.ln_api_mutex);
 		CERROR("Invalid health value. Maximum: %d value = %lu\n",
 		       LNET_MAX_HEALTH_VALUE, value);
 		return -EINVAL;
+	}
+
+	/*
+	 * if we're turning on health then use the health timeout
+	 * defaults.
+	 */
+	if (*sensitivity == 0 && value != 0) {
+		lnet_transaction_timeout =
+			LNET_TRANSACTION_TIMEOUT_HEALTH_DEFAULT;
+		lnet_retry_count = LNET_RETRY_COUNT_HEALTH_DEFAULT;
+	/*
+	 * if we're turning off health then use the no health timeout
+	 * default.
+	 */
+	} else if (*sensitivity != 0 && value == 0) {
+		lnet_transaction_timeout =
+			LNET_TRANSACTION_TIMEOUT_NO_HEALTH_DEFAULT;
+		lnet_retry_count = 0;
 	}
 
 	*sensitivity = value;
@@ -239,11 +256,6 @@ recovery_interval_set(const char *val, const struct kernel_param *kp)
 	 * the correct value ends up stored properly.
 	 */
 	mutex_lock(&the_lnet.ln_api_mutex);
-
-	if (the_lnet.ln_state != LNET_STATE_RUNNING) {
-		mutex_unlock(&the_lnet.ln_api_mutex);
-		return 0;
-	}
 
 	*interval = value;
 
@@ -352,11 +364,6 @@ transaction_to_set(const char *val, const struct kernel_param *kp)
 	 */
 	mutex_lock(&the_lnet.ln_api_mutex);
 
-	if (the_lnet.ln_state != LNET_STATE_RUNNING) {
-		mutex_unlock(&the_lnet.ln_api_mutex);
-		return 0;
-	}
-
 	if (value < lnet_retry_count || value == 0) {
 		mutex_unlock(&the_lnet.ln_api_mutex);
 		CERROR("Invalid value for lnet_transaction_timeout (%lu). Has to be greater than lnet_retry_count (%u)\n",
@@ -399,9 +406,10 @@ retry_count_set(const char *val, const struct kernel_param *kp)
 	 */
 	mutex_lock(&the_lnet.ln_api_mutex);
 
-	if (the_lnet.ln_state != LNET_STATE_RUNNING) {
+	if (lnet_health_sensitivity == 0) {
 		mutex_unlock(&the_lnet.ln_api_mutex);
-		return 0;
+		CERROR("Can not set retry_count when health feature is turned off\n");
+		return -EINVAL;
 	}
 
 	if (value > lnet_transaction_timeout) {
@@ -409,11 +417,6 @@ retry_count_set(const char *val, const struct kernel_param *kp)
 		CERROR("Invalid value for lnet_retry_count (%lu). Has to be smaller than lnet_transaction_timeout (%u)\n",
 		       value, lnet_transaction_timeout);
 		return -EINVAL;
-	}
-
-	if (value == *retry_count) {
-		mutex_unlock(&the_lnet.ln_api_mutex);
-		return 0;
 	}
 
 	*retry_count = value;
