@@ -759,10 +759,11 @@ lnet_wait_known_routerstate(void)
 	}
 }
 
-static void
+static bool
 lnet_update_ni_status_locked(void)
 {
 	struct lnet_ni *ni = NULL;
+	bool push = false;
 	time64_t now;
 	time64_t timeout;
 
@@ -795,9 +796,12 @@ lnet_update_ni_status_locked(void)
 			 * NI status to "down"
 			 */
 			ni->ni_status->ns_status = LNET_NI_STATUS_DOWN;
+			push = true;
 		}
 		lnet_ni_unlock(ni);
 	}
+
+	return push;
 }
 
 void lnet_wait_router_start(void)
@@ -834,6 +838,7 @@ lnet_check_routers(void)
 {
 	struct lnet_peer_ni *lpni;
 	struct lnet_peer *rtr;
+	bool push = false;
 	u64 version;
 	time64_t now;
 	int cpt;
@@ -901,9 +906,13 @@ rescan:
 	}
 
 	if (the_lnet.ln_routing)
-		lnet_update_ni_status_locked();
+		push = lnet_update_ni_status_locked();
 
 	lnet_net_unlock(cpt);
+
+	/* if the status of the ni changed update the peers */
+	if (push)
+		lnet_push_update_to_peers(1);
 }
 
 void
