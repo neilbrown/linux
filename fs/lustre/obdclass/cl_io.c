@@ -412,7 +412,8 @@ void cl_io_iter_fini(const struct lu_env *env, struct cl_io *io)
 	const struct cl_io_slice *scan;
 
 	LINVRNT(cl_io_is_loopable(io));
-	LINVRNT(io->ci_state < CIS_LOCKED || io->ci_state > CIS_IO_FINISHED);
+	LINVRNT(io->ci_state <= CIS_IT_STARTED ||
+		io->ci_state > CIS_IO_FINISHED);
 	LINVRNT(cl_io_invariant(io));
 
 	list_for_each_entry_reverse(scan, &io->ci_layers, cis_linkage) {
