@@ -1128,24 +1128,24 @@ hsm_req_err:
 /**
  * This is _inode_ placement policy function (not name).
  */
-static int lmv_placement_policy(struct obd_device *obd,
-				struct md_op_data *op_data, u32 *mds)
+static u32 lmv_placement_policy(struct obd_device *obd,
+				struct md_op_data *op_data)
 {
 	struct lmv_obd *lmv = &obd->u.lmv;
 	struct lmv_user_md *lum;
+	u32 mdt;
 
-	LASSERT(mds);
-
-	if (lmv->desc.ld_tgt_count == 1) {
-		*mds = 0;
+	if (lmv->desc.ld_tgt_count == 1)
 		return 0;
-	}
 
 	lum = op_data->op_data;
-	/* Choose MDS by
+	/*
+	 * Choose MDT by
 	 * 1. See if the stripe offset is specified by lum.
-	 * 2. Then check if there is default stripe offset.
-	 * 3. Finally choose MDS by name hash if the parent
+	 * 2. If parent has default LMV, and its hash type is "space", choose
+	 *    MDT with QoS. (see lmv_locate_tgt_qos()).
+	 * 3. Then check if default LMV stripe offset is not -1.
+	 * 4. Finally choose MDS by name hash if the parent
 	 *    is striped directory. (see lmv_locate_tgt()).
 	 *
 	 * presently explicit MDT location is not supported
@@ -1156,18 +1156,22 @@ static int lmv_placement_policy(struct obd_device *obd,
 	if (op_data->op_cli_flags & CLI_SET_MEA && lum &&
 	    le32_to_cpu(lum->lum_magic != LMV_MAGIC_FOREIGN) &&
 	    le32_to_cpu(lum->lum_stripe_offset) != (u32)-1) {
-		*mds = le32_to_cpu(lum->lum_stripe_offset);
+		mdt = le32_to_cpu(lum->lum_stripe_offset);
+	} else if (op_data->op_code == LUSTRE_OPC_MKDIR &&
+		   !lmv_dir_striped(op_data->op_mea1) &&
+		   lmv_dir_space_hashed(op_data->op_default_mea1)) {
+		mdt = op_data->op_mds;
 	} else if (op_data->op_code == LUSTRE_OPC_MKDIR &&
 		   op_data->op_default_mea1 &&
 		   op_data->op_default_mea1->lsm_md_master_mdt_index !=
-			 (u32)-1) {
-		*mds = op_data->op_default_mea1->lsm_md_master_mdt_index;
-		op_data->op_mds = *mds;
+			(u32)-1) {
+		mdt = op_data->op_default_mea1->lsm_md_master_mdt_index;
+		op_data->op_mds = mdt;
 	} else {
-		*mds = op_data->op_mds;
+		mdt = op_data->op_mds;
 	}
 
-	return 0;
+	return mdt;
 }
 
 int __lmv_fid_alloc(struct lmv_obd *lmv, struct lu_fid *fid, u32 mds)
@@ -1209,24 +1213,17 @@ int lmv_fid_alloc(const struct lu_env *env, struct obd_export *exp,
 {
 	struct obd_device *obd = class_exp2obd(exp);
 	struct lmv_obd *lmv = &obd->u.lmv;
-	u32 mds = 0;
+	u32 mds;
 	int rc;
 
 	LASSERT(op_data);
 	LASSERT(fid);
 
-	rc = lmv_placement_policy(obd, op_data, &mds);
-	if (rc) {
-		CERROR("Can't get target for allocating fid, rc %d\n",
-		       rc);
-		return rc;
-	}
+	mds = lmv_placement_policy(obd, op_data);
 
 	rc = __lmv_fid_alloc(lmv, fid, mds);
-	if (rc) {
+	if (rc)
 		CERROR("Can't alloc new fid, rc %d\n", rc);
-		return rc;
-	}
 
 	return rc;
 }
@@ -1567,20 +1564,30 @@ static int lmv_close(struct obd_export *exp, struct md_op_data *op_data,
 	return md_close(tgt->ltd_exp, op_data, mod, request);
 }
 
-struct lmv_tgt_desc*
-__lmv_locate_tgt(struct lmv_obd *lmv, struct lmv_stripe_md *lsm,
-		 const char *name, int namelen, struct lu_fid *fid, u32 *mds,
-		 bool post_migrate)
+static struct lmv_tgt_desc *lmv_locate_tgt_qos(struct lmv_obd *lmv, u32 *mdt)
+{
+	static unsigned int rr_index;
+
+	/* locate MDT round-robin is the first step */
+	*mdt = rr_index % lmv->tgts_size;
+	rr_index++;
+
+	return lmv->tgts[*mdt];
+}
+
+static struct lmv_tgt_desc *
+lmv_locate_tgt_by_name(struct lmv_obd *lmv, struct lmv_stripe_md *lsm,
+		       const char *name, int namelen, struct lu_fid *fid,
+		       u32 *mds, bool post_migrate)
 {
 	struct lmv_tgt_desc *tgt;
 	const struct lmv_oinfo *oinfo;
 
-	if (!lsm || namelen == 0) {
+	if (!lmv_dir_striped(lsm) || !namelen) {
 		tgt = lmv_find_target(lmv, fid);
 		if (IS_ERR(tgt))
 			return tgt;
 
-		LASSERT(mds);
 		*mds = tgt->ltd_idx;
 		return tgt;
 	}
@@ -1596,49 +1603,42 @@ __lmv_locate_tgt(struct lmv_obd *lmv, struct lmv_stripe_md *lsm,
 			return ERR_CAST(oinfo);
 	}
 
-	if (fid)
-		*fid = oinfo->lmo_fid;
-	if (mds)
-		*mds = oinfo->lmo_mds;
-
+	*fid = oinfo->lmo_fid;
+	*mds = oinfo->lmo_mds;
 	tgt = lmv_get_target(lmv, oinfo->lmo_mds, NULL);
 
-	CDEBUG(D_INFO, "locate on mds %u " DFID "\n", oinfo->lmo_mds,
-	       PFID(&oinfo->lmo_fid));
+	CDEBUG(D_INODE, "locate MDT %u parent " DFID "\n", *mds, PFID(fid));
 
 	return tgt;
 }
 
-
 /**
- * Locate mdt by fid or name
+ * Locate MDT of op_data->op_fid1
  *
  * For striped directory, it will locate the stripe by name hash, if hash_type
  * is unknown, it will return the stripe specified by 'op_data->op_stripe_index'
  * which is set outside, and if dir is migrating, 'op_data->op_post_migrate'
  * indicates whether old or new layout is used to locate.
  *
- * For normal direcotry, it will locate MDS by FID directly.
+ * For plain direcotry, normally it will locate MDT by FID, but if this
+ * directory has default LMV, and its hash type is "space", locate MDT with QoS.
  *
  *
  * @lmv:	LMV device
  * @op_data:	client MD stack parameters, name, namelen
  *		mds_num etc.
- * @fid:	object FID used to locate MDS.
  *
  * Returns:	pointer to the lmv_tgt_desc if succeed.
  *		ERR_PTR(errno) if failed.
  */
-struct lmv_tgt_desc*
-lmv_locate_tgt(struct lmv_obd *lmv, struct md_op_data *op_data,
-	       struct lu_fid *fid)
+struct lmv_tgt_desc *
+lmv_locate_tgt(struct lmv_obd *lmv, struct md_op_data *op_data)
 {
 	struct lmv_stripe_md *lsm = op_data->op_mea1;
 	struct lmv_oinfo *oinfo;
 	struct lmv_tgt_desc *tgt;
 
-	/* foreign dir is not striped dir */
-	if (lsm && lsm->lsm_md_magic == LMV_MAGIC_FOREIGN)
+	if (lmv_dir_foreign(lsm))
 		return ERR_PTR(-ENODATA);
 
 	/*
@@ -1653,43 +1653,102 @@ lmv_locate_tgt(struct lmv_obd *lmv, struct md_op_data *op_data,
 		if (IS_ERR(tgt))
 			return tgt;
 
-		if (lsm) {
+		if (lmv_dir_striped(lsm)) {
 			int i;
 
 			/* refill the right parent fid */
 			for (i = 0; i < lsm->lsm_md_stripe_count; i++) {
 				oinfo = &lsm->lsm_md_oinfo[i];
 				if (oinfo->lmo_mds == op_data->op_mds) {
-					*fid = oinfo->lmo_fid;
+					op_data->op_fid1 = oinfo->lmo_fid;
 					break;
 				}
 			}
 
 			if (i == lsm->lsm_md_stripe_count)
-				*fid = lsm->lsm_md_oinfo[0].lmo_fid;
+				op_data->op_fid1 = lsm->lsm_md_oinfo[0].lmo_fid;
 		}
-	} else if (lmv_is_dir_bad_hash(lsm)) {
+	} else if (lmv_dir_bad_hash(lsm)) {
 		LASSERT(op_data->op_stripe_index < lsm->lsm_md_stripe_count);
 		oinfo = &lsm->lsm_md_oinfo[op_data->op_stripe_index];
 
-		*fid = oinfo->lmo_fid;
+		op_data->op_fid1 = oinfo->lmo_fid;
 		op_data->op_mds = oinfo->lmo_mds;
 
 		tgt = lmv_get_target(lmv, oinfo->lmo_mds, NULL);
+	} else if (op_data->op_code == LUSTRE_OPC_MKDIR &&
+		   lmv_dir_space_hashed(op_data->op_default_mea1) &&
+		   !lmv_dir_striped(lsm)) {
+		tgt = lmv_locate_tgt_qos(lmv, &op_data->op_mds);
+		/*
+		 * only update statfs when mkdir under dir with "space" hash,
+		 * this means the cached statfs may be stale, and current mkdir
+		 * may not follow QoS accurately, but it's not serious, and it
+		 * avoids periodic statfs when client doesn't mkdir under
+		 * "space" hashed directories.
+		 */
+		if (!IS_ERR(tgt)) {
+			struct obd_device *obd;
+
+			obd = container_of(lmv, struct obd_device, u.lmv);
+			lmv_statfs_check_update(obd, tgt);
+		}
 	} else {
-		tgt = __lmv_locate_tgt(lmv, lsm, op_data->op_name,
-				       op_data->op_namelen, fid,
-				       &op_data->op_mds,
-				       op_data->op_post_migrate);
+		tgt = lmv_locate_tgt_by_name(lmv, op_data->op_mea1,
+				op_data->op_name, op_data->op_namelen,
+				&op_data->op_fid1, &op_data->op_mds,
+				op_data->op_post_migrate);
 	}
 
 	return tgt;
 }
 
-static int lmv_create(struct obd_export *exp, struct md_op_data *op_data,
-		      const void *data, size_t datalen, umode_t mode,
-		      uid_t uid, gid_t gid, kernel_cap_t cap_effective,
-		      u64 rdev, struct ptlrpc_request **request)
+/* Locate MDT of op_data->op_fid2 for link/rename */
+static struct lmv_tgt_desc *
+lmv_locate_tgt2(struct lmv_obd *lmv, struct md_op_data *op_data)
+{
+	struct lmv_tgt_desc *tgt;
+	int rc;
+
+	LASSERT(op_data->op_name);
+	if (lmv_dir_migrating(op_data->op_mea2)) {
+		struct lu_fid fid1 = op_data->op_fid1;
+		struct lmv_stripe_md *lsm1 = op_data->op_mea1;
+		struct ptlrpc_request *request = NULL;
+
+		/*
+		 * avoid creating new file under old layout of migrating
+		 * directory, check it here.
+		 */
+		tgt = lmv_locate_tgt_by_name(lmv, op_data->op_mea2,
+				op_data->op_name, op_data->op_namelen,
+				&op_data->op_fid2, &op_data->op_mds, false);
+		if (IS_ERR(tgt))
+			return tgt;
+
+		op_data->op_fid1 = op_data->op_fid2;
+		op_data->op_mea1 = op_data->op_mea2;
+		rc = md_getattr_name(tgt->ltd_exp, op_data, &request);
+		op_data->op_fid1 = fid1;
+		op_data->op_mea1 = lsm1;
+		if (!rc) {
+			ptlrpc_req_finished(request);
+			return ERR_PTR(-EEXIST);
+		}
+
+		if (rc != -ENOENT)
+			return ERR_PTR(rc);
+	}
+
+	return lmv_locate_tgt_by_name(lmv, op_data->op_mea2, op_data->op_name,
+				op_data->op_namelen, &op_data->op_fid2,
+				&op_data->op_mds, true);
+}
+
+int lmv_create(struct obd_export *exp, struct md_op_data *op_data,
+		const void *data, size_t datalen, umode_t mode, uid_t uid,
+		gid_t gid, kernel_cap_t cap_effective, u64 rdev,
+		struct ptlrpc_request **request)
 {
 	struct obd_device *obd = exp->exp_obd;
 	struct lmv_obd *lmv = &obd->u.lmv;
@@ -1699,16 +1758,16 @@ static int lmv_create(struct obd_export *exp, struct md_op_data *op_data,
 	if (!lmv->desc.ld_active_tgt_count)
 		return -EIO;
 
-	if (lmv_is_dir_bad_hash(op_data->op_mea1))
+	if (lmv_dir_bad_hash(op_data->op_mea1))
 		return -EBADF;
 
-	if (lmv_is_dir_migrating(op_data->op_mea1)) {
+	if (lmv_dir_migrating(op_data->op_mea1)) {
 		/*
 		 * if parent is migrating, create() needs to lookup existing
 		 * name, to avoid creating new file under old layout of
 		 * migrating directory, check old layout here.
 		 */
-		tgt = lmv_locate_tgt(lmv, op_data, &op_data->op_fid1);
+		tgt = lmv_locate_tgt(lmv, op_data);
 		if (IS_ERR(tgt))
 			return PTR_ERR(tgt);
 
@@ -1725,7 +1784,7 @@ static int lmv_create(struct obd_export *exp, struct md_op_data *op_data,
 		op_data->op_post_migrate = true;
 	}
 
-	tgt = lmv_locate_tgt(lmv, op_data, &op_data->op_fid1);
+	tgt = lmv_locate_tgt(lmv, op_data);
 	if (IS_ERR(tgt))
 		return PTR_ERR(tgt);
 
@@ -1747,8 +1806,6 @@ static int lmv_create(struct obd_export *exp, struct md_op_data *op_data,
 			return PTR_ERR(tgt);
 
 		op_data->op_mds = tgt->ltd_idx;
-	} else {
-		CDEBUG(D_CONFIG, "Server doesn't support striped dirs\n");
 	}
 
 	CDEBUG(D_INODE, "CREATE obj " DFID " -> mds #%x\n",
@@ -1800,7 +1857,7 @@ lmv_getattr_name(struct obd_export *exp, struct md_op_data *op_data,
 	int rc;
 
 retry:
-	tgt = lmv_locate_tgt(lmv, op_data, &op_data->op_fid1);
+	tgt = lmv_locate_tgt(lmv, op_data);
 	if (IS_ERR(tgt))
 		return PTR_ERR(tgt);
 
@@ -1898,39 +1955,7 @@ static int lmv_link(struct obd_export *exp, struct md_op_data *op_data,
 	op_data->op_fsgid = from_kgid(&init_user_ns, current_fsgid());
 	op_data->op_cap = current_cap();
 
-	if (lmv_is_dir_migrating(op_data->op_mea2)) {
-		struct lu_fid fid1 = op_data->op_fid1;
-		struct lmv_stripe_md *lsm1 = op_data->op_mea1;
-
-		/*
-		 * avoid creating new file under old layout of migrating
-		 * directory, check it here.
-		 */
-		tgt = __lmv_locate_tgt(lmv, op_data->op_mea2, op_data->op_name,
-				       op_data->op_namelen, &op_data->op_fid2,
-				       &op_data->op_mds, false);
-		tgt = lmv_locate_tgt(lmv, op_data, &op_data->op_fid1);
-		if (IS_ERR(tgt))
-			return PTR_ERR(tgt);
-
-		op_data->op_fid1 = op_data->op_fid2;
-		op_data->op_mea1 = op_data->op_mea2;
-		rc = md_getattr_name(tgt->ltd_exp, op_data, request);
-		op_data->op_fid1 = fid1;
-		op_data->op_mea1 = lsm1;
-		if (!rc) {
-			ptlrpc_req_finished(*request);
-			*request = NULL;
-			return -EEXIST;
-		}
-
-		if (rc != -ENOENT)
-			return rc;
-	}
-
-	tgt = __lmv_locate_tgt(lmv, op_data->op_mea2, op_data->op_name,
-			       op_data->op_namelen, &op_data->op_fid2,
-			       &op_data->op_mds, true);
+	tgt = lmv_locate_tgt2(lmv, op_data);
 	if (IS_ERR(tgt))
 		return PTR_ERR(tgt);
 
@@ -1974,7 +1999,7 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 	if (IS_ERR(parent_tgt))
 		return PTR_ERR(parent_tgt);
 
-	if (lsm) {
+	if (lmv_dir_striped(lsm)) {
 		u32 hash_type = lsm->lsm_md_hash_type;
 		u32 stripe_count = lsm->lsm_md_stripe_count;
 
@@ -1982,7 +2007,7 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 		 * old stripes are appended after new stripes for migrating
 		 * directory.
 		 */
-		if (lsm->lsm_md_hash_type & LMV_HASH_FLAG_MIGRATION) {
+		if (lmv_dir_migrating(lsm)) {
 			hash_type = lsm->lsm_md_migrate_hash;
 			stripe_count -= lsm->lsm_md_migrate_offset;
 		}
@@ -1992,7 +2017,7 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 		if (rc < 0)
 			return rc;
 
-		if (lsm->lsm_md_hash_type & LMV_HASH_FLAG_MIGRATION)
+		if (lmv_dir_migrating(lsm))
 			rc += lsm->lsm_md_migrate_offset;
 
 		/* save it in fid4 temporarily for early cancel */
@@ -2006,7 +2031,7 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 		 * if parent is being migrated too, fill op_fid2 with target
 		 * stripe fid, otherwise the target stripe is not created yet.
 		 */
-		if (lsm->lsm_md_hash_type & LMV_HASH_FLAG_MIGRATION) {
+		if (lmv_dir_migrating(lsm)) {
 			hash_type = lsm->lsm_md_hash_type &
 				    ~LMV_HASH_FLAG_MIGRATION;
 			stripe_count = lsm->lsm_md_migrate_offset;
@@ -2133,44 +2158,10 @@ static int lmv_rename(struct obd_export *exp, struct md_op_data *op_data,
 	op_data->op_fsgid = from_kgid(&init_user_ns, current_fsgid());
 	op_data->op_cap = current_cap();
 
-	if (lmv_is_dir_migrating(op_data->op_mea2)) {
-		struct lu_fid fid1 = op_data->op_fid1;
-		struct lmv_stripe_md *lsm1 = op_data->op_mea1;
+	op_data->op_name = new;
+	op_data->op_namelen = newlen;
 
-		/*
-		 * we avoid creating new file under old layout of migrating
-		 * directory, if there is an existing file with new name under
-		 * old layout, we can't unlink file in old layout and rename to
-		 * new layout in one transaction, so return -EBUSY here.`
-		 */
-		tgt = __lmv_locate_tgt(lmv, op_data->op_mea2, new, newlen,
-				       &op_data->op_fid2, &op_data->op_mds,
-				       false);
-		if (IS_ERR(tgt))
-			return PTR_ERR(tgt);
-
-		op_data->op_fid1 = op_data->op_fid2;
-		op_data->op_mea1 = op_data->op_mea2;
-		op_data->op_name = new;
-		op_data->op_namelen = newlen;
-		rc = md_getattr_name(tgt->ltd_exp, op_data, request);
-		op_data->op_fid1 = fid1;
-		op_data->op_mea1 = lsm1;
-		op_data->op_name = NULL;
-		op_data->op_namelen = 0;
-		if (!rc) {
-			ptlrpc_req_finished(*request);
-			*request = NULL;
-			return -EBUSY;
-		}
-
-		if (rc != -ENOENT)
-			return rc;
-	}
-
-	/* rename to new layout for migrating directory */
-	tp_tgt = __lmv_locate_tgt(lmv, op_data->op_mea2, new, newlen,
-				  &op_data->op_fid2, &op_data->op_mds, true);
+	tp_tgt = lmv_locate_tgt2(lmv, op_data);
 	if (IS_ERR(tp_tgt))
 		return PTR_ERR(tp_tgt);
 
@@ -2222,10 +2213,10 @@ static int lmv_rename(struct obd_export *exp, struct md_op_data *op_data,
 			return rc;
 	}
 
+	op_data->op_name = old;
+	op_data->op_namelen = oldlen;
 retry:
-	sp_tgt = __lmv_locate_tgt(lmv, op_data->op_mea1, old, oldlen,
-				  &op_data->op_fid1, &op_data->op_mds,
-				  op_data->op_post_migrate);
+	sp_tgt = lmv_locate_tgt(lmv, op_data);
 	if (IS_ERR(sp_tgt))
 		return PTR_ERR(sp_tgt);
 
@@ -2691,16 +2682,14 @@ static int lmv_read_page(struct obd_export *exp, struct md_op_data *op_data,
 			 struct md_callback *cb_op, u64 offset,
 			 struct page **ppage)
 {
-	struct lmv_stripe_md *lsm = op_data->op_mea1;
 	struct obd_device *obd = exp->exp_obd;
 	struct lmv_obd *lmv = &obd->u.lmv;
 	struct lmv_tgt_desc *tgt;
 
-	if (unlikely(lsm)) {
-		/* foreign dir is not striped dir */
-		if (lsm->lsm_md_magic == LMV_MAGIC_FOREIGN)
-			return -ENODATA;
+	if (unlikely(lmv_dir_foreign(op_data->op_mea1)))
+		return -ENODATA;
 
+	if (unlikely(lmv_dir_striped(op_data->op_mea1))) {
 		return lmv_striped_read_page(exp, op_data, cb_op,
 					     offset, ppage);
 	}
@@ -2751,7 +2740,7 @@ static int lmv_unlink(struct obd_export *exp, struct md_op_data *op_data,
 	op_data->op_cap = current_cap();
 
 retry:
-	parent_tgt = lmv_locate_tgt(lmv, op_data, &op_data->op_fid1);
+	parent_tgt = lmv_locate_tgt(lmv, op_data);
 	if (IS_ERR(parent_tgt))
 		return PTR_ERR(parent_tgt);
 
@@ -3041,7 +3030,7 @@ static int lmv_unpackmd(struct obd_export *exp, struct lmv_stripe_md **lsmp,
 			return 0;
 		}
 
-		if (lsm->lsm_md_magic == LMV_MAGIC) {
+		if (lmv_dir_striped(lsm)) {
 			for (i = 0; i < lsm->lsm_md_stripe_count; i++)
 				iput(lsm->lsm_md_oinfo[i].lmo_root);
 		}
@@ -3319,7 +3308,8 @@ lmv_get_fid_from_lsm(struct obd_export *exp,
 {
 	const struct lmv_oinfo *oinfo;
 
-	LASSERT(lsm);
+	LASSERT(lmv_dir_striped(lsm));
+
 	oinfo = lsm_name_to_stripe_info(lsm, name, namelen, false);
 	if (IS_ERR(oinfo))
 		return PTR_ERR(oinfo);
@@ -3384,8 +3374,7 @@ static int lmv_merge_attr(struct obd_export *exp,
 {
 	int rc, i;
 
-	/* foreign dir is not striped dir */
-	if (lsm->lsm_md_magic == LMV_MAGIC_FOREIGN)
+	if (!lmv_dir_striped(lsm))
 		return 0;
 
 	rc = lmv_revalidate_slaves(exp, lsm, cb_blocking, 0);
