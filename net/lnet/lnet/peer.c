@@ -3145,7 +3145,6 @@ static int lnet_peer_discovery(void *arg)
 	 * size of the thundering herd if there are multiple threads
 	 * waiting on discovery of a single peer.
 	 */
-	the_lnet.ln_dc_eq = NULL;
 
 	/* Queue cleanup 1: stop all pending pings and pushes. */
 	lnet_net_lock(LNET_LOCK_EX);
@@ -3172,6 +3171,8 @@ static int lnet_peer_discovery(void *arg)
 		lnet_peer_discovery_complete(lp);
 	}
 	lnet_net_unlock(LNET_LOCK_EX);
+
+	the_lnet.ln_dc_eq = NULL;
 
 	the_lnet.ln_dc_state = LNET_DC_STATE_SHUTDOWN;
 	wake_up(&the_lnet.ln_dc_waitq);
