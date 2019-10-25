@@ -1407,7 +1407,8 @@ static bool file_is_noatime(const struct file *file)
 	return false;
 }
 
-void ll_io_init(struct cl_io *io, const struct file *file, int write)
+void ll_io_init(struct cl_io *io, const struct file *file, int write,
+		struct vvp_io_args *args)
 {
 	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
 	struct inode *inode = file_inode(file);
@@ -1420,7 +1421,11 @@ void ll_io_init(struct cl_io *io, const struct file *file, int write)
 		io->u.ci_wr.wr_sync = file->f_flags & O_SYNC ||
 				      file->f_flags & O_DIRECT ||
 				      IS_SYNC(inode);
+		io->u.ci_wr.wr_sync  |= !!(args &&
+					   (args->u.normal.via_iocb->ki_flags &
+					    IOCB_DSYNC));
 	}
+
 	io->ci_obj = ll_i2info(inode)->lli_clob;
 	io->ci_lockreq = CILR_MAYBE;
 	if (ll_file_nolock(file)) {
@@ -1491,7 +1496,7 @@ ll_file_io_generic(const struct lu_env *env, struct vvp_io_args *args,
 
 restart:
 	io = vvp_env_thread_io(env);
-	ll_io_init(io, file, iot == CIT_WRITE);
+	ll_io_init(io, file, iot == CIT_WRITE, args);
 	io->ci_ndelay_tried = retried;
 
 	if (cl_io_rw_init(env, io, iot, *ppos, count) == 0) {

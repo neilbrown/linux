@@ -818,7 +818,6 @@ void ll_stats_ops_tally(struct ll_sb_info *sbi, int op, int count);
 void ll_rw_stats_tally(struct ll_sb_info *sbi, pid_t pid,
 		       struct ll_file_data *file, loff_t pos,
 		       size_t count, int rw);
-void ll_io_init(struct cl_io *io, const struct file *file, int write);
 
 enum {
 	LPROC_LL_READ_BYTES,
@@ -1088,6 +1087,9 @@ static inline struct vvp_io_args *ll_env_args(const struct lu_env *env)
 {
 	return &ll_env_info(env)->lti_args;
 }
+
+void ll_io_init(struct cl_io *io, const struct file *file, int write,
+		struct vvp_io_args *args);
 
 /* llite/llite_mmap.c */
 
