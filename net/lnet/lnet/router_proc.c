@@ -674,7 +674,7 @@ static int proc_lnet_nis(struct ctl_table *table, int write,
 			int j;
 
 			if (the_lnet.ln_routing)
-				last_alive = now - ni->ni_last_alive;
+				last_alive = now - ni->ni_net->net_last_alive;
 
 			lnet_ni_lock(ni);
 			LASSERT(ni->ni_status);
