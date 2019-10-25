@@ -81,6 +81,7 @@ void lustre_swab_mgs_config_res(struct mgs_config_res *body);
 void lustre_swab_ost_body(struct ost_body *b);
 void lustre_swab_ost_last_id(u64 *id);
 void lustre_swab_fiemap(struct fiemap *fiemap);
+void lustre_swab_fiemap_info_key(struct ll_fiemap_info_key *fiemap_info);
 void lustre_swab_lov_user_md_v1(struct lov_user_md_v1 *lum);
 void lustre_swab_lov_user_md_v3(struct lov_user_md_v3 *lum);
 void lustre_swab_lov_comp_md_v1(struct lov_comp_md_v1 *lum);
