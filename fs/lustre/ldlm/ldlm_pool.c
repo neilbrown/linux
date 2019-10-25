@@ -255,6 +255,7 @@ static void ldlm_cli_pool_pop_slv(struct ldlm_pool *pl)
 static int ldlm_cli_pool_recalc(struct ldlm_pool *pl)
 {
 	time64_t recalc_interval_sec;
+	int lru_flags;
 	int ret;
 
 	recalc_interval_sec = ktime_get_real_seconds() - pl->pl_recalc_time;
@@ -279,13 +280,13 @@ static int ldlm_cli_pool_recalc(struct ldlm_pool *pl)
 	spin_unlock(&pl->pl_lock);
 
 	/*
-	 * Do not cancel locks in case lru resize is disabled for this ns.
+	 * Cancel aged locks if lru resize is disabled for this ns.
 	 */
 	if (!ns_connect_lru_resize(container_of(pl, struct ldlm_namespace,
-						ns_pool))) {
-		ret = 0;
-		goto out;
-	}
+						ns_pool)))
+		lru_flags = LDLM_LRU_FLAG_LRUR;
+	else
+		lru_flags = LDLM_LRU_FLAG_AGED;
 
 	/*
 	 * In the time of canceling locks on client we do not need to maintain
@@ -294,9 +295,8 @@ static int ldlm_cli_pool_recalc(struct ldlm_pool *pl)
 	 * take into account pl->pl_recalc_time here.
 	 */
 	ret = ldlm_cancel_lru(container_of(pl, struct ldlm_namespace, ns_pool),
-			      0, LCF_ASYNC, LDLM_LRU_FLAG_LRUR);
+			      0, LCF_ASYNC, lru_flags);
 
-out:
 	spin_lock(&pl->pl_lock);
 	/*
 	 * Time of LRU resizing might be longer than period,
