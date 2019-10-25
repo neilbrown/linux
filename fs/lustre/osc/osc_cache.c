@@ -636,6 +636,7 @@ void osc_extent_release(const struct lu_env *env, struct osc_extent *ext)
 			 */
 			osc_extent_state_set(ext, OES_TRUNC);
 			ext->oe_trunc_pending = 0;
+			osc_object_unlock(obj);
 		} else {
 			int grant = 0;
 
@@ -648,8 +649,6 @@ void osc_extent_release(const struct lu_env *env, struct osc_extent *ext)
 				grant += cli->cl_grant_extent_tax;
 			if (!osc_extent_merge(env, ext, next_extent(ext)))
 				grant += cli->cl_grant_extent_tax;
-			if (grant > 0)
-				osc_unreserve_grant(cli, 0, grant);
 
 			if (ext->oe_urgent)
 				list_move_tail(&ext->oe_link,
@@ -658,8 +657,10 @@ void osc_extent_release(const struct lu_env *env, struct osc_extent *ext)
 				list_move_tail(&ext->oe_link,
 					       &obj->oo_full_exts);
 			}
+			osc_object_unlock(obj);
+			if (grant > 0)
+				osc_unreserve_grant(cli, 0, grant);
 		}
-		osc_object_unlock(obj);
 
 		osc_io_unplug_async(env, cli, obj);
 	}
@@ -1483,13 +1484,20 @@ static void __osc_unreserve_grant(struct client_obd *cli,
 	}
 }
 
+static void osc_unreserve_grant_nolock(struct client_obd *cli,
+				       unsigned int reserved,
+				       unsigned int unused)
+{
+	__osc_unreserve_grant(cli, reserved, unused);
+	if (unused > 0)
+		osc_wake_cache_waiters(cli);
+}
+
 static void osc_unreserve_grant(struct client_obd *cli,
 				unsigned int reserved, unsigned int unused)
 {
 	spin_lock(&cli->cl_loi_list_lock);
-	__osc_unreserve_grant(cli, reserved, unused);
-	if (unused > 0)
-		osc_wake_cache_waiters(cli);
+	osc_unreserve_grant_nolock(cli, reserved, unused);
 	spin_unlock(&cli->cl_loi_list_lock);
 }
 
@@ -2386,7 +2394,6 @@ int osc_queue_async_io(const struct lu_env *env, struct cl_io *io,
 			grants = 0;
 			need_release = true;
 		}
-		spin_unlock(&cli->cl_loi_list_lock);
 		if (!need_release && ext->oe_end < index) {
 			tmp = grants;
 			/* try to expand this extent */
@@ -2397,10 +2404,11 @@ int osc_queue_async_io(const struct lu_env *env, struct cl_io *io,
 			} else {
 				OSC_EXTENT_DUMP(D_CACHE, ext,
 						"expanded for %lu.\n", index);
-				osc_unreserve_grant(cli, grants, tmp);
+				osc_unreserve_grant_nolock(cli, grants, tmp);
 				grants = 0;
 			}
 		}
+		spin_unlock(&cli->cl_loi_list_lock);
 		rc = 0;
 	} else if (ext) {
 		/* index is located outside of active extent */
