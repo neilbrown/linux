@@ -92,14 +92,25 @@ static struct ll_sb_info *ll_init_sbi(void)
 	pages = si.totalram - si.totalhigh;
 	lru_page_max = pages / 2;
 
-	sbi->ll_cache = cl_cache_init(lru_page_max);
-	if (!sbi->ll_cache) {
+	sbi->ll_ra_info.ra_async_max_active = 0;
+	sbi->ll_ra_info.ll_readahead_wq =
+		alloc_workqueue("ll-readahead-wq", WQ_UNBOUND,
+				sbi->ll_ra_info.ra_async_max_active);
+	if (!sbi->ll_ra_info.ll_readahead_wq) {
 		rc = -ENOMEM;
 		goto out_pcc;
 	}
 
+	sbi->ll_cache = cl_cache_init(lru_page_max);
+	if (!sbi->ll_cache) {
+		rc = -ENOMEM;
+		goto out_destroy_ra;
+	}
+
 	sbi->ll_ra_info.ra_max_pages_per_file = min(pages / 32,
 						    SBI_DEFAULT_READAHEAD_MAX);
+	sbi->ll_ra_info.ra_async_pages_per_file_threshold =
+				sbi->ll_ra_info.ra_max_pages_per_file;
 	sbi->ll_ra_info.ra_max_pages = sbi->ll_ra_info.ra_max_pages_per_file;
 	sbi->ll_ra_info.ra_max_read_ahead_whole_pages = -1;
 
@@ -138,6 +149,8 @@ static struct ll_sb_info *ll_init_sbi(void)
 	sbi->ll_heat_decay_weight = SBI_DEFAULT_HEAT_DECAY_WEIGHT;
 	sbi->ll_heat_period_second = SBI_DEFAULT_HEAT_PERIOD_SECOND;
 	return sbi;
+out_destroy_ra:
+	destroy_workqueue(sbi->ll_ra_info.ll_readahead_wq);
 out_pcc:
 	pcc_super_fini(&sbi->ll_pcc_super);
 out_sbi:
@@ -151,6 +164,8 @@ static void ll_free_sbi(struct super_block *sb)
 
 	cfs_free_nidlist(&sbi->ll_squash.rsi_nosquash_nids);
 	if (sbi->ll_cache) {
+		if (sbi->ll_ra_info.ll_readahead_wq)
+			destroy_workqueue(sbi->ll_ra_info.ll_readahead_wq);
 		cl_cache_decref(sbi->ll_cache);
 		sbi->ll_cache = NULL;
 	}

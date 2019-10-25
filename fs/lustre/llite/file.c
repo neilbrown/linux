@@ -1407,7 +1407,7 @@ static bool file_is_noatime(const struct file *file)
 	return false;
 }
 
-static void ll_io_init(struct cl_io *io, const struct file *file, int write)
+void ll_io_init(struct cl_io *io, const struct file *file, int write)
 {
 	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
 	struct inode *inode = file_inode(file);
@@ -1431,6 +1431,7 @@ static void ll_io_init(struct cl_io *io, const struct file *file, int write)
 	}
 
 	io->ci_noatime = file_is_noatime(file);
+	io->ci_async_readahead = false;
 
 	/* FLR: only use non-delay I/O for read as there is only one
 	 * available mirror for write.
