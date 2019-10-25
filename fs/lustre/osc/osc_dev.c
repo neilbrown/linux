@@ -40,6 +40,7 @@
 /* class_name2obd() */
 #include <obd_class.h>
 #include <lustre_osc.h>
+#include <uapi/linux/lustre/lustre_param.h>
 
 #include "osc_internal.h"
 
@@ -161,15 +162,17 @@ EXPORT_SYMBOL(osc_session_key);
 /* type constructor/destructor: osc_type_{init,fini,start,stop}(). */
 LU_TYPE_INIT_FINI(osc, &osc_key, &osc_session_key);
 
-static int osc_cl_process_config(const struct lu_env *env,
-				 struct lu_device *d, struct lustre_cfg *cfg)
+static int osc_process_config(const struct lu_env *env, struct lu_device *d,
+			      struct lustre_cfg *cfg)
 {
-	return osc_process_config_base(d->ld_obd, cfg);
+	ssize_t count  = class_modify_config(cfg, PARAM_OSC,
+					     &d->ld_obd->obd_kset.kobj);
+	return count > 0 ? 0 : count;
 }
 
 static const struct lu_device_operations osc_lu_ops = {
 	.ldo_object_alloc	= osc_object_alloc,
-	.ldo_process_config	= osc_cl_process_config,
+	.ldo_process_config	= osc_process_config,
 	.ldo_recovery_complete	= NULL
 };
 
