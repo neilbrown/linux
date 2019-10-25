@@ -157,6 +157,13 @@ enum obd_cl_sem_lock_class {
  */
 #define OBD_MAX_DEFAULT_EA_SIZE		4096
 
+/*
+ * Lustre can handle larger xattrs internally, but we must respect the Linux
+ * VFS limitation or tools like tar cannot interact with Lustre volumes
+ * correctly.
+ */
+#define OBD_MAX_EA_SIZE		XATTR_SIZE_MAX
+
 struct mdc_rpc_lock;
 struct obd_import;
 struct client_obd {
