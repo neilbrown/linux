@@ -221,6 +221,7 @@ int ll_dom_lock_cancel(struct inode *inode, struct ldlm_lock *lock)
 void ll_lock_cancel_bits(struct ldlm_lock *lock, u64 to_cancel)
 {
 	struct inode *inode = ll_inode_from_resource_lock(lock);
+	struct ll_inode_info *lli;
 	u64 bits = to_cancel;
 	int rc;
 
@@ -308,13 +309,12 @@ void ll_lock_cancel_bits(struct ldlm_lock *lock, u64 to_cancel)
 			       PFID(ll_inode2fid(inode)), rc);
 	}
 
+	lli = ll_i2info(inode);
 	if (bits & MDS_INODELOCK_UPDATE)
 		set_bit(LLIF_UPDATE_ATIME,
-			&ll_i2info(inode)->lli_flags);
+			&lli->lli_flags);
 
 	if ((bits & MDS_INODELOCK_UPDATE) && S_ISDIR(inode->i_mode)) {
-		struct ll_inode_info *lli = ll_i2info(inode);
-
 		CDEBUG(D_INODE,
 		       "invalidating inode "DFID" lli = %p, pfid  = "DFID"\n",
 		       PFID(ll_inode2fid(inode)),
@@ -689,7 +689,7 @@ static int ll_lookup_it_finish(struct ptlrpc_request *request,
 		struct lu_fid fid = ll_i2info(parent)->lli_fid;
 
 		/* If it is striped directory, get the real stripe parent */
-		if (unlikely(ll_i2info(parent)->lli_lsm_md)) {
+		if (unlikely(ll_dir_striped(parent))) {
 			rc = md_get_fid_from_lsm(ll_i2mdexp(parent),
 						 ll_i2info(parent)->lli_lsm_md,
 						 (*de)->d_name.name,
