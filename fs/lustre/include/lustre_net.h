@@ -306,13 +306,15 @@
  *	DT_MAX_BRW_PAGES * niobuf_remote
  *
  * - single object with 16 pages is 512 bytes
- * - OST_IO_MAXREQSIZE must be at least 1 page of cookies plus some spillover
+ * - OST_IO_MAXREQSIZE must be at least 1 niobuf per page of data
  * - Must be a multiple of 1024
+ * - should allow a reasonably large SHORT_IO_BYTES size (64KB)
  */
-#define _OST_MAXREQSIZE_BASE	(sizeof(struct lustre_msg) + \
-				 sizeof(struct ptlrpc_body) + \
-				 sizeof(struct obdo) + \
-				 sizeof(struct obd_ioobj) + \
+#define _OST_MAXREQSIZE_BASE	(sizeof(struct lustre_msg)		+ \
+			     /* lm_buflens */ sizeof(u32) * 4		+ \
+				 sizeof(struct ptlrpc_body)		+ \
+				 sizeof(struct obdo)			+ \
+				 sizeof(struct obd_ioobj)		+ \
 				 sizeof(struct niobuf_remote))
 #define _OST_MAXREQSIZE_SUM	(_OST_MAXREQSIZE_BASE + \
 				 sizeof(struct niobuf_remote) * \
@@ -334,14 +336,15 @@
 /* Safe estimate of free space in standard RPC, provides upper limit for # of
  * bytes of i/o to pack in RPC (skipping bulk transfer).
  */
-#define OST_SHORT_IO_SPACE	(OST_IO_MAXREQSIZE - _OST_MAXREQSIZE_BASE)
+#define OST_MAX_SHORT_IO_BYTES	((OST_IO_MAXREQSIZE - _OST_MAXREQSIZE_BASE) & \
+				 PAGE_MASK)
 
 /* Actual size used for short i/o buffer.  Calculation means this:
  * At least one page (for large PAGE_SIZE), or 16 KiB, but not more
  * than the available space aligned to a page boundary.
  */
-#define OBD_MAX_SHORT_IO_BYTES	(min(max(PAGE_SIZE, 16UL * 1024UL), \
-					 OST_SHORT_IO_SPACE & PAGE_MASK))
+#define OBD_DEF_SHORT_IO_BYTES	(min(max(PAGE_SIZE, 16UL * 1024UL), \
+					 OST_MAX_SHORT_IO_BYTES))
 
 /* Macro to hide a typecast and BUILD_BUG. */
 #define ptlrpc_req_async_args(_var, req) ({				\
