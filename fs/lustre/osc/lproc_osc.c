@@ -710,10 +710,10 @@ static ssize_t grant_shrink_show(struct kobject *kobj, struct attribute *attr,
 	ssize_t len;
 
 	with_imp_locked(obd, imp, len)
-		len = snprintf(buf, PAGE_SIZE, "%d\n",
-			       !imp->imp_grant_shrink_disabled &&
-			       OCD_HAS_FLAG(&imp->imp_connect_data,
-					    GRANT_SHRINK));
+		len = scnprintf(buf, PAGE_SIZE, "%d\n",
+				!imp->imp_grant_shrink_disabled &&
+				OCD_HAS_FLAG(&imp->imp_connect_data,
+					     GRANT_SHRINK));
 
 	return len;
 }
