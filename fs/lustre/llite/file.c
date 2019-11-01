@@ -4558,8 +4558,22 @@ int ll_getattr(const struct path *path, struct kstat *stat,
 	struct inode *inode = d_inode(path->dentry);
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
 	struct ll_inode_info *lli = ll_i2info(inode);
+	struct inode *dir = d_inode(path->dentry->d_parent);
+	bool need_glimpse = true;
 	ktime_t kstart = ktime_get();
-	int rc;
+	int rc = 0;
+
+	/* The OST object(s) determine the file size, blocks and mtime. */
+	if (!(request_mask & STATX_SIZE || request_mask & STATX_BLOCKS ||
+	      request_mask & STATX_MTIME))
+		need_glimpse = false;
+
+	if (dentry_may_statahead(dir, path->dentry))
+		ll_start_statahead(dir, path->dentry, need_glimpse &&
+				   !(flags & AT_STATX_DONT_SYNC));
+
+	if (flags & AT_STATX_DONT_SYNC)
+		goto fill_attr;
 
 	rc = ll_inode_revalidate(path->dentry, IT_GETATTR);
 	if (rc < 0)
@@ -4568,9 +4582,35 @@ int ll_getattr(const struct path *path, struct kstat *stat,
 	if (S_ISREG(inode->i_mode)) {
 		bool cached;
 
-		rc = pcc_inode_getattr(inode, &cached);
+		if (!need_glimpse)
+			goto fill_attr;
+
+		rc = pcc_inode_getattr(inode, request_mask, flags, &cached);
 		if (cached && rc < 0)
 			return rc;
+
+		if (cached)
+			goto fill_attr;
+
+		/*
+		 * If the returned attr is masked with OBD_MD_FLSIZE &
+		 * OBD_MD_FLBLOCKS & OBD_MD_FLMTIME, it means that the file size
+		 * or blocks obtained from MDT is strictly correct, and the file
+		 * is usually not being modified by clients, and the [a|m|c]time
+		 * got from MDT is also strictly correct.
+		 * Under this circumstance, it does not need to send glimpse
+		 * RPCs to OSTs for file attributes such as the size and blocks.
+		 */
+		if (lli->lli_attr_valid & OBD_MD_FLSIZE &&
+		    lli->lli_attr_valid & OBD_MD_FLBLOCKS &&
+		    lli->lli_attr_valid & OBD_MD_FLMTIME) {
+			inode->i_mtime.tv_sec = lli->lli_mtime;
+			if (lli->lli_attr_valid & OBD_MD_FLATIME)
+				inode->i_atime.tv_sec = lli->lli_atime;
+			if (lli->lli_attr_valid & OBD_MD_FLCTIME)
+				inode->i_ctime.tv_sec = lli->lli_ctime;
+			goto fill_attr;
+		}
 
 		/* In case of restore, the MDT has the right size and has
 		 * already send it back without granting the layout lock,
@@ -4579,7 +4619,7 @@ int ll_getattr(const struct path *path, struct kstat *stat,
 		 * restore the MDT holds the layout lock so the glimpse will
 		 * block up to the end of restore (getattr will block)
 		 */
-		if (!cached && !test_bit(LLIF_FILE_RESTORING,
+		if (!test_bit(LLIF_FILE_RESTORING,
 					 &lli->lli_flags)) {
 			rc = ll_glimpse_size(inode);
 			if (rc < 0)
@@ -4593,11 +4633,15 @@ int ll_getattr(const struct path *path, struct kstat *stat,
 				return rc;
 		}
 
-		inode->i_atime.tv_sec = lli->lli_atime;
-		inode->i_mtime.tv_sec = lli->lli_mtime;
-		inode->i_ctime.tv_sec = lli->lli_ctime;
+		if (lli->lli_attr_valid & OBD_MD_FLATIME)
+			inode->i_atime.tv_sec = lli->lli_atime;
+		if (lli->lli_attr_valid & OBD_MD_FLMTIME)
+			inode->i_mtime.tv_sec = lli->lli_mtime;
+		if (lli->lli_attr_valid & OBD_MD_FLCTIME)
+			inode->i_ctime.tv_sec = lli->lli_ctime;
 	}
 
+fill_attr:
 	OBD_FAIL_TIMEOUT(OBD_FAIL_GETATTR_DELAY, 30);
 
 	stat->dev = inode->i_sb->s_dev;
@@ -4630,6 +4674,24 @@ int ll_getattr(const struct path *path, struct kstat *stat,
 	stat->nlink = inode->i_nlink;
 	stat->size = i_size_read(inode);
 	stat->blocks = inode->i_blocks;
+
+	if (flags & AT_STATX_DONT_SYNC) {
+		if (stat->size == 0 &&
+		    lli->lli_attr_valid & OBD_MD_FLLAZYSIZE)
+			stat->size = lli->lli_lazysize;
+		if (stat->blocks == 0 &&
+		    lli->lli_attr_valid & OBD_MD_FLLAZYBLOCKS)
+			stat->blocks = lli->lli_lazyblocks;
+	}
+
+	if (lli->lli_attr_valid & OBD_MD_FLBTIME) {
+		stat->result_mask |= STATX_BTIME;
+		stat->btime.tv_sec = lli->lli_btime;
+	}
+
+	stat->attributes_mask = STATX_ATTR_IMMUTABLE | STATX_ATTR_APPEND;
+	stat->attributes |= ll_inode_to_ext_flags(inode->i_flags);
+	stat->result_mask &= request_mask;
 
 	ll_stats_ops_tally(sbi, LPROC_LL_GETATTR,
 			   ktime_us_delta(ktime_get(), kstart));

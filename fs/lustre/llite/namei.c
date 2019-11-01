@@ -751,7 +751,7 @@ static struct dentry *ll_lookup_it(struct inode *parent, struct dentry *dentry,
 		it = &lookup_it;
 
 	if (it->it_op == IT_GETATTR && dentry_may_statahead(parent, dentry)) {
-		rc = ll_statahead(parent, &dentry, 0);
+		rc = ll_revalidate_statahead(parent, &dentry, 0);
 		if (rc == 1) {
 			if (dentry == save)
 				retval = NULL;

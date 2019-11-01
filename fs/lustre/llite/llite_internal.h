@@ -146,6 +146,7 @@ struct ll_inode_info {
 	s64				lli_atime;
 	s64				lli_mtime;
 	s64				lli_ctime;
+	s64				lli_btime;
 	spinlock_t			lli_agl_lock;
 
 	/* Try to make the d::member and f::member are aligned. Before using
@@ -236,6 +237,10 @@ struct ll_inode_info {
 			struct mutex			lli_group_mutex;
 			u64				lli_group_users;
 			unsigned long			lli_group_gid;
+
+			u64				lli_attr_valid;
+			u64				lli_lazysize;
+			u64				lli_lazyblocks;
 		};
 	};
 
@@ -1385,7 +1390,9 @@ struct ll_statahead_info {
 	atomic_t		sai_cache_count; /* entry count in cache */
 };
 
-int ll_statahead(struct inode *dir, struct dentry **dentry, bool unplug);
+int ll_revalidate_statahead(struct inode *dir, struct dentry **dentry,
+			    bool unplug);
+int ll_start_statahead(struct inode *dir, struct dentry *dentry, bool agl);
 void ll_authorize_statahead(struct inode *dir, void *key);
 void ll_deauthorize_statahead(struct inode *dir, void *key);
 
@@ -1469,7 +1476,8 @@ dentry_may_statahead(struct inode *dir, struct dentry *dentry)
 	 * 'lld_sa_generation == lli->lli_sa_generation'.
 	 */
 	ldd = ll_d2d(dentry);
-	if (ldd->lld_sa_generation == lli->lli_sa_generation)
+	if (lli->lli_sa_generation &&
+	    ldd->lld_sa_generation == lli->lli_sa_generation)
 		return false;
 
 	return true;

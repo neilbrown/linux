@@ -664,7 +664,18 @@ struct lov_user_mds_data_v3 {
 	lstat_t lmd_st;			/* MDS stat struct */
 	struct lov_user_md_v3 lmd_lmm;	/* LOV EA V3 user data */
 } __attribute__((packed));
-#endif
+#define AT_STATX_SYNC_TYPE	0x6000	/* Type of synchronisation required
+					 * from statx()
+					 */
+#define AT_STATX_SYNC_AS_STAT	0x0000	/* - Do whatever stat() does */
+#define AT_STATX_FORCE_SYNC	0x2000	/* - Force the attributes to be sync'd
+					 * with the server
+					 */
+#define AT_STATX_DONT_SYNC	0x4000	/* - Don't sync attributes with the
+					 * server
+					 */
+
+#endif /* STATX_BASIC_STATS */
 
 struct lmv_user_mds_data {
 	struct lu_fid	lum_fid;
