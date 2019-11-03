@@ -480,11 +480,11 @@ static ssize_t mdc_dom_min_repsize_seq_write(struct file *file,
 					     const char __user *buffer,
 					     size_t count, loff_t *off)
 {
-	struct obd_device *obd;
+	struct seq_file *m = file->private_data;
+	struct obd_device *obd = m->private;
 	unsigned int val;
 	int rc;
 
-	obd =  ((struct seq_file *)file->private_data)->private;
 	rc = kstrtouint_from_user(buffer, count, 0, &val);
 	if (rc)
 		return rc;
