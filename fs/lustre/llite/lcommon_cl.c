@@ -113,7 +113,7 @@ again:
 			/* populate the file descriptor for ftruncate to honor
 			 * group lock - see LU-787
 			 */
-			vio->vui_fd = LUSTRE_FPRIVATE(attr->ia_file);
+			vio->vui_fd = attr->ia_file->private_data;
 
 		result = cl_io_loop(env, io);
 	} else {

@@ -306,7 +306,7 @@ int ll_md_real_close(struct inode *inode, fmode_t fmode)
 
 static int ll_md_close(struct inode *inode, struct file *file)
 {
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct ll_inode_info *lli = ll_i2info(inode);
 	int lockmode;
 	u64 flags = LDLM_FL_BLOCK_GRANTED | LDLM_FL_TEST_LOCK;
@@ -367,7 +367,7 @@ static int ll_md_close(struct inode *inode, struct file *file)
 		rc = ll_md_real_close(inode, fd->fd_omode);
 
 out:
-	LUSTRE_FPRIVATE(file) = NULL;
+	file->private_data = NULL;
 	ll_file_data_put(fd);
 
 	return rc;
@@ -389,7 +389,7 @@ int ll_file_release(struct inode *inode, struct file *file)
 	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID "(%p)\n",
 	       PFID(ll_inode2fid(inode)), inode);
 
-	fd = LUSTRE_FPRIVATE(file);
+	fd = file->private_data;
 	LASSERT(fd);
 
 	/* The last ref on @file, maybe not be the owner pid of statahead,
@@ -399,7 +399,7 @@ int ll_file_release(struct inode *inode, struct file *file)
 		ll_deauthorize_statahead(inode, fd);
 
 	if (is_root_inode(inode)) {
-		LUSTRE_FPRIVATE(file) = NULL;
+		file->private_data = NULL;
 		ll_file_data_put(fd);
 		rc = 0;
 		goto out;
@@ -659,7 +659,7 @@ static int ll_local_open(struct file *file, struct lookup_intent *it,
 {
 	struct inode *inode = file_inode(file);
 
-	LASSERT(!LUSTRE_FPRIVATE(file));
+	LASSERT(!file->private_data);
 
 	LASSERT(fd);
 
@@ -671,7 +671,7 @@ static int ll_local_open(struct file *file, struct lookup_intent *it,
 			return rc;
 	}
 
-	LUSTRE_FPRIVATE(file) = fd;
+	file->private_data = fd;
 	ll_readahead_init(inode, &fd->fd_ras);
 	fd->fd_omode = it->it_flags & (FMODE_READ | FMODE_WRITE | FMODE_EXEC);
 
@@ -723,7 +723,7 @@ int ll_file_open(struct inode *inode, struct file *file)
 		ll_authorize_statahead(inode, fd);
 
 	if (is_root_inode(inode)) {
-		LUSTRE_FPRIVATE(file) = fd;
+		file->private_data = fd;
 		return 0;
 	}
 
@@ -951,7 +951,7 @@ static int ll_md_blocking_lease_ast(struct ldlm_lock *lock,
 static int ll_lease_och_acquire(struct inode *inode, struct file *file,
 				struct lustre_handle *old_open_handle)
 {
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct ll_inode_info *lli = ll_i2info(inode);
 	struct obd_client_handle **och_p;
 	u64 *och_usecount;
@@ -997,7 +997,7 @@ out_unlock:
  */
 static int ll_lease_och_release(struct inode *inode, struct file *file)
 {
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct ll_inode_info *lli = ll_i2info(inode);
 	struct obd_client_handle *old_och = NULL;
 	struct obd_client_handle **och_p;
@@ -1376,7 +1376,7 @@ out_size_unlock:
  */
 void ll_io_set_mirror(struct cl_io *io, const struct file *file)
 {
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 
 	/* clear layout version for generic(non-resync) I/O in case it carries
 	 * stale layout version due to I/O restart
@@ -1426,7 +1426,7 @@ static bool file_is_noatime(const struct file *file)
 void ll_io_init(struct cl_io *io, const struct file *file, int write,
 		struct vvp_io_args *args)
 {
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd  = file->private_data;
 	struct inode *inode = file_inode(file);
 
 	io->u.ci_rw.crw_nonblock = file->f_flags & O_NONBLOCK;
@@ -1499,7 +1499,7 @@ ll_file_io_generic(const struct lu_env *env, struct vvp_io_args *args,
 		   loff_t *ppos, size_t count)
 {
 	struct ll_inode_info *lli = ll_i2info(file_inode(file));
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd  = file->private_data;
 	struct vvp_io *vio = vvp_env_io(env);
 	struct range_lock range;
 	struct cl_io *io;
@@ -1526,7 +1526,7 @@ restart:
 		else
 			range_lock_init(&range, *ppos, *ppos + count - 1);
 
-		vio->vui_fd  = LUSTRE_FPRIVATE(file);
+		vio->vui_fd  = file->private_data;
 		vio->vui_iter = args->u.normal.via_iter;
 		vio->vui_iocb = args->u.normal.via_iocb;
 		/*
@@ -1738,7 +1738,7 @@ static ssize_t ll_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 out:
 	if (result > 0) {
 		ll_rw_stats_tally(ll_i2sbi(file_inode(file)), current->pid,
-				  LUSTRE_FPRIVATE(file), iocb->ki_pos, result,
+				  file->private_data, iocb->ki_pos, result,
 				  READ);
 		ll_stats_ops_tally(ll_i2sbi(file_inode(file)), LPROC_LL_READ,
 				   ktime_us_delta(ktime_get(), kstart));
@@ -1880,7 +1880,7 @@ static ssize_t ll_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 out:
 	if (rc_normal > 0) {
 		ll_rw_stats_tally(ll_i2sbi(file_inode(file)), current->pid,
-				  LUSTRE_FPRIVATE(file), iocb->ki_pos,
+				  file->private_data, iocb->ki_pos,
 				  rc_normal, WRITE);
 		ll_stats_ops_tally(ll_i2sbi(file_inode(file)), LPROC_LL_WRITE,
 				   ktime_us_delta(ktime_get(), kstart));
@@ -2091,7 +2091,7 @@ static int
 ll_get_grouplock(struct inode *inode, struct file *file, unsigned long arg)
 {
 	struct ll_inode_info *lli = ll_i2info(inode);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct cl_object *obj = lli->lli_clob;
 	struct ll_grouplock grouplock;
 	int rc;
@@ -2184,7 +2184,7 @@ static int ll_put_grouplock(struct inode *inode, struct file *file,
 			    unsigned long arg)
 {
 	struct ll_inode_info *lli = ll_i2info(inode);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct ll_grouplock grouplock;
 	int rc;
 
@@ -3005,7 +3005,7 @@ static int ll_ladvise(struct inode *inode, struct file *file, u64 flags,
 
 static int ll_lock_noexpand(struct file *file, int flags)
 {
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 
 	fd->ll_lock_no_expand = !(flags & LF_UNSET);
 
@@ -3124,7 +3124,7 @@ static long ll_file_unlock_lease(struct file *file, struct ll_ioc_lease *ioc,
 				 unsigned long arg)
 {
 	struct inode *inode = file_inode(file);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct ll_inode_info *lli = ll_i2info(inode);
 	struct obd_client_handle *och = NULL;
 	struct split_param sp;
@@ -3307,7 +3307,7 @@ static long ll_file_set_lease(struct file *file, struct ll_ioc_lease *ioc,
 {
 	struct inode *inode = file_inode(file);
 	struct ll_inode_info *lli = ll_i2info(inode);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct obd_client_handle *och = NULL;
 	u64 open_flags = 0;
 	bool lease_broken;
@@ -3407,7 +3407,7 @@ static long
 ll_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct inode *inode = file_inode(file);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	int flags, rc;
 
 	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID "(%p),cmd=%x\n",
@@ -3908,7 +3908,7 @@ static int ll_flush(struct file *file, fl_owner_t id)
 {
 	struct inode *inode = file_inode(file);
 	struct ll_inode_info *lli = ll_i2info(inode);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	int rc, err;
 
 	LASSERT(!S_ISDIR(inode->i_mode));
@@ -4018,7 +4018,7 @@ int ll_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 		ptlrpc_req_finished(req);
 
 	if (S_ISREG(inode->i_mode)) {
-		struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+		struct ll_file_data *fd = file->private_data;
 		bool cached;
 
 		/* Sync metadata on MDT first, and then sync the cached data
@@ -4362,7 +4362,7 @@ out_iput:
 static int
 ll_file_noflock(struct file *file, int cmd, struct file_lock *file_lock)
 {
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 
 	/*
 	 * In order to avoid flood of warning messages, only print one message

@@ -1462,7 +1462,7 @@ int pcc_file_open(struct inode *inode, struct file *file)
 {
 	struct pcc_inode *pcci;
 	struct ll_inode_info *lli = ll_i2info(inode);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct pcc_file *pccf = &fd->fd_pcc_file;
 	struct file *pcc_file;
 	struct path *path;
@@ -1516,7 +1516,7 @@ out_unlock:
 void pcc_file_release(struct inode *inode, struct file *file)
 {
 	struct pcc_inode *pcci;
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct pcc_file *pccf;
 	struct path *path;
 	struct qstr *dname;
@@ -1579,7 +1579,7 @@ ssize_t pcc_file_read_iter(struct kiocb *iocb,
 			   struct iov_iter *iter, bool *cached)
 {
 	struct file *file = iocb->ki_filp;
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct pcc_file *pccf = &fd->fd_pcc_file;
 	struct inode *inode = file_inode(file);
 	ssize_t result;
@@ -1609,7 +1609,7 @@ ssize_t pcc_file_write_iter(struct kiocb *iocb,
 			    struct iov_iter *iter, bool *cached)
 {
 	struct file *file = iocb->ki_filp;
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct pcc_file *pccf = &fd->fd_pcc_file;
 	struct inode *inode = file_inode(file);
 	ssize_t result;
@@ -1745,7 +1745,7 @@ ssize_t pcc_file_splice_read(struct file *in_file, loff_t *ppos,
 			     bool *cached)
 {
 	struct inode *inode = file_inode(in_file);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(in_file);
+	struct ll_file_data *fd = in_file->private_data;
 	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
 	ssize_t result;
 
@@ -1772,7 +1772,7 @@ int pcc_fsync(struct file *file, loff_t start, loff_t end,
 	      int datasync, bool *cached)
 {
 	struct inode *inode = file_inode(file);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
 	int rc;
 
@@ -1796,7 +1796,7 @@ int pcc_file_mmap(struct file *file, struct vm_area_struct *vma,
 		  bool *cached)
 {
 	struct inode *inode = file_inode(file);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
 	struct pcc_inode *pcci;
 	int rc = 0;
@@ -1829,7 +1829,7 @@ void pcc_vm_open(struct vm_area_struct *vma)
 	struct pcc_inode *pcci;
 	struct file *file = vma->vm_file;
 	struct inode *inode = file_inode(file);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
 	const struct vm_operations_struct *pcc_vm_ops = vma->vm_private_data;
 
@@ -1850,7 +1850,7 @@ void pcc_vm_close(struct vm_area_struct *vma)
 {
 	struct file *file = vma->vm_file;
 	struct inode *inode = file_inode(file);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
 	const struct vm_operations_struct *pcc_vm_ops = vma->vm_private_data;
 
@@ -1872,7 +1872,7 @@ vm_fault_t pcc_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf,
 	struct mm_struct *mm = vma->vm_mm;
 	struct file *file = vma->vm_file;
 	struct inode *inode = file_inode(file);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
 	const struct vm_operations_struct *pcc_vm_ops = vma->vm_private_data;
 	int rc;
@@ -1946,7 +1946,7 @@ int pcc_fault(struct vm_area_struct *vma, struct vm_fault *vmf,
 {
 	struct file *file = vma->vm_file;
 	struct inode *inode = file_inode(file);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
 	const struct vm_operations_struct *pcc_vm_ops = vma->vm_private_data;
 	int rc;
@@ -2564,7 +2564,7 @@ int pcc_ioctl_state(struct file *file, struct inode *inode,
 	char *buf;
 	char *path;
 	int buf_len = sizeof(state->pccs_path);
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct pcc_file *pccf = &fd->fd_pcc_file;
 	struct pcc_inode *pcci;
 

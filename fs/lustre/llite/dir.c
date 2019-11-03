@@ -291,7 +291,7 @@ int ll_dir_read(struct inode *inode, u64 *ppos, struct md_op_data *op_data,
 static int ll_readdir(struct file *filp, struct dir_context *ctx)
 {
 	struct inode *inode = file_inode(filp);
-	struct ll_file_data *lfd = LUSTRE_FPRIVATE(filp);
+	struct ll_file_data *lfd = filp->private_data;
 	struct ll_sb_info *sbi	= ll_i2sbi(inode);
 	u64 pos = lfd ? lfd->lfd_pos : 0;
 	int hash64 = sbi->ll_flags & LL_SBI_64BIT_HASH;
@@ -2098,7 +2098,7 @@ out_detach:
 static loff_t ll_dir_seek(struct file *file, loff_t offset, int origin)
 {
 	struct inode *inode = file->f_mapping->host;
-	struct ll_file_data *fd = LUSTRE_FPRIVATE(file);
+	struct ll_file_data *fd = file->private_data;
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
 	bool api32 = ll_need_32bit_api(sbi);
 	loff_t ret = -EINVAL;
