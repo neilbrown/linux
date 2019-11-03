@@ -99,11 +99,10 @@ ldebugfs_fid_space_seq_write(struct file *file,
 			     const char __user *buffer,
 			     size_t count, loff_t *off)
 {
-	struct lu_client_seq *seq;
+	struct seq_file *m = file->private_data;
+	struct lu_client_seq *seq = m->private;
 	struct lu_seq_range range;
 	int rc;
-
-	seq = ((struct seq_file *)file->private_data)->private;
 
 	rc = ldebugfs_fid_write_common(buffer, count, &range);
 
@@ -145,11 +144,10 @@ ldebugfs_fid_width_seq_write(struct file *file,
 			     const char __user *buffer,
 			     size_t count, loff_t *off)
 {
-	struct lu_client_seq *seq;
+	struct seq_file *m = file->private_data;
+	struct lu_client_seq *seq = m->private;
 	u64 max;
 	int rc, val;
-
-	seq = ((struct seq_file *)file->private_data)->private;
 
 	rc = lprocfs_write_helper(buffer, count, &val);
 	if (rc)
