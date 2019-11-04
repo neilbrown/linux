@@ -3454,7 +3454,7 @@ kiblnd_connd(void *arg)
 					HASH_SIZE(kiblnd_data.kib_peers);
 			}
 
-			deadline += msecs_to_jiffies(p * MSEC_PER_SEC);
+			deadline += p * HZ;
 			timeout = (int)(deadline - jiffies);
 		}
 	}

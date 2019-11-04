@@ -346,7 +346,7 @@ static void cfs_crypto_performance_test(enum cfs_crypto_hash_alg hash_alg)
 	memset(buf, 0xAD, PAGE_SIZE);
 	kunmap(page);
 
-	for (start = jiffies, end = start + msecs_to_jiffies(MSEC_PER_SEC / 4),
+	for (start = jiffies, end = start + HZ / 4,
 	     bcount = 0; time_before(jiffies, end) && err == 0; bcount++) {
 		struct ahash_request *hdesc;
 		int i;
