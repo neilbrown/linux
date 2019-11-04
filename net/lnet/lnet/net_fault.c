@@ -395,9 +395,11 @@ drop_rule_match(struct lnet_drop_rule *rule, lnet_nid_t src,
 		}
 
 	} else { /* rate based drop */
-		drop = rule->dr_stat.fs_count++ == rule->dr_drop_at;
+		u64 count;
 
-		if (!do_div(rule->dr_stat.fs_count, attr->u.drop.da_rate)) {
+		drop = rule->dr_stat.fs_count++ == rule->dr_drop_at;
+		count = rule->dr_stat.fs_count;
+		if (!do_div(count, attr->u.drop.da_rate)) {
 			rule->dr_drop_at = rule->dr_stat.fs_count +
 				prandom_u32_max(attr->u.drop.da_rate);
 			CDEBUG(D_NET, "Drop Rule %s->%s: next drop: %lu\n",
@@ -565,9 +567,12 @@ delay_rule_match(struct lnet_delay_rule *rule, lnet_nid_t src,
 		}
 
 	} else { /* rate based delay */
+		u64 count;
+
 		delay = rule->dl_stat.fs_count++ == rule->dl_delay_at;
+		count = rule->dl_stat.fs_count;
 		/* generate the next random rate sequence */
-		if (!do_div(rule->dl_stat.fs_count, attr->u.delay.la_rate)) {
+		if (!do_div(count, attr->u.delay.la_rate)) {
 			rule->dl_delay_at = rule->dl_stat.fs_count +
 				prandom_u32_max(attr->u.delay.la_rate);
 			CDEBUG(D_NET, "Delay Rule %s->%s: next delay: %lu\n",
