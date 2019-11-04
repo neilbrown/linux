@@ -967,7 +967,7 @@ lnet_res_containers_create(int type)
 	int rc;
 	int i;
 
-	recs = cfs_percpt_alloc(lnet_cpt_table(), sizeof(*rec));
+	recs = cfs_percpt_alloc(lnet_cpt_table(), sizeof(*recs[0]));
 	if (!recs) {
 		CERROR("Failed to allocate %s resource containers\n",
 		       lnet_res_type2str(type));
@@ -1030,8 +1030,7 @@ lnet_create_array_of_queues(void)
 	struct list_head *q;
 	int i;
 
-	qs = cfs_percpt_alloc(lnet_cpt_table(),
-			      sizeof(struct list_head));
+	qs = cfs_percpt_alloc(lnet_cpt_table(), sizeof(*qs[0]));
 	if (!qs) {
 		CERROR("Failed to allocate queues\n");
 		return NULL;
@@ -1092,7 +1091,7 @@ lnet_prepare(lnet_pid_t requested_pid)
 	the_lnet.ln_interface_cookie = ktime_get_real_ns();
 
 	the_lnet.ln_counters = cfs_percpt_alloc(lnet_cpt_table(),
-						sizeof(struct lnet_counters));
+						sizeof(*the_lnet.ln_counters[0]));
 	if (!the_lnet.ln_counters) {
 		CERROR("Failed to allocate counters for LNet\n");
 		rc = -ENOMEM;

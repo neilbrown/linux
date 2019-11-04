@@ -1367,7 +1367,7 @@ static int echo_client_prep_commit(const struct lu_env *env,
 	npages = batch >> PAGE_SHIFT;
 	tot_pages = count >> PAGE_SHIFT;
 
-	lnb = kvmalloc_array(npages, sizeof(struct niobuf_local),
+	lnb = kvmalloc_array(npages, sizeof(*lnb),
 			     GFP_NOFS | __GFP_ZERO);
 	if (!lnb) {
 		ret = -ENOMEM;

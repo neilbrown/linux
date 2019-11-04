@@ -1413,7 +1413,7 @@ struct lprocfs_stats *lprocfs_alloc_stats(unsigned int num,
 
 	/* alloc num of counter headers */
 	stats->ls_cnt_header = kvmalloc_array(stats->ls_num,
-					      sizeof(struct lprocfs_counter_header),
+					      sizeof(*stats->ls_cnt_header),
 					      GFP_KERNEL | __GFP_ZERO);
 	if (!stats->ls_cnt_header)
 		goto fail;

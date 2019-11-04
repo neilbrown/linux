@@ -813,7 +813,8 @@ struct kib_conn *kiblnd_create_conn(struct kib_peer_ni *peer_ni,
 		      peer_ni->ibp_queue_depth,
 		      conn->ibc_queue_depth);
 
-	conn->ibc_rxs = kzalloc_cpt(IBLND_RX_MSGS(conn) * sizeof(struct kib_rx),
+	conn->ibc_rxs = kzalloc_cpt(IBLND_RX_MSGS(conn) *
+				    sizeof(*conn->ibc_rxs),
 				    GFP_NOFS, cpt);
 	if (!conn->ibc_rxs) {
 		CERROR("Cannot allocate RX buffers\n");
@@ -2073,7 +2074,7 @@ static int kiblnd_create_tx_pool(struct kib_poolset *ps, int size,
 		return -ENOMEM;
 	}
 
-	tpo->tpo_tx_descs = kzalloc_cpt(size * sizeof(struct kib_tx),
+	tpo->tpo_tx_descs = kzalloc_cpt(size * sizeof(*tpo->tpo_tx_descs),
 					GFP_NOFS, ps->ps_cpt);
 	if (!tpo->tpo_tx_descs) {
 		CERROR("Can't allocate %d tx descriptors\n", size);
@@ -2205,7 +2206,7 @@ static int kiblnd_net_init_pools(struct kib_net *net, struct lnet_ni *ni,
 	 * number of CPTs that exist, i.e net->ibn_fmr_ps[cpt].
 	 */
 	net->ibn_fmr_ps = cfs_percpt_alloc(lnet_cpt_table(),
-					   sizeof(struct kib_fmr_poolset));
+					   sizeof(*net->ibn_fmr_ps[0]));
 	if (!net->ibn_fmr_ps) {
 		CERROR("Failed to allocate FMR pool array\n");
 		rc = -ENOMEM;
@@ -2232,7 +2233,7 @@ static int kiblnd_net_init_pools(struct kib_net *net, struct lnet_ni *ni,
 	 * number of CPTs that exist, i.e net->ibn_tx_ps[cpt].
 	 */
 	net->ibn_tx_ps = cfs_percpt_alloc(lnet_cpt_table(),
-					  sizeof(struct kib_tx_poolset));
+					  sizeof(*net->ibn_tx_ps[0]));
 	if (!net->ibn_tx_ps) {
 		CERROR("Failed to allocate tx pool array\n");
 		rc = -ENOMEM;
