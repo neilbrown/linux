@@ -47,7 +47,7 @@ int
 lnet_sock_write(struct socket *sock, void *buffer, int nob, int timeout)
 {
 	int rc;
-	long jiffies_left = timeout * msecs_to_jiffies(MSEC_PER_SEC);
+	long jiffies_left = timeout * HZ;
 	unsigned long then;
 	struct timeval tv;
 	struct __kernel_sock_timeval ktv;
@@ -105,7 +105,7 @@ int
 lnet_sock_read(struct socket *sock, void *buffer, int nob, int timeout)
 {
 	int rc;
-	long jiffies_left = timeout * msecs_to_jiffies(MSEC_PER_SEC);
+	long jiffies_left = timeout * HZ;
 	unsigned long then;
 	struct timeval tv;
 	struct __kernel_sock_timeval ktv;
