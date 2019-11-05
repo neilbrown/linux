@@ -357,8 +357,6 @@ lnet_peer_ni_del_locked(struct lnet_peer_ni *lpni, bool force)
 
 	/* decrement the ref count on the peer table */
 	ptable = the_lnet.ln_peer_tables[lpni->lpni_cpt];
-	LASSERT(atomic_read(&ptable->pt_number) > 0);
-	atomic_dec(&ptable->pt_number);
 
 	/*
 	 * The peer_ni can no longer be found with a lookup. But there
@@ -1252,7 +1250,6 @@ lnet_peer_attach_peer_ni(struct lnet_peer *lp,
 		ptable = the_lnet.ln_peer_tables[lpni->lpni_cpt];
 		list_add_tail(&lpni->lpni_hashlist, &ptable->pt_hash[hash]);
 		ptable->pt_version++;
-		atomic_inc(&ptable->pt_number);
 	}
 
 	/* Detach the peer_ni from an existing peer, if necessary. */
