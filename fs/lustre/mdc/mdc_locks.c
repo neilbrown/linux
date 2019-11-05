@@ -581,7 +581,7 @@ static struct ptlrpc_request *mdc_intent_layout_pack(struct obd_export *exp,
 						     struct md_op_data *op_data)
 {
 	struct obd_device *obd = class_exp2obd(exp);
-	struct list_head cancels = LIST_HEAD_INIT(cancels);
+	LIST_HEAD(cancels);
 	struct ptlrpc_request *req;
 	struct ldlm_intent *lit;
 	struct layout_intent *layout;

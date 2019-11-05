@@ -43,7 +43,7 @@
 
 struct mutex pinger_mutex;
 static LIST_HEAD(pinger_imports);
-static struct list_head timeout_list = LIST_HEAD_INIT(timeout_list);
+static LIST_HEAD(timeout_list);
 
 struct ptlrpc_request *
 ptlrpc_prep_ping(struct obd_import *imp)

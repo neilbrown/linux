@@ -470,7 +470,7 @@ int mdc_rename(struct obd_export *exp, struct md_op_data *op_data,
 
 int mdc_file_resync(struct obd_export *exp, struct md_op_data *op_data)
 {
-	struct list_head cancels = LIST_HEAD_INIT(cancels);
+	LIST_HEAD(cancels);
 	struct ptlrpc_request *req;
 	struct ldlm_lock *lock;
 	struct mdt_rec_resync *rec;

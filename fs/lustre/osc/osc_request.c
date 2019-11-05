@@ -3383,7 +3383,7 @@ static const struct obd_ops osc_obd_ops = {
 	.quotactl	= osc_quotactl,
 };
 
-struct list_head osc_shrink_list = LIST_HEAD_INIT(osc_shrink_list);
+LIST_HEAD(osc_shrink_list);
 DEFINE_SPINLOCK(osc_shrink_lock);
 
 static struct shrinker osc_cache_shrinker = {
