@@ -1084,7 +1084,7 @@ static int check_owner(int type, int id)
 	return 0;
 }
 
-static int quotactl_ioctl(struct ll_sb_info *sbi, struct if_quotactl *qctl)
+int quotactl_ioctl(struct ll_sb_info *sbi, struct if_quotactl *qctl)
 {
 	int cmd = qctl->qc_cmd;
 	int type = qctl->qc_type;
