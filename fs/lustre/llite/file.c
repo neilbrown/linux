@@ -798,6 +798,7 @@ restart:
 	} else {
 		LASSERT(*och_usecount == 0);
 		if (!it->it_disposition) {
+			struct dentry *dentry = file_dentry(file);
 			struct ll_dentry_data *ldd;
 
 			/* We cannot just request lock handle now, new ELC code
@@ -822,10 +823,13 @@ restart:
 			 * lookup path only, since ll_iget_for_nfs always calls
 			 * ll_d_init().
 			 */
-			ldd = ll_d2d(file->f_path.dentry);
+			ldd = ll_d2d(dentry);
 			if (ldd && ldd->lld_nfs_dentry) {
 				ldd->lld_nfs_dentry = 0;
-				it->it_flags |= MDS_OPEN_LOCK;
+				if (!filename_is_volatile(dentry->d_name.name,
+							  dentry->d_name.len,
+							  NULL))
+					it->it_flags |= MDS_OPEN_LOCK;
 			}
 
 			/*
@@ -833,8 +837,7 @@ restart:
 			 * to get file with different fid.
 			 */
 			it->it_flags |= MDS_OPEN_BY_FID;
-			rc = ll_intent_file_open(file->f_path.dentry,
-						 NULL, 0, it);
+			rc = ll_intent_file_open(dentry, NULL, 0, it);
 			if (rc)
 				goto out_openerr;
 
