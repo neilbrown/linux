@@ -2641,7 +2641,9 @@ static int kiblnd_base_startup(struct net *ns)
 
 	LASSERT(kiblnd_data.kib_init == IBLND_INIT_NOTHING);
 
-	try_module_get(THIS_MODULE);
+	if (!try_module_get(THIS_MODULE))
+		goto failed;
+
 	/* zero pointers, flags etc */
 	memset(&kiblnd_data, 0, sizeof(kiblnd_data));
 
