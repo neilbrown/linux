@@ -1747,20 +1747,20 @@ void lustre_assert_wire_constants(void)
 		 (long long)(int)offsetof(struct obd_statfs, os_spare9));
 	LASSERTF((int)sizeof(((struct obd_statfs *)0)->os_spare9) == 4, "found %lld\n",
 		 (long long)(int)sizeof(((struct obd_statfs *)0)->os_spare9));
-	LASSERTF(OS_STATE_DEGRADED == 0x1, "found %lld\n",
-		 (long long)OS_STATE_DEGRADED);
-	LASSERTF(OS_STATE_READONLY == 0x2, "found %lld\n",
-		 (long long)OS_STATE_READONLY);
-	LASSERTF(OS_STATE_NOPRECREATE == 0x4, "found %lld\n",
-		 (long long)OS_STATE_NOPRECREATE);
-	LASSERTF(OS_STATE_ENOSPC == 0x20, "found %lld\n",
-		 (long long)OS_STATE_ENOSPC);
-	LASSERTF(OS_STATE_ENOINO == 0x40, "found %lld\n",
-		 (long long)OS_STATE_ENOINO);
-	LASSERTF(OS_STATE_SUM == 0x100, "found %lld\n",
-		 (long long)OS_STATE_SUM);
-	LASSERTF(OS_STATE_NONROT == 0x200, "found %lld\n",
-		 (long long)OS_STATE_NONROT);
+	LASSERTF(OS_STATE_DEGRADED == 0x00000001UL, "found 0x%.8xUL\n",
+		(unsigned int)OS_STATE_DEGRADED);
+	LASSERTF(OS_STATE_READONLY == 0x00000002UL, "found 0x%.8xUL\n",
+		(unsigned int)OS_STATE_READONLY);
+	LASSERTF(OS_STATE_NOPRECREATE == 0x00000004UL, "found 0x%.8xUL\n",
+		(unsigned int)OS_STATE_NOPRECREATE);
+	LASSERTF(OS_STATE_ENOSPC == 0x00000020UL, "found 0x%.8xUL\n",
+		(unsigned int)OS_STATE_ENOSPC);
+	LASSERTF(OS_STATE_ENOINO == 0x00000040UL, "found 0x%.8xUL\n",
+		(unsigned int)OS_STATE_ENOINO);
+	LASSERTF(OS_STATE_SUM == 0x00000100UL, "found 0x%.8xUL\n",
+		(unsigned int)OS_STATE_SUM);
+	LASSERTF(OS_STATE_NONROT == 0x00000200UL, "found 0x%.8xUL\n",
+		(unsigned int)OS_STATE_NONROT);
 
 	/* Checks for struct obd_ioobj */
 	LASSERTF((int)sizeof(struct obd_ioobj) == 24, "found %lld\n",
@@ -2179,20 +2179,20 @@ void lustre_assert_wire_constants(void)
 		 LUSTRE_DIRECTIO_FL);
 	LASSERTF(LUSTRE_INLINE_DATA_FL == 0x10000000, "found 0x%.8x\n",
 		 LUSTRE_INLINE_DATA_FL);
-	LASSERTF(MDS_INODELOCK_LOOKUP == 0x000001, "found 0x%.8x\n",
-		 MDS_INODELOCK_LOOKUP);
-	LASSERTF(MDS_INODELOCK_UPDATE == 0x000002, "found 0x%.8x\n",
-		 MDS_INODELOCK_UPDATE);
-	LASSERTF(MDS_INODELOCK_OPEN == 0x000004, "found 0x%.8x\n",
-		 MDS_INODELOCK_OPEN);
-	LASSERTF(MDS_INODELOCK_LAYOUT == 0x000008, "found 0x%.8x\n",
-		 MDS_INODELOCK_LAYOUT);
-	LASSERTF(MDS_INODELOCK_PERM == 0x000010, "found 0x%.8x\n",
-		MDS_INODELOCK_PERM);
-	LASSERTF(MDS_INODELOCK_XATTR == 0x000020, "found 0x%.8x\n",
-		MDS_INODELOCK_XATTR);
-	LASSERTF(MDS_INODELOCK_DOM == 0x000040, "found 0x%.8x\n",
-		MDS_INODELOCK_DOM);
+	LASSERTF(MDS_INODELOCK_LOOKUP == 0x00000001UL, "found 0x%.8xUL\n",
+		 (unsigned int)MDS_INODELOCK_LOOKUP);
+	LASSERTF(MDS_INODELOCK_UPDATE == 0x00000002UL, "found 0x%.8xUL\n",
+		 (unsigned int)MDS_INODELOCK_UPDATE);
+	LASSERTF(MDS_INODELOCK_OPEN == 0x00000004UL, "found 0x%.8xUL\n",
+		 (unsigned int)MDS_INODELOCK_OPEN);
+	LASSERTF(MDS_INODELOCK_LAYOUT == 0x00000008UL, "found 0x%.8xUL\n",
+		 (unsigned int)MDS_INODELOCK_LAYOUT);
+	LASSERTF(MDS_INODELOCK_PERM == 0x00000010UL, "found 0x%.8xUL\n",
+		(unsigned int)MDS_INODELOCK_PERM);
+	LASSERTF(MDS_INODELOCK_XATTR == 0x00000020UL, "found 0x%.8xUL\n",
+		(unsigned int)MDS_INODELOCK_XATTR);
+	LASSERTF(MDS_INODELOCK_DOM == 0x00000040UL, "found 0x%.8xUL\n",
+		(unsigned int)MDS_INODELOCK_DOM);
 
 	/* Checks for struct mdt_ioepoch */
 	LASSERTF((int)sizeof(struct mdt_ioepoch) == 24, "found %lld\n",
@@ -4177,7 +4177,7 @@ void lustre_assert_wire_constants(void)
 	BUILD_BUG_ON(FIEMAP_EXTENT_NO_DIRECT != 0x40000000);
 	BUILD_BUG_ON(FIEMAP_EXTENT_NET != 0x80000000);
 
-	/* Checks for type posix_acl_xattr_entry */
+	/* Checks for type struct posix_acl_xattr_entry */
 	LASSERTF((int)sizeof(struct posix_acl_xattr_entry) == 8, "found %lld\n",
 		 (long long)(int)sizeof(struct posix_acl_xattr_entry));
 	LASSERTF((int)offsetof(struct posix_acl_xattr_entry, e_tag) == 0, "found %lld\n",
@@ -4192,8 +4192,7 @@ void lustre_assert_wire_constants(void)
 		 (long long)(int)offsetof(struct posix_acl_xattr_entry, e_id));
 	LASSERTF((int)sizeof(((struct posix_acl_xattr_entry *)0)->e_id) == 4, "found %lld\n",
 		 (long long)(int)sizeof(((struct posix_acl_xattr_entry *)0)->e_id));
-
-	/* Checks for type posix_acl_xattr_header */
+	/* Checks for type struct posix_acl_xattr_header */
 	LASSERTF((int)sizeof(struct posix_acl_xattr_header) == 4, "found %lld\n",
 		 (long long)(int)sizeof(struct posix_acl_xattr_header));
 	LASSERTF((int)offsetof(struct posix_acl_xattr_header, a_version) == 0, "found %lld\n",
