@@ -2852,7 +2852,7 @@ static int lmv_get_info(const struct lu_env *env, struct obd_export *exp,
 			exp->exp_connect_data = *(struct obd_connect_data *)val;
 		return rc;
 	} else if (KEY_IS(KEY_TGT_COUNT)) {
-		*((int *)val) = lmv->lmv_mdt_descs.ltd_tgts_size;
+		*((int *)val) = lmv->lmv_mdt_descs.ltd_lmv_desc.ld_tgt_count;
 		return 0;
 	}
 
