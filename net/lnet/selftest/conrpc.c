@@ -1327,7 +1327,7 @@ lstcon_rpc_cleanup_wait(void)
 {
 	struct lstcon_rpc_trans *trans;
 	struct lstcon_rpc *crpc;
-	struct list_head zlist;
+	LIST_HEAD(zlist);
 
 	/* Called with hold of global mutex */
 
@@ -1357,8 +1357,7 @@ lstcon_rpc_cleanup_wait(void)
 		       "Network is not accessible or target is down, waiting for %d console RPCs to being recycled\n",
 		       atomic_read(&console_session.ses_rpc_counter));
 
-	list_add(&zlist, &console_session.ses_rpc_freelist);
-	list_del_init(&console_session.ses_rpc_freelist);
+	list_splice_init(&console_session.ses_rpc_freelist, &zlist);
 
 	spin_unlock(&console_session.ses_rpc_lock);
 
