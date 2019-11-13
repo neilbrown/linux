@@ -1397,10 +1397,7 @@ int ksocknal_scheduler(void *arg)
 		if (!list_empty(&sched->kss_tx_conns)) {
 			LIST_HEAD(zlist);
 
-			if (!list_empty(&sched->kss_zombie_noop_txs)) {
-				list_add(&zlist, &sched->kss_zombie_noop_txs);
-				list_del_init(&sched->kss_zombie_noop_txs);
-			}
+			list_splice_init(&sched->kss_zombie_noop_txs, &zlist);
 
 			conn = list_first_entry(&sched->kss_tx_conns,
 						struct ksock_conn,
