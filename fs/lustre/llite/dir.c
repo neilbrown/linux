@@ -1229,7 +1229,7 @@ int ll_rmfid(struct file *file, void __user *arg)
 	lfa = kzalloc(size, GFP_NOFS);
 	if (!lfa)
 		return -ENOMEM;
-	rcs = kcalloc(nr, sizeof(int), GFP_NOFS);
+	rcs = kcalloc(nr, sizeof(*rcs), GFP_NOFS);
 	if (!rcs) {
 		rc = -ENOMEM;
 		goto free_lfa;

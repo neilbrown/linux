@@ -2883,7 +2883,7 @@ static int lmv_rmfid(struct obd_export *exp, struct fid_array *fa,
 		rc = -ENOMEM;
 		goto out;
 	}
-	rcs = kcalloc(tgt_count, sizeof(int *), GFP_NOFS);
+	rcs = kcalloc(tgt_count, sizeof(*rcs), GFP_NOFS);
 	if (!rcs) {
 		rc = -ENOMEM;
 		goto out_fas;

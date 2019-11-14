@@ -1300,7 +1300,7 @@ static int mdc_read_page_remote(void *data, struct page *page0)
 	fid = &op_data->op_fid1;
 	LASSERT(inode);
 
-	page_pool = kcalloc(max_pages, sizeof(page), GFP_NOFS);
+	page_pool = kcalloc(max_pages, sizeof(*page_pool), GFP_NOFS);
 	if (page_pool) {
 		page_pool[0] = page0;
 	} else {
