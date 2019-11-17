@@ -93,7 +93,7 @@ lnet_peer_tables_destroy(void)
 		if (!hash) /* not initialized */
 			break;
 
-		LASSERT(list_empty(&ptable->pt_zombie_list));
+		LASSERT(ptable->pt_zombies == 0);
 
 		ptable->pt_hash = NULL;
 		for (j = 0; j < LNET_PEER_HASH_SIZE; j++)
@@ -371,7 +371,6 @@ lnet_peer_ni_del_locked(struct lnet_peer_ni *lpni, bool force)
 	 * has its own lock.
 	 */
 	spin_lock(&ptable->pt_zombie_lock);
-	list_add(&lpni->lpni_hashlist, &ptable->pt_zombie_list);
 	ptable->pt_zombies++;
 	spin_unlock(&ptable->pt_zombie_lock);
 
@@ -425,7 +424,6 @@ lnet_peer_tables_create(void)
 		}
 
 		spin_lock_init(&ptable->pt_zombie_lock);
-		INIT_LIST_HEAD(&ptable->pt_zombie_list);
 
 		INIT_LIST_HEAD(&ptable->pt_peer_list);
 
@@ -1713,7 +1711,6 @@ lnet_destroy_peer_ni_locked(struct kref *ref)
 	/* remove the peer ni from the zombie list */
 	ptable = the_lnet.ln_peer_tables[lpni->lpni_cpt];
 	spin_lock(&ptable->pt_zombie_lock);
-	list_del_init(&lpni->lpni_hashlist);
 	ptable->pt_zombies--;
 	spin_unlock(&ptable->pt_zombie_lock);
 
