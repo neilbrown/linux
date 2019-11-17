@@ -843,9 +843,7 @@ int lnet_get_rtr_pool_cfg(int cpt, struct lnet_ioctl_pool_cfg *pool_cfg)
 		break;
 	}
 
-	lnet_net_lock(LNET_LOCK_EX);
 	pool_cfg->pl_routing = the_lnet.ln_routing;
-	lnet_net_unlock(LNET_LOCK_EX);
 
 	return rc;
 }
@@ -1435,9 +1433,7 @@ lnet_rtrpools_alloc(int im_a_router)
 			goto failed;
 	}
 
-	lnet_net_lock(LNET_LOCK_EX);
 	the_lnet.ln_routing = 1;
-	lnet_net_unlock(LNET_LOCK_EX);
 	complete(&the_lnet.ln_mt_wait_complete);
 	return 0;
 
@@ -1528,12 +1524,10 @@ lnet_rtrpools_enable(void)
 	if (rc)
 		return rc;
 
-	lnet_net_lock(LNET_LOCK_EX);
 	the_lnet.ln_routing = 1;
 
 	the_lnet.ln_ping_target->pb_info.pi_features &=
 		~LNET_PING_FEAT_RTE_DISABLED;
-	lnet_net_unlock(LNET_LOCK_EX);
 
 	if (lnet_peer_discovery_disabled)
 		CWARN("Consider turning discovery on to enable full Multi-Rail routing functionality\n");
@@ -1547,7 +1541,6 @@ lnet_rtrpools_disable(void)
 	if (!the_lnet.ln_routing)
 		return;
 
-	lnet_net_lock(LNET_LOCK_EX);
 	the_lnet.ln_routing = 0;
 	the_lnet.ln_ping_target->pb_info.pi_features |=
 		LNET_PING_FEAT_RTE_DISABLED;
@@ -1555,7 +1548,6 @@ lnet_rtrpools_disable(void)
 	tiny_router_buffers = 0;
 	small_router_buffers = 0;
 	large_router_buffers = 0;
-	lnet_net_unlock(LNET_LOCK_EX);
 	lnet_rtrpools_free(1);
 }
 

@@ -300,13 +300,11 @@ discovery_set(const char *val, const struct kernel_param *kp)
 	}
 
 	/* tell peers that discovery setting has changed */
-	lnet_net_lock(LNET_LOCK_EX);
 	pbuf = the_lnet.ln_ping_target;
 	if (value)
 		pbuf->pb_info.pi_features &= ~LNET_PING_FEAT_DISCOVERY;
 	else
 		pbuf->pb_info.pi_features |= LNET_PING_FEAT_DISCOVERY;
-	lnet_net_unlock(LNET_LOCK_EX);
 
 	lnet_push_update_to_peers(1);
 
