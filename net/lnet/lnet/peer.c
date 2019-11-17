@@ -138,7 +138,7 @@ lnet_peer_ni_alloc(lnet_nid_t nid)
 	lpni->lpni_cpt = cpt;
 	atomic_set(&lpni->lpni_healthv, LNET_MAX_HEALTH_VALUE);
 
-	net = lnet_get_net_locked(LNET_NIDNET(nid));
+	net = lnet_get_net_rcu(LNET_NIDNET(nid));
 	lpni->lpni_net = net;
 	if (net) {
 		lpni->lpni_txcredits = net->net_tunables.lct_peer_tx_credits;
@@ -2936,7 +2936,7 @@ static lnet_nid_t lnet_peer_select_nid(struct lnet_peer *lp)
 	/* Look for a direct-connected NID for this peer. */
 	lpni = NULL;
 	while ((lpni = lnet_get_next_peer_ni_locked(lp, NULL, lpni)) != NULL) {
-		if (!lnet_get_net_locked(lpni->lpni_peer_net->lpn_net_id))
+		if (!lnet_get_net_rcu(lpni->lpni_peer_net->lpn_net_id))
 			continue;
 		break;
 	}

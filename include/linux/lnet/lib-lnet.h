@@ -381,7 +381,7 @@ int lnet_cpt_of_nid_locked(lnet_nid_t nid, struct lnet_ni *ni);
 int lnet_cpt_of_nid(lnet_nid_t nid, struct lnet_ni *ni);
 struct lnet_ni *lnet_nid2ni_addref(lnet_nid_t nid);
 struct lnet_ni *lnet_net2ni_addref(u32 net);
-struct lnet_net *lnet_get_net_locked(u32 net_id);
+struct lnet_net *lnet_get_net_rcu(u32 net_id);
 
 extern unsigned int lnet_transaction_timeout;
 extern unsigned int lnet_retry_count;
@@ -433,7 +433,6 @@ int lnet_dyn_del_net(u32 net);
 int lnet_dyn_add_ni(struct lnet_ioctl_config_ni *conf);
 int lnet_dyn_del_ni(struct lnet_ioctl_config_ni *conf);
 int lnet_clear_lazy_portal(struct lnet_ni *ni, int portal, char *reason);
-struct lnet_net *lnet_get_net_locked(u32 net_id);
 
 int lnet_islocalnid(lnet_nid_t nid);
 int lnet_islocalnet(u32 net);

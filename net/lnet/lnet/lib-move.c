@@ -2088,6 +2088,7 @@ lnet_handle_any_mr_dsta(struct lnet_send_data *sd)
 	 * MR peer then we can just run the selection algorithm on our
 	 * local NIs and pick the best one.
 	 */
+	rcu_read_lock();
 	if (sd->sd_send_case & SND_RESP) {
 		sd->sd_best_ni =
 		  lnet_find_best_ni_on_spec_net(NULL, sd->sd_peer,

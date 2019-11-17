@@ -1236,19 +1236,24 @@ lnet_net2ni_addref(u32 net_id)
 EXPORT_SYMBOL(lnet_net2ni_addref);
 
 struct lnet_net *
-lnet_get_net_locked(u32 net_id)
+lnet_get_net_rcu(u32 net_id)
 {
+	/* Note: returned value can only be dereferenced if
+	 * caller holds RCU read lock or ln_api_mutex.
+	 */
 	struct lnet_net *net;
 
-	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
+	rcu_read_lock();
+	list_for_each_entry_rcu(net, &the_lnet.ln_nets, net_list) {
 		if (net->net_id == net_id) {
+			rcu_read_unlock();
 			if (smp_load_acquire(&the_lnet.ln_state) !=
 			    LNET_STATE_RUNNING)
 				return NULL;
 			return net;
 		}
 	}
-
+	rcu_read_unlock();
 	return NULL;
 }
 
@@ -1295,11 +1300,14 @@ lnet_cpt_of_nid_locked(lnet_nid_t nid, struct lnet_ni *ni)
 			return lnet_nid_cpt_hash(nid, LNET_CPT_NUMBER);
 	}
 
+	rcu_read_lock();
 	/* no NI provided so look at the net */
-	net = lnet_get_net_locked(LNET_NIDNET(nid));
+	net = lnet_get_net_rcu(LNET_NIDNET(nid));
 
 	if (net && net->net_cpts) {
-		return net->net_cpts[lnet_nid_cpt_hash(nid, net->net_ncpts)];
+		int ret = net->net_cpts[lnet_nid_cpt_hash(nid, net->net_ncpts)];
+		rcu_read_unlock();
+		return ret;
 	}
 
 	return lnet_nid_cpt_hash(nid, LNET_CPT_NUMBER);
@@ -1335,16 +1343,7 @@ lnet_islocalnet_locked(u32 net_id)
 int
 lnet_islocalnet(u32 net_id)
 {
-	int cpt;
-	bool local;
-
-	cpt = lnet_net_lock_current();
-
-	local = lnet_islocalnet_locked(net_id);
-
-	lnet_net_unlock(cpt);
-
-	return local;
+	return !!lnet_get_net_rcu(net_id);
 }
 
 struct lnet_ni *
@@ -3006,9 +3005,7 @@ static int lnet_add_net_common(struct lnet_net *net,
 	if (rc < 0)
 		goto failed;
 
-	lnet_net_lock(LNET_LOCK_EX);
-	net = lnet_get_net_locked(net_id);
-	lnet_net_unlock(LNET_LOCK_EX);
+	net = lnet_get_net_rcu(net_id);
 
 	LASSERT(net);
 
@@ -3149,7 +3146,7 @@ int lnet_dyn_del_ni(struct lnet_ioctl_config_ni *conf)
 
 	lnet_net_lock(0);
 
-	net = lnet_get_net_locked(net_id);
+	net = lnet_get_net_rcu(net_id);
 	if (!net) {
 		CERROR("net %s not found\n",
 		       libcfs_net2str(net_id));
@@ -3298,7 +3295,7 @@ lnet_dyn_del_net(u32 net_id)
 
 	lnet_net_lock(0);
 
-	net = lnet_get_net_locked(net_id);
+	net = lnet_get_net_rcu(net_id);
 	if (!net) {
 		lnet_net_unlock(0);
 		rc = -EINVAL;
