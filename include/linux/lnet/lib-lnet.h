@@ -671,7 +671,13 @@ void lnet_ping_buffer_free(struct lnet_ping_buffer *pbuf);
 
 static inline void lnet_ping_buffer_addref(struct lnet_ping_buffer *pbuf)
 {
+	LASSERT(atomic_read(&pbuf->pb_refcnt) > 0);
 	atomic_inc(&pbuf->pb_refcnt);
+}
+
+static inline int lnet_ping_buffer_addref_not_zero(struct lnet_ping_buffer *pbuf)
+{
+	return atomic_inc_not_zero(&pbuf->pb_refcnt);
 }
 
 static inline void lnet_ping_buffer_decref(struct lnet_ping_buffer *pbuf)

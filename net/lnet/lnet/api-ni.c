@@ -1429,6 +1429,7 @@ lnet_ping_buffer_alloc(int nnis, gfp_t gfp)
 	pbuf = kmalloc(LNET_PING_BUFFER_SIZE(nnis), gfp);
 	if (pbuf) {
 		pbuf->pb_nnis = nnis;
+		pbuf->pb_rcu_free = 0;
 		atomic_set(&pbuf->pb_refcnt, 1);
 	}
 
@@ -1439,7 +1440,10 @@ void
 lnet_ping_buffer_free(struct lnet_ping_buffer *pbuf)
 {
 	LASSERT(atomic_read(&pbuf->pb_refcnt) == 0);
-	kfree(pbuf);
+	if (pbuf->pb_rcu_free)
+		kfree_rcu(pbuf, pb_rcu);
+	else
+		kfree(pbuf);
 }
 
 static struct lnet_ping_buffer *
@@ -1577,7 +1581,7 @@ lnet_ping_target_destroy(void)
 	}
 
 	lnet_ping_buffer_decref(the_lnet.ln_ping_target);
-	the_lnet.ln_ping_target = NULL;
+	RCU_INIT_POINTER(the_lnet.ln_ping_target, NULL);
 
 	lnet_net_unlock(LNET_LOCK_EX);
 }
@@ -1733,7 +1737,8 @@ lnet_ping_target_update(struct lnet_ping_buffer *pbuf,
 		old_ping_md = the_lnet.ln_ping_target_md;
 	}
 	the_lnet.ln_ping_target_md = ping_mdh;
-	the_lnet.ln_ping_target = pbuf;
+	pbuf->pb_rcu_free = 1;
+	rcu_assign_pointer(the_lnet.ln_ping_target, pbuf);
 
 	lnet_net_unlock(LNET_LOCK_EX);
 

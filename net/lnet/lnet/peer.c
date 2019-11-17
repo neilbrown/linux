@@ -3078,10 +3078,11 @@ __must_hold(&lp->lp_lock)
 	lp->lp_state &= ~LNET_PEER_FORCE_PUSH;
 	spin_unlock(&lp->lp_lock);
 
-	cpt = lnet_net_lock_current();
-	pbuf = the_lnet.ln_ping_target;
-	lnet_ping_buffer_addref(pbuf);
-	lnet_net_unlock(cpt);
+	rcu_read_lock();
+	do {
+		pbuf = rcu_dereference(the_lnet.ln_ping_target);
+	} while (!lnet_ping_buffer_addref_not_zero(pbuf));
+	rcu_read_unlock();
 
 	/* Push source MD */
 	md.start = &pbuf->pb_info;

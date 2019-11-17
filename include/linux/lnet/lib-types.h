@@ -481,9 +481,13 @@ struct lnet_ni {
  * area that may be overwritten by network data.
  */
 struct lnet_ping_buffer {
-	int			pb_nnis;
+	int			pb_nnis:31;
+	unsigned int		pb_rcu_free:1;
 	atomic_t		pb_refcnt;
-	struct lnet_ping_info	pb_info;
+	union {
+		struct lnet_ping_info	pb_info;
+		struct rcu_head		pb_rcu;
+	};
 };
 
 #define LNET_PING_BUFFER_SIZE(NNIDS) \
@@ -1060,7 +1064,7 @@ struct lnet {
 	 */
 	struct lnet_handle_md		ln_ping_target_md;
 	lnet_eq_handler_t		ln_ping_target_eq;
-	struct lnet_ping_buffer	       *ln_ping_target;
+	struct lnet_ping_buffer __rcu  *ln_ping_target;
 	atomic_t			ln_ping_target_seqno;
 
 	/*
