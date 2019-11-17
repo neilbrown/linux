@@ -220,53 +220,20 @@ static void obd_connect_data_seqprint(struct seq_file *m,
 int lprocfs_read_frac_helper(char *buffer, unsigned long count, long val,
 			     int mult)
 {
-	long decimal_val, frac_val;
 	int prtn;
 
 	if (count < 10)
 		return -EINVAL;
 
-	decimal_val = val / mult;
-	prtn = snprintf(buffer, count, "%ld", decimal_val);
-	frac_val = val % mult;
+	prtn = snprintf(buffer, count, "%ld.%02lu",
+			val / mult,
+			(val % mult) / (mult / 100));
 
-	if (prtn < (count - 4) && frac_val > 0) {
-		long temp_frac;
-		int i, temp_mult = 1, frac_bits = 0;
-
-		temp_frac = frac_val * 10;
-		buffer[prtn++] = '.';
-		while (frac_bits < 2 && (temp_frac / mult) < 1) {
-			/* only reserved 2 bits fraction */
-			buffer[prtn++] = '0';
-			temp_frac *= 10;
-			frac_bits++;
-		}
-		/*
-		 * Need to think these cases :
-		 *      1. #echo x.00 > /sys/xxx       output result : x
-		 *      2. #echo x.0x > /sys/xxx       output result : x.0x
-		 *      3. #echo x.x0 > /sys/xxx       output result : x.x
-		 *      4. #echo x.xx > /sys/xxx       output result : x.xx
-		 *      Only reserved 2 bits fraction.
-		 */
-		for (i = 0; i < (5 - prtn); i++)
-			temp_mult *= 10;
-
-		frac_bits = min((int)count - prtn, 3 - frac_bits);
-		prtn += snprintf(buffer + prtn, frac_bits, "%ld",
-				 frac_val * temp_mult / mult);
-
+	/* Strip trailing zeroes, and trailing '.' */
+	while (prtn && buffer[prtn-1] == '0')
 		prtn--;
-		while (buffer[prtn] < '1' || buffer[prtn] > '9') {
-			prtn--;
-			if (buffer[prtn] == '.') {
-				prtn--;
-				break;
-			}
-		}
-		prtn++;
-	}
+	if (prtn && buffer[prtn-1] == '.')
+		prtn--;
 	buffer[prtn++] = '\n';
 	return prtn;
 }
