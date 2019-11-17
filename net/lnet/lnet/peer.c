@@ -93,7 +93,7 @@ lnet_peer_tables_destroy(void)
 		if (!hash) /* not initialized */
 			break;
 
-		LASSERT(ptable->pt_zombies == 0);
+		LASSERT(atomic_read(&ptable->pt_zombies) == 0);
 
 		ptable->pt_hash = NULL;
 		for (j = 0; j < LNET_PEER_HASH_SIZE; j++)
@@ -360,19 +360,7 @@ lnet_peer_ni_del_locked(struct lnet_peer_ni *lpni, bool force)
 	LASSERT(atomic_read(&ptable->pt_number) > 0);
 	atomic_dec(&ptable->pt_number);
 
-	/*
-	 * The peer_ni can no longer be found with a lookup. But there
-	 * can be current users, so keep track of it on the zombie
-	 * list until the reference count has gone to zero.
-	 *
-	 * The last reference may be lost in a place where the
-	 * lnet_net_lock locks only a single cpt, and that cpt may not
-	 * be lpni->lpni_cpt. So the zombie list of lnet_peer_table
-	 * has its own lock.
-	 */
-	spin_lock(&ptable->pt_zombie_lock);
-	ptable->pt_zombies++;
-	spin_unlock(&ptable->pt_zombie_lock);
+	atomic_inc(&ptable->pt_zombies);
 
 	/* no need to keep this peer_ni on the hierarchy anymore */
 	lnet_peer_detach_peer_ni_locked(lpni);
@@ -422,8 +410,6 @@ lnet_peer_tables_create(void)
 			lnet_peer_tables_destroy();
 			return -ENOMEM;
 		}
-
-		spin_lock_init(&ptable->pt_zombie_lock);
 
 		INIT_LIST_HEAD(&ptable->pt_peer_list);
 
@@ -568,19 +554,15 @@ lnet_peer_ni_finalize_wait(struct lnet_peer_table *ptable)
 {
 	int i = 3;
 
-	spin_lock(&ptable->pt_zombie_lock);
-	while (ptable->pt_zombies) {
-		spin_unlock(&ptable->pt_zombie_lock);
+	while (atomic_read(&ptable->pt_zombies)) {
 
 		if (is_power_of_2(i)) {
 			CDEBUG(D_WARNING,
 			       "Waiting for %d zombies on peer table\n",
-			       ptable->pt_zombies);
+			       atomic_read(&ptable->pt_zombies));
 		}
 		schedule_timeout_uninterruptible(HZ >> 1);
-		spin_lock(&ptable->pt_zombie_lock);
 	}
-	spin_unlock(&ptable->pt_zombie_lock);
 }
 
 static void
@@ -1710,9 +1692,7 @@ lnet_destroy_peer_ni_locked(struct kref *ref)
 
 	/* remove the peer ni from the zombie list */
 	ptable = the_lnet.ln_peer_tables[lpni->lpni_cpt];
-	spin_lock(&ptable->pt_zombie_lock);
-	ptable->pt_zombies--;
-	spin_unlock(&ptable->pt_zombie_lock);
+	atomic_dec(&ptable->pt_zombies);
 
 	if (lpni->lpni_pref_nnids > 1)
 		kfree(lpni->lpni_pref.nids);

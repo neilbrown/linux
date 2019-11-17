@@ -754,10 +754,6 @@ struct lnet_peer_net {
  *    pt_hash[...]
  *    pt_peer_list
  *    pt_peers
- * protected by pt_zombie_lock:
- *    pt_zombies
- *
- * pt_zombie lock nests inside lnet_net_lock
  */
 struct lnet_peer_table {
 	/* /proc validity stamp */
@@ -769,9 +765,7 @@ struct lnet_peer_table {
 	/* # peers */
 	int			 pt_peers;
 	/* # zombies to go to deathrow (and not there yet) */
-	int			 pt_zombies;
-	/* protect list and count */
-	spinlock_t		 pt_zombie_lock;
+	atomic_t		 pt_zombies;
 	/* NID->peer hash */
 	struct list_head	*pt_hash;
 };
