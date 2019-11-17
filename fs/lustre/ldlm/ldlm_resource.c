@@ -133,12 +133,11 @@ static ssize_t resource_count_show(struct kobject *kobj, struct attribute *attr,
 	struct ldlm_namespace *ns = container_of(kobj, struct ldlm_namespace,
 						 ns_kobj);
 	u64 res = 0;
-	struct cfs_hash_bd bd;
 	int i;
 
 	/* result is not strictly consistent */
-	cfs_hash_for_each_bucket(ns->ns_rs_hash, &bd, i)
-		res += cfs_hash_bd_count_get(&bd);
+	for (i = 0; i < (1 << ns->ns_bucket_bits); i++)
+		res += atomic_read(&ns->ns_rs_buckets[i].nsb_count);
 	return sprintf(buf, "%lld\n", res);
 }
 LUSTRE_RO_ATTR(resource_count);
@@ -644,6 +643,7 @@ struct ldlm_namespace *ldlm_namespace_new(struct obd_device *obd, char *name,
 		struct ldlm_ns_bucket *nsb = &ns->ns_rs_buckets[idx];
 		at_init(&nsb->nsb_at_estimate, ldlm_enqueue_min, 0);
 		nsb->nsb_namespace = ns;
+		atomic_set(&nsb->nsb_count, 0);
 	}
 
 	ns->ns_obd = obd;
@@ -1139,7 +1139,7 @@ lvbo_init:
 	}
 	/* We won! Let's add the resource. */
 	cfs_hash_bd_add_locked(ns->ns_rs_hash, &bd, &res->lr_hash);
-	if (cfs_hash_bd_count_get(&bd) == 1)
+	if (atomic_inc_return(&res->lr_ns_bucket->nsb_count) == 1)
 		ns_refcount = ldlm_namespace_get_return(ns);
 
 	cfs_hash_bd_unlock(ns->ns_rs_hash, &bd, 1);
@@ -1197,7 +1197,7 @@ static void __ldlm_resource_putref_final(struct cfs_hash_bd *bd,
 	cfs_hash_bd_unlock(ns->ns_rs_hash, bd, 1);
 	if (ns->ns_lvbo && ns->ns_lvbo->lvbo_free)
 		ns->ns_lvbo->lvbo_free(res);
-	if (cfs_hash_bd_count_get(bd) == 0)
+	if (atomic_dec_and_test(&nsb->nsb_count))
 		ldlm_namespace_put(ns);
 	if (res->lr_itree)
 		kmem_cache_free(ldlm_interval_tree_slab, res->lr_itree);
