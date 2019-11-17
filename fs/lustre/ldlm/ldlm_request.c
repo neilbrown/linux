@@ -2019,11 +2019,8 @@ struct ldlm_cli_cancel_arg {
 	void   *lc_opaque;
 };
 
-static int ldlm_cli_hash_cancel_unused(struct cfs_hash *hs,
-				       struct cfs_hash_bd *bd,
-				       struct hlist_node *hnode, void *arg)
+static int ldlm_cli_hash_cancel_unused(struct ldlm_resource *res, void *arg)
 {
-	struct ldlm_resource *res = cfs_hash_object(hs, hnode);
 	struct ldlm_cli_cancel_arg *lc = arg;
 
 	ldlm_cli_cancel_unused_resource(ldlm_res_to_ns(res), &res->lr_name,
@@ -2057,8 +2054,7 @@ int ldlm_cli_cancel_unused(struct ldlm_namespace *ns,
 						       LCK_MINMODE, flags,
 						       opaque);
 	} else {
-		cfs_hash_for_each_nolock(ns->ns_rs_hash,
-					 ldlm_cli_hash_cancel_unused, &arg, 0);
+		ldlm_resource_for_each(ns, ldlm_cli_hash_cancel_unused, &arg);
 		return ELDLM_OK;
 	}
 }
@@ -2107,27 +2103,21 @@ static int ldlm_iter_helper(struct ldlm_lock *lock, void *closure)
 	return helper->iter(lock, helper->closure);
 }
 
-static int ldlm_res_iter_helper(struct cfs_hash *hs, struct cfs_hash_bd *bd,
-				struct hlist_node *hnode, void *arg)
-
+static int ldlm_res_iter_helper(struct ldlm_resource *res, void *arg)
 {
-	struct ldlm_resource *res = cfs_hash_object(hs, hnode);
-
 	return ldlm_resource_foreach(res, ldlm_iter_helper, arg) ==
 	       LDLM_ITER_STOP;
 }
 
 static void ldlm_namespace_foreach(struct ldlm_namespace *ns,
 				   ldlm_iterator_t iter, void *closure)
-
 {
 	struct iter_helper_data helper = {
 		.iter		= iter,
 		.closure	= closure,
 	};
 
-	cfs_hash_for_each_nolock(ns->ns_rs_hash,
-				 ldlm_res_iter_helper, &helper, 0);
+	ldlm_resource_for_each(ns, ldlm_res_iter_helper, &helper);
 }
 
 /*
@@ -2163,11 +2153,14 @@ static int ldlm_chain_lock_for_replay(struct ldlm_lock *lock, void *closure)
 {
 	struct list_head *list = closure;
 
-	/* we use l_pending_chain here, because it's unused on clients. */
-	LASSERTF(list_empty(&lock->l_pending_chain),
-		 "lock %p next %p prev %p\n",
-		 lock, &lock->l_pending_chain.next,
-		 &lock->l_pending_chain.prev);
+	/*
+	 * We use l_pending_chain here, because it's unused on clients.
+	 * As rhashtable_walk_next() can repeat elements when a resize event
+	 * happens, we skip locks that have already been added to the chain
+	 */
+	if (!list_empty(&lock->l_pending_chain))
+		return LDLM_ITER_CONTINUE;
+
 	/*
 	 * b=9573: don't replay locks left after eviction, or
 	 * b=17614: locks being actively cancelled. Get a reference

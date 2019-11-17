@@ -369,7 +369,7 @@ struct ldlm_namespace {
 	char			*ns_name;
 
 	/** Resource hash table for namespace. */
-	struct cfs_hash		*ns_rs_hash;
+	struct rhashtable	ns_rs_hash;
 	struct ldlm_ns_bucket	*ns_rs_buckets;
 	unsigned int		ns_bucket_bits;
 
@@ -835,9 +835,8 @@ struct ldlm_resource {
 
 	/**
 	 * List item for list in namespace hash.
-	 * protected by ns_lock
 	 */
-	struct hlist_node		lr_hash;
+	struct rhash_head		lr_hash;
 
 	/** Reference count for this resource */
 	atomic_t			lr_refcount;
@@ -885,12 +884,17 @@ struct ldlm_resource {
 
 	/** List of references to this resource. For debugging. */
 	struct lu_ref			lr_reference;
+	struct rcu_head		lr_rcu;
 };
 
 static inline int ldlm_is_granted(struct ldlm_lock *lock)
 {
 	return lock->l_req_mode == lock->l_granted_mode;
 }
+
+void ldlm_resource_for_each(struct ldlm_namespace *ns,
+			    int cb(struct ldlm_resource *res, void *data),
+			    void *data);
 
 static inline bool ldlm_has_layout(struct ldlm_lock *lock)
 {
@@ -1283,7 +1287,6 @@ struct ldlm_resource *ldlm_resource_get(struct ldlm_namespace *ns,
 					struct ldlm_resource *parent,
 					const struct ldlm_res_id *,
 					enum ldlm_type type, int create);
-struct ldlm_resource *ldlm_resource_getref(struct ldlm_resource *res);
 void ldlm_resource_putref(struct ldlm_resource *res);
 void ldlm_resource_add_lock(struct ldlm_resource *res,
 			    struct list_head *head,

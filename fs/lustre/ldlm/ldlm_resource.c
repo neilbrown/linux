@@ -64,6 +64,7 @@ static LIST_HEAD(ldlm_cli_inactive_namespace_list);
 static struct dentry *ldlm_debugfs_dir;
 static struct dentry *ldlm_ns_debugfs_dir;
 struct dentry *ldlm_svc_debugfs_dir;
+static void __ldlm_resource_putref_final(struct ldlm_resource *res);
 
 /* during debug dump certain amount of granted locks for one resource to avoid
  * DDOS.
@@ -429,28 +430,6 @@ static int ldlm_namespace_debugfs_register(struct ldlm_namespace *ns)
 	return 0;
 }
 
-struct ldlm_resource *ldlm_resource_getref(struct ldlm_resource *res)
-{
-	LASSERT(res);
-	LASSERT(res != LP_POISON);
-	atomic_inc(&res->lr_refcount);
-	CDEBUG(D_INFO, "getref res: %p count: %d\n", res,
-	       atomic_read(&res->lr_refcount));
-	return res;
-}
-
-static unsigned int ldlm_res_hop_hash(struct cfs_hash *hs,
-				      const void *key, unsigned int mask)
-{
-	const struct ldlm_res_id *id = key;
-	unsigned int val = 0;
-	unsigned int i;
-
-	for (i = 0; i < RES_NAME_SIZE; i++)
-		val += id->name[i];
-	return val & mask;
-}
-
 static unsigned int ldlm_res_hop_fid_hash(const struct ldlm_res_id *id, unsigned int bits)
 {
 	struct lu_fid fid;
@@ -472,84 +451,50 @@ static unsigned int ldlm_res_hop_fid_hash(const struct ldlm_res_id *id, unsigned
 	return hash_32(hash, bits);
 }
 
-static void *ldlm_res_hop_key(struct hlist_node *hnode)
+static int rs_cmp(struct rhashtable_compare_arg *arg, const void *obj)
 {
-	struct ldlm_resource *res;
+	/*
+	 * Don't allow entries with lr_refcount==0 to be found.
+	 * rhashtable_remove doesn't use this function, so they
+	 * can still be deleted.
+	 */
+	const struct ldlm_res_id *name = arg->key;
+	const struct ldlm_resource *res = obj;
 
-	res = hlist_entry(hnode, struct ldlm_resource, lr_hash);
-	return &res->lr_name;
+	if (!ldlm_res_eq(name, &res->lr_name))
+		return -ESRCH;
+	return atomic_read(&res->lr_refcount) > 0 ? 0 : -EBUSY;
 }
 
-static int ldlm_res_hop_keycmp(const void *key, struct hlist_node *hnode)
-{
-	struct ldlm_resource *res;
-
-	res = hlist_entry(hnode, struct ldlm_resource, lr_hash);
-	return ldlm_res_eq((const struct ldlm_res_id *)key,
-			   (const struct ldlm_res_id *)&res->lr_name);
-}
-
-static void *ldlm_res_hop_object(struct hlist_node *hnode)
-{
-	return hlist_entry(hnode, struct ldlm_resource, lr_hash);
-}
-
-static void ldlm_res_hop_get_locked(struct cfs_hash *hs,
-				    struct hlist_node *hnode)
-{
-	struct ldlm_resource *res;
-
-	res = hlist_entry(hnode, struct ldlm_resource, lr_hash);
-	ldlm_resource_getref(res);
-}
-
-static void ldlm_res_hop_put(struct cfs_hash *hs, struct hlist_node *hnode)
-{
-	struct ldlm_resource *res;
-
-	res = hlist_entry(hnode, struct ldlm_resource, lr_hash);
-	ldlm_resource_putref(res);
-}
-
-static struct cfs_hash_ops ldlm_ns_hash_ops = {
-	.hs_hash	= ldlm_res_hop_hash,
-	.hs_key		= ldlm_res_hop_key,
-	.hs_keycmp      = ldlm_res_hop_keycmp,
-	.hs_keycpy      = NULL,
-	.hs_object      = ldlm_res_hop_object,
-	.hs_get		= ldlm_res_hop_get_locked,
-	.hs_put		= ldlm_res_hop_put
+static const struct rhashtable_params ns_rs_hash_params = {
+	.key_len	= sizeof(struct ldlm_res_id),
+	.key_offset	= offsetof(struct ldlm_resource, lr_name),
+	.head_offset	= offsetof(struct ldlm_resource, lr_hash),
+	.obj_cmpfn	= rs_cmp,
+	.automatic_shrinking = true,
+	.percpu_count	= true,
 };
 
 static struct {
-	/** hash bucket bits */
 	unsigned int		nsd_bkt_bits;
-	/** hash bits */
-	unsigned int		nsd_all_bits;
 } ldlm_ns_hash_defs[] = {
 	[LDLM_NS_TYPE_MDC] = {
-		.nsd_bkt_bits   = 11,
-		.nsd_all_bits   = 16,
+		.nsd_bkt_bits   = 5,
 	},
 	[LDLM_NS_TYPE_MDT] = {
-		.nsd_bkt_bits   = 14,
-		.nsd_all_bits   = 21,
+		.nsd_bkt_bits   = 7,
 	},
 	[LDLM_NS_TYPE_OSC] = {
-		.nsd_bkt_bits   = 8,
-		.nsd_all_bits   = 12,
+		.nsd_bkt_bits   = 4,
 	},
 	[LDLM_NS_TYPE_OST] = {
-		.nsd_bkt_bits   = 11,
-		.nsd_all_bits   = 17,
+		.nsd_bkt_bits   = 6,
 	},
 	[LDLM_NS_TYPE_MGC] = {
-		.nsd_bkt_bits   = 3,
-		.nsd_all_bits   = 4,
+		.nsd_bkt_bits   = 1,
 	},
 	[LDLM_NS_TYPE_MGT] = {
-		.nsd_bkt_bits   = 3,
-		.nsd_all_bits   = 4,
+		.nsd_bkt_bits   = 1,
 	},
 };
 
@@ -594,23 +539,11 @@ struct ldlm_namespace *ldlm_namespace_new(struct obd_device *obd, char *name,
 	if (!ns)
 		goto out_ref;
 
-	ns->ns_rs_hash = cfs_hash_create(name,
-					 ldlm_ns_hash_defs[ns_type].nsd_all_bits,
-					 ldlm_ns_hash_defs[ns_type].nsd_all_bits,
-					 ldlm_ns_hash_defs[ns_type].nsd_bkt_bits,
-					 0,
-					 CFS_HASH_MIN_THETA,
-					 CFS_HASH_MAX_THETA,
-					 &ldlm_ns_hash_ops,
-					 CFS_HASH_DEPTH |
-					 CFS_HASH_BIGNAME |
-					 CFS_HASH_SPIN_BKTLOCK |
-					 CFS_HASH_NO_ITEMREF);
-	if (!ns->ns_rs_hash)
-		goto out_ns;
-	ns->ns_bucket_bits = ldlm_ns_hash_defs[ns_type].nsd_all_bits -
-			      ldlm_ns_hash_defs[ns_type].nsd_bkt_bits;
+	rc = rhashtable_init(&ns->ns_rs_hash, &ns_rs_hash_params);
 
+	if (rc)
+		goto out_ns;
+	ns->ns_bucket_bits = ldlm_ns_hash_defs[ns_type].nsd_bkt_bits;
 	ns->ns_rs_buckets = kvmalloc_array(1 << ns->ns_bucket_bits,
 					   sizeof(ns->ns_rs_buckets[0]),
 					   GFP_KERNEL);
@@ -676,7 +609,7 @@ out_sysfs:
 out_hash:
 	kfree(ns->ns_name);
 	kvfree(ns->ns_rs_buckets);
-	cfs_hash_putref(ns->ns_rs_hash);
+	rhashtable_destroy(&ns->ns_rs_hash);
 out_ns:
 	kfree(ns);
 out_ref:
@@ -761,23 +694,18 @@ static void cleanup_resource(struct ldlm_resource *res, struct list_head *q,
 	} while (1);
 }
 
-static int ldlm_resource_clean(struct cfs_hash *hs, struct cfs_hash_bd *bd,
-			       struct hlist_node *hnode, void *arg)
+static int ldlm_resource_clean(struct ldlm_resource *res, void *arg)
 {
-	struct ldlm_resource *res = cfs_hash_object(hs, hnode);
-	u64 flags = *(u64 *)arg;
+	__u64 *flags = arg;
 
-	cleanup_resource(res, &res->lr_granted, flags);
-	cleanup_resource(res, &res->lr_waiting, flags);
+	cleanup_resource(res, &res->lr_granted, *flags);
+	cleanup_resource(res, &res->lr_waiting, *flags);
 
 	return 0;
 }
 
-static int ldlm_resource_complain(struct cfs_hash *hs, struct cfs_hash_bd *bd,
-				  struct hlist_node *hnode, void *arg)
+static int ldlm_resource_complain(struct ldlm_resource *res, void *arg)
 {
-	struct ldlm_resource *res = cfs_hash_object(hs, hnode);
-
 	lock_res(res);
 	CERROR("%s: namespace resource " DLDLMRES
 	       " (%p) refcount nonzero (%d) after lock cleanup; forcing cleanup.\n",
@@ -789,6 +717,41 @@ static int ldlm_resource_complain(struct cfs_hash *hs, struct cfs_hash_bd *bd,
 	unlock_res(res);
 	return 0;
 }
+
+void ldlm_resource_for_each(struct ldlm_namespace *ns,
+			    int cb(struct ldlm_resource *res, void *data),
+			    void *data)
+{
+	struct rhashtable_iter iter;
+	struct ldlm_resource *res, *to_put = NULL;
+
+	rhashtable_walk_enter(&ns->ns_rs_hash, &iter);
+	rhashtable_walk_start(&iter);
+	while ((res = rhashtable_walk_next(&iter)) != NULL) {
+		if (IS_ERR(res))
+			continue;
+		if (!atomic_inc_not_zero(&res->lr_refcount))
+			continue;
+		rhashtable_walk_stop(&iter);
+		if (to_put) {
+			__ldlm_resource_putref_final(to_put);
+			to_put = NULL;
+		}
+		if (cb(res, data)) {
+			ldlm_resource_putref(res);
+			goto exit;
+		}
+		rhashtable_walk_start(&iter);
+		if (atomic_dec_and_test(&res->lr_refcount))
+			to_put = res;
+	}
+	rhashtable_walk_stop(&iter);
+exit:
+	rhashtable_walk_exit(&iter);
+	if (to_put)
+		__ldlm_resource_putref_final(to_put);
+}
+EXPORT_SYMBOL(ldlm_resource_for_each);
 
 /**
  * Cancel and destroy all locks in the namespace.
@@ -804,10 +767,9 @@ int ldlm_namespace_cleanup(struct ldlm_namespace *ns, u64 flags)
 		return ELDLM_OK;
 	}
 
-	cfs_hash_for_each_nolock(ns->ns_rs_hash, ldlm_resource_clean,
-				 &flags, 0);
-	cfs_hash_for_each_nolock(ns->ns_rs_hash, ldlm_resource_complain,
-				 NULL, 0);
+	ldlm_resource_for_each(ns, ldlm_resource_clean, &flags);
+	ldlm_resource_for_each(ns, ldlm_resource_complain, NULL);
+
 	return ELDLM_OK;
 }
 EXPORT_SYMBOL(ldlm_namespace_cleanup);
@@ -936,7 +898,7 @@ void ldlm_namespace_free_post(struct ldlm_namespace *ns)
 
 	ldlm_namespace_debugfs_unregister(ns);
 	ldlm_namespace_sysfs_unregister(ns);
-	cfs_hash_putref(ns->ns_rs_hash);
+	rhashtable_destroy(&ns->ns_rs_hash);
 	kfree(ns->ns_name);
 	kvfree(ns->ns_rs_buckets);
 	/* Namespace @ns should be not on list at this time, otherwise
@@ -1049,27 +1011,22 @@ ldlm_resource_get(struct ldlm_namespace *ns, struct ldlm_resource *parent,
 		  const struct ldlm_res_id *name, enum ldlm_type type,
 		  int create)
 {
-	struct hlist_node *hnode;
 	struct ldlm_resource *res = NULL;
-	struct cfs_hash_bd bd;
-	u64 version;
-	int ns_refcount = 0;
+	struct ldlm_resource *res2;
+	int		      ns_refcount = 0;
 	int rc;
 	int hash;
 
 	LASSERT(!parent);
-	LASSERT(ns->ns_rs_hash);
 	LASSERT(name->name[0] != 0);
 
-	cfs_hash_bd_get_and_lock(ns->ns_rs_hash, (void *)name, &bd, 0);
-	hnode = cfs_hash_bd_lookup_locked(ns->ns_rs_hash, &bd, (void *)name);
-	if (hnode) {
-		cfs_hash_bd_unlock(ns->ns_rs_hash, &bd, 0);
+	rcu_read_lock();
+	res = rhashtable_lookup(&ns->ns_rs_hash, name, ns_rs_hash_params);
+	if (res && atomic_inc_not_zero(&res->lr_refcount)) {
+		rcu_read_unlock();
 		goto lvbo_init;
 	}
-
-	version = cfs_hash_bd_version_get(&bd);
-	cfs_hash_bd_unlock(ns->ns_rs_hash, &bd, 0);
+	rcu_read_unlock();
 
 	if (create == 0)
 		return ERR_PTR(-ENOENT);
@@ -1085,13 +1042,20 @@ ldlm_resource_get(struct ldlm_namespace *ns, struct ldlm_resource *parent,
 	res->lr_name = *name;
 	res->lr_type = type;
 
-	cfs_hash_bd_lock(ns->ns_rs_hash, &bd, 1);
-	hnode = (version == cfs_hash_bd_version_get(&bd)) ?  NULL :
-		cfs_hash_bd_lookup_locked(ns->ns_rs_hash, &bd, (void *)name);
-
-	if (hnode) {
+	/*
+	 * If we find an existing entry with a refcount of zero, we need to
+	 * try again.
+	 */
+	rcu_read_lock();
+	do {
+		res2 = rhashtable_lookup_get_insert_fast(&ns->ns_rs_hash, &res->lr_hash,
+							 ns_rs_hash_params);
+	} while (!IS_ERR_OR_NULL(res2) && !atomic_inc_not_zero(&res2->lr_refcount));
+	rcu_read_unlock();
+	if (res2) {
+		/* Insertion failed: an error occurred or              */
 		/* Someone won the race and already added the resource. */
-		cfs_hash_bd_unlock(ns->ns_rs_hash, &bd, 1);
+
 		/* Clean lu_ref for failed resource. */
 		lu_ref_fini(&res->lr_reference);
 		/* We have taken lr_lvb_mutex. Drop it. */
@@ -1100,8 +1064,11 @@ ldlm_resource_get(struct ldlm_namespace *ns, struct ldlm_resource *parent,
 			kmem_cache_free(ldlm_interval_tree_slab,
 					res->lr_itree);
 		kmem_cache_free(ldlm_resource_slab, res);
+
+		if (IS_ERR(res2))
+			return ERR_PTR(-ENOMEM);
+		res = res2;
 lvbo_init:
-		res = hlist_entry(hnode, struct ldlm_resource, lr_hash);
 		/* Synchronize with regard to resource creation. */
 		if (ns->ns_lvbo && ns->ns_lvbo->lvbo_init) {
 			mutex_lock(&res->lr_lvb_mutex);
@@ -1115,12 +1082,9 @@ lvbo_init:
 		}
 		return res;
 	}
-	/* We won! Let's add the resource. */
-	cfs_hash_bd_add_locked(ns->ns_rs_hash, &bd, &res->lr_hash);
 	if (atomic_inc_return(&res->lr_ns_bucket->nsb_count) == 1)
 		ns_refcount = ldlm_namespace_get_return(ns);
 
-	cfs_hash_bd_unlock(ns->ns_rs_hash, &bd, 1);
 	if (ns->ns_lvbo && ns->ns_lvbo->lvbo_init) {
 		OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_CREATE_RESOURCE, 2);
 		rc = ns->ns_lvbo->lvbo_init(res);
@@ -1153,8 +1117,14 @@ lvbo_init:
 }
 EXPORT_SYMBOL(ldlm_resource_get);
 
-static void __ldlm_resource_putref_final(struct cfs_hash_bd *bd,
-					 struct ldlm_resource *res)
+static void ldlm_resource_free(struct rcu_head *rcu)
+{
+	struct ldlm_resource *res = container_of(rcu, struct ldlm_resource,
+						 lr_rcu);
+	kmem_cache_free(ldlm_resource_slab, res);
+}
+
+static void __ldlm_resource_putref_final(struct ldlm_resource *res)
 {
 	struct ldlm_ns_bucket *nsb = res->lr_ns_bucket;
 	struct ldlm_namespace *ns = nsb->nsb_namespace;
@@ -1169,31 +1139,26 @@ static void __ldlm_resource_putref_final(struct cfs_hash_bd *bd,
 		LBUG();
 	}
 
-	cfs_hash_bd_del_locked(ns->ns_rs_hash,
-			       bd, &res->lr_hash);
+	rhashtable_remove_fast(&ns->ns_rs_hash,
+			       &res->lr_hash, ns_rs_hash_params);
 	lu_ref_fini(&res->lr_reference);
-	cfs_hash_bd_unlock(ns->ns_rs_hash, bd, 1);
 	if (ns->ns_lvbo && ns->ns_lvbo->lvbo_free)
 		ns->ns_lvbo->lvbo_free(res);
 	if (atomic_dec_and_test(&nsb->nsb_count))
 		ldlm_namespace_put(ns);
 	if (res->lr_itree)
 		kmem_cache_free(ldlm_interval_tree_slab, res->lr_itree);
-	kmem_cache_free(ldlm_resource_slab, res);
+	call_rcu(&res->lr_rcu, ldlm_resource_free);
 }
 
 void ldlm_resource_putref(struct ldlm_resource *res)
 {
-	struct ldlm_namespace *ns = ldlm_res_to_ns(res);
-	struct cfs_hash_bd bd;
-
 	LASSERT_ATOMIC_GT_LT(&res->lr_refcount, 0, LI_POISON);
 	CDEBUG(D_INFO, "putref res: %p count: %d\n",
 	       res, atomic_read(&res->lr_refcount) - 1);
 
-	cfs_hash_bd_get(ns->ns_rs_hash, &res->lr_name, &bd);
-	if (cfs_hash_bd_dec_and_lock(ns->ns_rs_hash, &bd, &res->lr_refcount))
-		__ldlm_resource_putref_final(&bd, res);
+	if (atomic_dec_and_test(&res->lr_refcount))
+		__ldlm_resource_putref_final(res);
 }
 EXPORT_SYMBOL(ldlm_resource_putref);
 
@@ -1255,14 +1220,12 @@ void ldlm_dump_all_namespaces(enum ldlm_side client, int level)
 	mutex_unlock(ldlm_namespace_lock(client));
 }
 
-static int ldlm_res_hash_dump(struct cfs_hash *hs, struct cfs_hash_bd *bd,
-			      struct hlist_node *hnode, void *arg)
+static int ldlm_res_hash_dump(struct ldlm_resource *res, void *arg)
 {
-	struct ldlm_resource *res = cfs_hash_object(hs, hnode);
-	int level = (int)(unsigned long)arg;
+	int *level = arg;
 
 	lock_res(res);
-	ldlm_resource_dump(level, res);
+	ldlm_resource_dump(*level, res);
 	unlock_res(res);
 
 	return 0;
@@ -1283,9 +1246,8 @@ void ldlm_namespace_dump(int level, struct ldlm_namespace *ns)
 	if (ktime_get_seconds() < ns->ns_next_dump)
 		return;
 
-	cfs_hash_for_each_nolock(ns->ns_rs_hash,
-				 ldlm_res_hash_dump,
-				 (void *)(unsigned long)level, 0);
+	ldlm_resource_for_each(ns, ldlm_res_hash_dump, &level);
+
 	spin_lock(&ns->ns_lock);
 	ns->ns_next_dump = ktime_get_seconds() + 10;
 	spin_unlock(&ns->ns_lock);

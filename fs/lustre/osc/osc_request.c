@@ -3055,13 +3055,10 @@ int osc_disconnect(struct obd_export *exp)
 }
 EXPORT_SYMBOL(osc_disconnect);
 
-int osc_ldlm_resource_invalidate(struct cfs_hash *hs,
-				 struct cfs_hash_bd *bd,
-				 struct hlist_node *hnode, void *arg)
+int osc_ldlm_resource_invalidate(struct ldlm_resource *res, void *data)
 {
-	struct ldlm_resource *res = cfs_hash_object(hs, hnode);
+	struct lu_env *env = data;
 	struct osc_object *osc = NULL;
-	struct lu_env *env = arg;
 	struct ldlm_lock *lock;
 
 	lock_res(res);
@@ -3122,9 +3119,8 @@ static int osc_import_event(struct obd_device *obd,
 		if (!IS_ERR(env)) {
 			osc_io_unplug(env, &obd->u.cli, NULL);
 
-			cfs_hash_for_each_nolock(ns->ns_rs_hash,
-						 osc_ldlm_resource_invalidate,
-						 env, 0);
+			ldlm_resource_for_each(ns, osc_ldlm_resource_invalidate, env);
+
 			cl_env_put(env, &refcheck);
 
 			ldlm_namespace_cleanup(ns, LDLM_FL_LOCAL_ONLY);
