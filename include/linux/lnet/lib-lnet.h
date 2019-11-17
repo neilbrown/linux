@@ -411,8 +411,8 @@ int lnet_get_route(int idx, u32 *net, u32 *hops,
 		   lnet_nid_t *gateway, u32 *alive, u32 *priority,
 		   u32 *sensitivity);
 int lnet_get_rtr_pool_cfg(int idx, struct lnet_ioctl_pool_cfg *pool_cfg);
-struct lnet_ni *lnet_get_next_ni_locked(struct lnet_net *mynet,
-					struct lnet_ni *prev);
+struct lnet_ni *lnet_get_next_ni_rcu(struct lnet_net *mynet,
+				     struct lnet_ni *prev);
 struct lnet_ni *lnet_get_ni_idx_locked(int idx);
 int lnet_get_peer_list(u32 *countp, u32 *sizep,
 		       struct lnet_process_id __user *ids);

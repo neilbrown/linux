@@ -504,8 +504,10 @@ static void lnet_shuffle_seed(void)
 	/* Nodes with small feet have little entropy
 	 * the NID for this node gives the most entropy in the low bits
 	 */
-	while ((ni = lnet_get_next_ni_locked(NULL, ni)))
+	rcu_read_lock();
+	while ((ni = lnet_get_next_ni_rcu(NULL, ni)))
 		add_device_randomness(&ni->ni_nid, sizeof(ni->ni_nid));
+	rcu_read_unlock();
 
 	seeded = 1;
 }
@@ -936,7 +938,7 @@ lnet_net_set_status_locked(struct lnet_net *net, u32 status)
 }
 
 static bool
-lnet_update_ni_status_locked(void)
+lnet_update_ni_status(void)
 {
 	struct lnet_net *net;
 	bool push = false;
@@ -948,6 +950,7 @@ lnet_update_ni_status_locked(void)
 	timeout = router_ping_timeout + alive_router_check_interval;
 
 	now = ktime_get_real_seconds();
+	rcu_read_lock();
 	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
 		if (net->net_lnd->lnd_type == LOLND)
 			continue;
@@ -972,6 +975,7 @@ lnet_update_ni_status_locked(void)
 	}
 
 	return push;
+	rcu_read_unlock();
 }
 
 void lnet_wait_router_start(void)
@@ -1022,6 +1026,7 @@ lnet_check_routers(void)
 rescan:
 	version = the_lnet.ln_routers_version;
 
+	rcu_read_lock();
 	list_for_each_entry(rtr, &the_lnet.ln_routers, lp_rtr_list) {
 		now = ktime_get_real_seconds();
 
@@ -1106,7 +1111,7 @@ rescan:
 	}
 
 	if (the_lnet.ln_routing)
-		push = lnet_update_ni_status_locked();
+		push = lnet_update_ni_status();
 
 	lnet_net_unlock(cpt);
 

@@ -2837,7 +2837,7 @@ lnet_get_ni_idx_locked(int idx)
 }
 
 struct lnet_ni *
-lnet_get_next_ni_locked(struct lnet_net *mynet, struct lnet_ni *prev)
+lnet_get_next_ni_rcu(struct lnet_net *mynet, struct lnet_ni *prev)
 {
 	struct lnet_ni *ni;
 	struct lnet_net *net = mynet;
@@ -2849,53 +2849,42 @@ lnet_get_next_ni_locked(struct lnet_net *mynet, struct lnet_ni *prev)
 	 */
 	if (!prev) {
 		if (!net)
-			net = list_first_entry(&the_lnet.ln_nets,
-					       struct lnet_net,
-					       net_list);
+			net = list_first_or_null_rcu(&the_lnet.ln_nets,
+						     struct lnet_net,
+						     net_list);
 
 		if (!net || (smp_load_acquire(&the_lnet.ln_state) !=
 			     LNET_STATE_RUNNING))
 			return NULL;
 
-		ni = list_first_entry_or_null(&net->net_ni_list,
-					      struct lnet_ni,
-					      ni_netlist);
+		ni = list_first_or_null_rcu(&net->net_ni_list, struct lnet_ni,
+					    ni_netlist);
 
 		return ni;
 	}
 
-	if (prev->ni_netlist.next == &prev->ni_net->net_ni_list) {
+	ni = list_first_or_null_rcu(&prev->ni_netlist, struct lnet_ni, ni_netlist);
+
+	if (!ni) {
 		/* if you reached the end of the ni list and the net is
 		 * specified, then there are no more nis in that net */
 		if (net)
 			return NULL;
 
-		/* we reached the end of this net ni list. move to the
-		 * next net */
-		if (prev->ni_net->net_list.next == &the_lnet.ln_nets)
-			/* no more nets and no more NIs. */
-			return NULL;
-
 		/* get the next net */
-		net = list_first_entry(&prev->ni_net->net_list, struct lnet_net,
-				       net_list);
+		net = list_next_or_null_rcu(&the_lnet.ln_nets,
+					    &prev->ni_net->net_list,
+					    struct lnet_net,
+					    net_list);
 
-		if (smp_load_acquire(&the_lnet.ln_state) != LNET_STATE_RUNNING)
+		if (!net || (smp_load_acquire(&the_lnet.ln_state) !=
+			     LNET_STATE_RUNNING))
 			return NULL;
 
 		/* get the ni on it */
-		ni = list_first_entry_or_null(&net->net_ni_list,
-					      struct lnet_ni,
-					      ni_netlist);
-
-		return ni;
+		ni = list_first_or_null_rcu(&net->net_ni_list, struct lnet_ni,
+					    ni_netlist);
 	}
-
-	if (list_empty(&prev->ni_netlist))
-		return NULL;
-
-	/* there are more nis left */
-	ni = list_first_entry(&prev->ni_netlist, struct lnet_ni, ni_netlist);
 
 	return ni;
 }

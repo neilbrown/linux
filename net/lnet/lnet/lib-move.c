@@ -1311,9 +1311,11 @@ lnet_get_best_ni(struct lnet_net *local_net, struct lnet_ni *best_ni,
 						     best_ni->ni_dev_cpt);
 		best_credits = atomic_read(&best_ni->ni_tx_credits);
 		best_healthv = atomic_read(&best_ni->ni_healthv);
+		lnet_ni_addref(best_ni);
 	}
 
-	while ((ni = lnet_get_next_ni_locked(local_net, ni))) {
+	rcu_read_lock();
+	while ((ni = lnet_get_next_ni_rcu(local_net, ni))) {
 		unsigned int distance;
 		int ni_credits;
 		int ni_healthv;
@@ -1375,10 +1377,18 @@ lnet_get_best_ni(struct lnet_net *local_net, struct lnet_ni *best_ni,
 			if (best_ni && best_ni->ni_seq <= ni->ni_seq)
 				continue;
 		}
+		if (!percpu_ref_tryget(&ni->ni_refs))
+			continue;
+		if (best_ni)
+			lnet_ni_decref(best_ni);
 		best_ni = ni;
 		best_credits = ni_credits;
 	}
+	rcu_read_unlock();
 
+	/* Caller doesn't expected a counted reference yet */
+	if (best_ni)
+		lnet_ni_decref(best_ni);
 	CDEBUG(D_NET, "selected best_ni %s\n",
 	       (best_ni) ? libcfs_nid2str(best_ni->ni_nid) : "no selection");
 
@@ -4800,8 +4810,8 @@ LNetDist(lnet_nid_t dstnid, lnet_nid_t *srcnidp, u32 *orderp)
 	LASSERT(the_lnet.ln_refcount > 0);
 
 	cpt = lnet_net_lock_current();
-
-	while ((ni = lnet_get_next_ni_locked(NULL, ni))) {
+	rcu_read_lock();
+	while ((ni = lnet_get_next_ni_rcu(NULL, ni))) {
 		if (ni->ni_nid == dstnid) {
 			if (srcnidp)
 				*srcnidp = dstnid;
@@ -4811,6 +4821,7 @@ LNetDist(lnet_nid_t dstnid, lnet_nid_t *srcnidp, u32 *orderp)
 				else
 					*orderp = 1;
 			}
+			rcu_read_unlock();
 			lnet_net_unlock(cpt);
 
 			return local_nid_dist_zero ? 0 : 1;
@@ -4830,12 +4841,14 @@ LNetDist(lnet_nid_t dstnid, lnet_nid_t *srcnidp, u32 *orderp)
 				*srcnidp = ni->ni_nid;
 			if (orderp)
 				*orderp = order;
+			rcu_read_unlock();
 			lnet_net_unlock(cpt);
 			return 1;
 		}
 
 		order++;
 	}
+	rcu_read_unlock();
 
 	rn_list = lnet_net2rnethash(dstnet);
 	list_for_each_entry(rnet, rn_list, lrn_list) {
@@ -4862,12 +4875,15 @@ LNetDist(lnet_nid_t dstnid, lnet_nid_t *srcnidp, u32 *orderp)
 			LASSERT(shortest);
 			hops = shortest_hops;
 			if (srcnidp) {
+				rcu_read_lock();
 				struct lnet_net *net;
 
 				net = lnet_get_net_locked(shortest->lr_lnet);
 				LASSERT(net);
-				ni = lnet_get_next_ni_locked(net, NULL);
-				*srcnidp = ni->ni_nid;
+				ni = lnet_get_next_ni_rcu(net, NULL);
+				if (ni)
+					*srcnidp = ni->ni_nid;
+				rcu_read_unlock();
 			}
 			if (orderp)
 				*orderp = order;
