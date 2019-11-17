@@ -662,7 +662,7 @@ static int proc_lnet_nis(struct ctl_table *table, int write,
 
 		lnet_net_lock(0);
 
-		ni = lnet_get_ni_idx_locked(skip);
+		ni = lnet_get_ni_idx_addref(skip);
 
 		if (ni) {
 			struct lnet_tx_queue *tq;
@@ -717,6 +717,7 @@ static int proc_lnet_nis(struct ctl_table *table, int write,
 					lnet_net_unlock(i);
 			}
 			LASSERT(tmpstr + tmpsiz - s > 0);
+			lnet_ni_decref(ni);
 		}
 
 		lnet_net_unlock(0);

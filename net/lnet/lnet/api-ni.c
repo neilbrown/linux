@@ -2798,21 +2798,30 @@ lnet_fill_ni_info_legacy(struct lnet_ni *ni,
 }
 
 struct lnet_ni *
-lnet_get_ni_idx_locked(int idx)
+lnet_get_ni_idx_addref(int idx)
 {
 	struct lnet_ni *ni;
 	struct lnet_net *net;
 
-	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
-		list_for_each_entry(ni, &net->net_ni_list, ni_netlist) {
+	rcu_read_lock();
+	list_for_each_entry_rcu(net, &the_lnet.ln_nets, net_list) {
+		list_for_each_entry_rcu(ni, &net->net_ni_list, ni_netlist) {
 			if (idx-- == 0) {
 				if (smp_load_acquire(&the_lnet.ln_state) !=
-				    LNET_STATE_RUNNING)
+				    LNET_STATE_RUNNING) {
+					rcu_read_unlock();
 					return NULL;
+				}
+				if (!percpu_ref_tryget(&ni->ni_refs)) {
+					idx++;
+					continue;
+				}
+				rcu_read_unlock();
 				return ni;
 			}
 		}
 	}
+	rcu_read_unlock();
 
 	return NULL;
 }
@@ -2875,20 +2884,17 @@ lnet_get_net_config(struct lnet_ioctl_config_data *config)
 {
 	struct lnet_ni *ni;
 	int idx = config->cfg_count;
-	int cpt;
 	int rc = -ENOENT;
 
-	cpt = lnet_net_lock_current();
-
-	ni = lnet_get_ni_idx_locked(idx);
+	ni = lnet_get_ni_idx_addref(idx);
 	if (ni) {
 		rc = 0;
 		lnet_ni_lock(ni);
 		lnet_fill_ni_info_legacy(ni, config);
 		lnet_ni_unlock(ni);
+		lnet_ni_decref(ni);
 	}
 
-	lnet_net_unlock(cpt);
 	return rc;
 }
 
@@ -2899,45 +2905,38 @@ lnet_get_ni_config(struct lnet_ioctl_config_ni *cfg_ni,
 		   u32 tun_size)
 {
 	struct lnet_ni *ni;
-	int cpt;
 	int rc = -ENOENT;
 
 	if (!cfg_ni || !tun || !stats)
 		return -EINVAL;
 
-	cpt = lnet_net_lock_current();
-
-	ni = lnet_get_ni_idx_locked(cfg_ni->lic_idx);
+	ni = lnet_get_ni_idx_addref(cfg_ni->lic_idx);
 	if (ni) {
 		rc = 0;
 		lnet_ni_lock(ni);
 		lnet_fill_ni_info(ni, cfg_ni, tun, stats, tun_size);
 		lnet_ni_unlock(ni);
+		lnet_ni_decref(ni);
 	}
 
-	lnet_net_unlock(cpt);
 	return rc;
 }
 
 int lnet_get_ni_stats(struct lnet_ioctl_element_msg_stats *msg_stats)
 {
 	struct lnet_ni *ni;
-	int cpt;
 	int rc = -ENOENT;
 
 	if (!msg_stats)
 		return -EINVAL;
 
-	cpt = lnet_net_lock_current();
-
-	ni = lnet_get_ni_idx_locked(msg_stats->im_idx);
+	ni = lnet_get_ni_idx_addref(msg_stats->im_idx);
 
 	if (ni) {
 		lnet_usr_translate_stats(msg_stats, &ni->ni_stats);
 		rc = 0;
+		lnet_ni_decref(ni);
 	}
-
-	lnet_net_unlock(cpt);
 
 	return rc;
 }
