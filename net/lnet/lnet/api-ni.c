@@ -1211,38 +1211,27 @@ lnet_unprepare(void)
 }
 
 struct lnet_ni  *
-lnet_net2ni_locked(u32 net_id, int cpt)
+lnet_net2ni_addref(u32 net_id)
 {
 	struct lnet_ni *ni;
 	struct lnet_net *net;
 
-	LASSERT(cpt != LNET_LOCK_EX);
-
-	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
+	rcu_read_lock();
+	list_for_each_entry_rcu(net, &the_lnet.ln_nets, net_list) {
 		if (net->net_id == net_id) {
-			ni = list_first_entry(&net->net_ni_list, struct lnet_ni,
-					      ni_netlist);
-			if (smp_load_acquire(&the_lnet.ln_state) != LNET_STATE_RUNNING)
+			ni = list_first_or_null_rcu(&net->net_ni_list, struct lnet_ni,
+						    ni_netlist);
+			if (!ni || smp_load_acquire(&the_lnet.ln_state) != LNET_STATE_RUNNING)
 				return NULL;
-			return ni;
+			if (percpu_ref_tryget(&ni->ni_refs)) {
+				rcu_read_unlock();
+				return ni;
+			}
 		}
 	}
+	rcu_read_unlock();
 
 	return NULL;
-}
-
-struct lnet_ni *
-lnet_net2ni_addref(u32 net)
-{
-	struct lnet_ni *ni;
-
-	lnet_net_lock(0);
-	ni = lnet_net2ni_locked(net, 0);
-	if (ni)
-		lnet_ni_addref(ni);
-	lnet_net_unlock(0);
-
-	return ni;
 }
 EXPORT_SYMBOL(lnet_net2ni_addref);
 
@@ -1359,39 +1348,30 @@ lnet_islocalnet(u32 net_id)
 }
 
 struct lnet_ni *
-lnet_nid2ni_locked(lnet_nid_t nid, int cpt)
+lnet_nid2ni_addref(lnet_nid_t nid)
 {
 	struct lnet_net *net;
 	struct lnet_ni *ni;
 
-	LASSERT(cpt != LNET_LOCK_EX);
-
-	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
-		list_for_each_entry(ni, &net->net_ni_list, ni_netlist) {
-			if (ni->ni_nid == nid) {
-				if (smp_load_acquire(&the_lnet.ln_state) !=
-				    LNET_STATE_RUNNING)
-					return NULL;
+	rcu_read_lock();
+	list_for_each_entry_rcu(net, &the_lnet.ln_nets, net_list) {
+		list_for_each_entry_rcu(ni, &net->net_ni_list, ni_netlist) {
+			if (ni->ni_nid != nid)
+				continue;
+			if (smp_load_acquire(&the_lnet.ln_state) !=
+			    LNET_STATE_RUNNING) {
+				rcu_read_unlock();
+				return NULL;
+			}
+			if (percpu_ref_tryget(&ni->ni_refs)) {
+				rcu_read_unlock();
 				return ni;
 			}
 		}
 	}
+	rcu_read_unlock();
 
 	return NULL;
-}
-
-struct lnet_ni *
-lnet_nid2ni_addref(lnet_nid_t nid)
-{
-	struct lnet_ni *ni;
-
-	lnet_net_lock(0);
-	ni = lnet_nid2ni_locked(nid, 0);
-	if (ni)
-		lnet_ni_addref(ni);
-	lnet_net_unlock(0);
-
-	return ni;
 }
 EXPORT_SYMBOL(lnet_nid2ni_addref);
 
@@ -1399,13 +1379,14 @@ int
 lnet_islocalnid(lnet_nid_t nid)
 {
 	struct lnet_ni *ni;
-	int cpt;
 
-	cpt = lnet_net_lock_current();
-	ni = lnet_nid2ni_locked(nid, cpt);
-	lnet_net_unlock(cpt);
+	ni = lnet_nid2ni_addref(nid);
+	if (ni) {
+		lnet_ni_decref(ni);
+		return 1;
+	}
 
-	return !!ni;
+	return 0;
 }
 
 int
@@ -3153,7 +3134,7 @@ int lnet_dyn_add_ni(struct lnet_ioctl_config_ni *conf)
 int lnet_dyn_del_ni(struct lnet_ioctl_config_ni *conf)
 {
 	struct lnet_net *net;
-	struct lnet_ni *ni;
+	struct lnet_ni *ni = NULL;
 	u32 net_id = LNET_NIDNET(conf->lic_nid);
 	struct lnet_ping_buffer *pbuf;
 	struct lnet_handle_md ping_mdh;
@@ -3201,7 +3182,7 @@ int lnet_dyn_del_ni(struct lnet_ioctl_config_ni *conf)
 		goto unlock_api_mutex;
 	}
 
-	ni = lnet_nid2ni_locked(conf->lic_nid, 0);
+	ni = lnet_nid2ni_addref(conf->lic_nid);
 	if (!ni) {
 		CERROR("nid %s not found\n",
 		       libcfs_nid2str(conf->lic_nid));
@@ -3235,6 +3216,8 @@ int lnet_dyn_del_ni(struct lnet_ioctl_config_ni *conf)
 unlock_net:
 	lnet_net_unlock(0);
 unlock_api_mutex:
+	if (ni)
+		lnet_ni_decref(ni);
 	mutex_unlock(&the_lnet.ln_api_mutex);
 
 	return rc;

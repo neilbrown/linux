@@ -1386,9 +1386,6 @@ lnet_get_best_ni(struct lnet_net *local_net, struct lnet_ni *best_ni,
 	}
 	rcu_read_unlock();
 
-	/* Caller doesn't expected a counted reference yet */
-	if (best_ni)
-		lnet_ni_decref(best_ni);
 	CDEBUG(D_NET, "selected best_ni %s\n",
 	       (best_ni) ? libcfs_nid2str(best_ni->ni_nid) : "no selection");
 
@@ -1618,7 +1615,7 @@ lnet_handle_spec_local_nmr_dst(struct lnet_send_data *sd)
 	/* the destination lpni is set before we get here. */
 
 	/* find local NI */
-	sd->sd_best_ni = lnet_nid2ni_locked(sd->sd_src_nid, sd->sd_cpt);
+	sd->sd_best_ni = lnet_nid2ni_addref(sd->sd_src_nid, sd->sd_cpt);
 	if (!sd->sd_best_ni) {
 		CERROR("Can't send to %s: src %s is not a local nid\n",
 		       libcfs_nid2str(sd->sd_dst_nid),
@@ -1929,6 +1926,7 @@ lnet_find_best_ni_on_local_net(struct lnet_peer *peer, int md_cpt,
 	 * The peer can have multiple interfaces, some of them can be on
 	 * the local network and others on a routed network. We should
 	 * prefer the local network. However if the local network is not
+
 	 * available then we need to try the routed network
 	 */
 
@@ -1990,7 +1988,7 @@ lnet_find_existing_preferred_best_ni(struct lnet_send_data *sd)
 		if (lpni->lpni_pref_nnids == 0)
 			continue;
 		LASSERT(lpni->lpni_pref_nnids == 1);
-		best_ni = lnet_nid2ni_locked(lpni->lpni_pref.nid, cpt);
+		best_ni = lnet_nid2ni_addref(lpni->lpni_pref.nid);
 		break;
 	}
 
@@ -3073,6 +3071,7 @@ lnet_clean_resendqs(void)
 		lnet_net_unlock(i);
 		list_for_each_entry_safe(msg, tmp, &msgs, msg_list) {
 			list_del_init(&msg->msg_list);
+			lnet_ni_decref(best_ni);
 			msg->msg_no_resend = true;
 			lnet_finalize(msg, -ESHUTDOWN);
 		}
