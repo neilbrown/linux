@@ -293,6 +293,12 @@ lnet_peer_ni_addref_locked(struct lnet_peer_ni *lp)
 	kref_get(&lp->lpni_kref);
 }
 
+static inline int
+lnet_peer_ni_addref_rcu(struct lnet_peer_ni *lp)
+{
+	return kref_get_unless_zero(&lp->lpni_kref);
+}
+
 void lnet_destroy_peer_ni_locked(struct kref *ref);
 
 static inline void
@@ -695,7 +701,7 @@ struct lnet_peer_ni *lnet_nid2peerni_locked(lnet_nid_t nid, lnet_nid_t pref,
 struct lnet_peer_ni *lnet_nid2peerni_ex(lnet_nid_t nid, int cpt);
 struct lnet_peer_ni *lnet_peer_get_ni_locked(struct lnet_peer *lp,
 					     lnet_nid_t nid);
-struct lnet_peer_ni *lnet_find_peer_ni_locked(lnet_nid_t nid);
+struct lnet_peer_ni *lnet_find_peer_ni(lnet_nid_t nid);
 struct lnet_peer *lnet_find_peer(lnet_nid_t nid);
 void lnet_peer_net_added(struct lnet_net *net);
 lnet_nid_t lnet_peer_primary_nid_locked(lnet_nid_t nid);

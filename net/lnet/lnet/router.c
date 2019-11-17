@@ -1612,7 +1612,7 @@ lnet_notify(struct lnet_ni *ni, lnet_nid_t nid, bool alive, bool reset,
 		return -ESHUTDOWN;
 	}
 
-	lpni = lnet_find_peer_ni_locked(nid);
+	lpni = lnet_find_peer_ni(nid);
 	if (!lpni) {
 		/* nid not found */
 		lnet_net_unlock(0);
