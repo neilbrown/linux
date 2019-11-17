@@ -374,8 +374,12 @@ struct lnet_net {
 	/* list of NIs on this net */
 	struct list_head	net_ni_list;
 
-	/* list of NIs being added, but not started yet */
-	struct list_head	net_ni_added;
+	union {
+		/* list of NIs being added, but not started yet */
+		struct list_head	net_ni_added;
+
+		struct rcu_head		net_rcu;
+	};
 
 	/* dying LND instances, linked on ni_netlist.prev */
 	struct list_head	*net_ni_zombie;

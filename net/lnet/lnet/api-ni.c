@@ -2019,7 +2019,7 @@ lnet_shutdown_lndnet(struct lnet_net *net)
 
 	lnet_net_lock(LNET_LOCK_EX);
 
-	list_del_init(&net->net_list);
+	list_del_rcu(&net->net_list);
 
 	while ((ni = list_first_entry_or_null(&net->net_ni_list,
 					      struct lnet_ni,
@@ -2322,7 +2322,7 @@ lnet_startup_lndnet(struct lnet_net *net, struct lnet_lnd_tunables *tun)
 			net->net_tunables.lct_peer_rtr_credits = peerrtrcredits;
 
 		lnet_net_lock(LNET_LOCK_EX);
-		list_add_tail(&net->net_list, &the_lnet.ln_nets);
+		list_add_tail_rcu(&net->net_list, &the_lnet.ln_nets);
 		lnet_net_unlock(LNET_LOCK_EX);
 	}
 

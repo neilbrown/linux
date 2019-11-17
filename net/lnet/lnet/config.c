@@ -340,7 +340,7 @@ lnet_net_free(struct lnet_net *net)
 	}
 
 	kfree(net->net_cpts);
-	kfree(net);
+	kfree_rcu(net, net_rcu);
 }
 
 struct lnet_net *
