@@ -613,14 +613,16 @@ static int proc_lnet_nis(struct ctl_table *table, int write,
 		struct lnet_net *net;
 		struct lnet_ni *ni;
 
-		lnet_net_lock(0);
-
-		list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
-			list_for_each_entry(ni, &net->net_ni_list, ni_netlist) {
+		rcu_read_lock();
+		list_for_each_entry_rcu(net, &the_lnet.ln_nets, net_list) {
+			list_for_each_entry_rcu(ni, &net->net_ni_list, ni_netlist) {
 				struct lnet_tx_queue *tq;
 				int i;
 				int j;
 
+				/* need a counted reference to access ni_tx_queues */
+				if (!percpu_ref_tryget(&ni->ni_refs))
+					continue;
 				cfs_percpt_for_each(tq, i, ni->ni_tx_queues) {
 					for (j = 0; ni->ni_cpts &&
 					     j < ni->ni_ncpts; j++) {
@@ -637,9 +639,10 @@ static int proc_lnet_nis(struct ctl_table *table, int write,
 					if (i != 0)
 						lnet_net_unlock(i);
 				}
+				lnet_ni_decref(ni);
 			}
 		}
-		lnet_net_unlock(0);
+		rcu_read_unlock();
 		*ppos += *lenp;
 		return 0;
 	}

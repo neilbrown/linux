@@ -1394,17 +1394,15 @@ lnet_count_acceptor_nets(void)
 	/* Return the # of NIs that need the acceptor. */
 	int count = 0;
 	struct lnet_net *net;
-	int cpt;
 
-	cpt = lnet_net_lock_current();
-	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
+	rcu_read_lock();
+	list_for_each_entry_rcu(net, &the_lnet.ln_nets, net_list) {
 		/* all socklnd type networks should have the acceptor
 		 * thread started */
 		if (net->net_lnd->lnd_accept)
 			count++;
 	}
-
-	lnet_net_unlock(cpt);
+	rcu_read_unlock();
 
 	return count;
 }
@@ -1455,13 +1453,15 @@ lnet_ping_target_create(int nnis)
 }
 
 static inline int
-lnet_get_net_ni_count_locked(struct lnet_net *net)
+lnet_get_net_ni_count(struct lnet_net *net)
 {
 	struct lnet_ni *ni;
 	int count = 0;
 
-	list_for_each_entry(ni, &net->net_ni_list, ni_netlist)
+	rcu_read_lock();
+	list_for_each_entry_rcu(ni, &net->net_ni_list, ni_netlist)
 		count++;
+	rcu_read_unlock();
 
 	return count;
 }
@@ -1485,14 +1485,12 @@ lnet_get_ni_count(void)
 	struct lnet_net *net;
 	int count = 0;
 
-	lnet_net_lock(0);
-
-	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
-		list_for_each_entry(ni, &net->net_ni_list, ni_netlist)
+	rcu_read_lock();
+	list_for_each_entry_rcu(net, &the_lnet.ln_nets, net_list) {
+		list_for_each_entry_rcu(ni, &net->net_ni_list, ni_netlist)
 			count++;
 	}
-
-	lnet_net_unlock(0);
+	rcu_read_unlock();
 
 	return count;
 }
@@ -1558,15 +1556,17 @@ lnet_ping_target_destroy(void)
 	struct lnet_net *net;
 	struct lnet_ni *ni;
 
-	lnet_net_lock(LNET_LOCK_EX);
-
-	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
-		list_for_each_entry(ni, &net->net_ni_list, ni_netlist) {
+	rcu_read_lock();
+	list_for_each_entry_rcu(net, &the_lnet.ln_nets, net_list) {
+		list_for_each_entry_rcu(ni, &net->net_ni_list, ni_netlist) {
 			lnet_ni_lock(ni);
 			ni->ni_status = NULL;
 			lnet_ni_unlock(ni);
 		}
 	}
+	rcu_read_unlock();
+
+	lnet_net_lock(LNET_LOCK_EX);
 
 	lnet_ping_buffer_decref(the_lnet.ln_ping_target);
 	RCU_INIT_POINTER(the_lnet.ln_ping_target, NULL);
@@ -1667,8 +1667,9 @@ lnet_ping_target_install_locked(struct lnet_ping_buffer *pbuf)
 	int i = 0;
 	int rc;
 
-	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
-		list_for_each_entry(ni, &net->net_ni_list, ni_netlist) {
+	rcu_read_lock();
+	list_for_each_entry_rcu(net, &the_lnet.ln_nets, net_list) {
+		list_for_each_entry_rcu(ni, &net->net_ni_list, ni_netlist) {
 			LASSERT(i < pbuf->pb_nnis);
 
 			ns = &pbuf->pb_info.pi_ni[i];
@@ -1685,6 +1686,7 @@ lnet_ping_target_install_locked(struct lnet_ping_buffer *pbuf)
 			i++;
 		}
 	}
+	rcu_read_unlock();
 	/*
 	 * We (ab)use the ns_status of the loopback interface to
 	 * transmit the sequence number. The first interface listed
@@ -3157,7 +3159,7 @@ int lnet_dyn_del_ni(struct lnet_ioctl_config_ni *conf)
 	addr = LNET_NIDADDR(conf->lic_nid);
 	if (addr == 0) {
 		/* remove the entire net */
-		net_count = lnet_get_net_ni_count_locked(net);
+		net_count = lnet_get_net_ni_count(net);
 
 		lnet_net_unlock(0);
 
@@ -3186,7 +3188,7 @@ int lnet_dyn_del_ni(struct lnet_ioctl_config_ni *conf)
 		goto unlock_net;
 	}
 
-	net_count = lnet_get_net_ni_count_locked(net);
+	net_count = lnet_get_net_ni_count(net);
 
 	lnet_net_unlock(0);
 
@@ -3302,7 +3304,7 @@ lnet_dyn_del_net(u32 net_id)
 		goto out;
 	}
 
-	net_ni_count = lnet_get_net_ni_count_locked(net);
+	net_ni_count = lnet_get_net_ni_count(net);
 
 	lnet_net_unlock(0);
 
@@ -3926,15 +3928,13 @@ LNetGetId(unsigned int index, struct lnet_process_id *id)
 {
 	struct lnet_ni *ni;
 	struct lnet_net *net;
-	int cpt;
 	int rc = -ENOENT;
 
 	LASSERT(the_lnet.ln_refcount > 0);
 
-	cpt = lnet_net_lock_current();
-
-	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
-		list_for_each_entry(ni, &net->net_ni_list, ni_netlist) {
+	rcu_read_lock();
+	list_for_each_entry_rcu(net, &the_lnet.ln_nets, net_list) {
+		list_for_each_entry_rcu(ni, &net->net_ni_list, ni_netlist) {
 			if (index-- != 0)
 				continue;
 
@@ -3943,9 +3943,11 @@ LNetGetId(unsigned int index, struct lnet_process_id *id)
 			rc = 0;
 			break;
 		}
+		if (!rc)
+			break;
 	}
+	rcu_read_unlock();
 
-	lnet_net_unlock(cpt);
 	if (smp_load_acquire(&the_lnet.ln_state) != LNET_STATE_RUNNING)
 		return -ENOENT;
 	return rc;
