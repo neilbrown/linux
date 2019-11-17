@@ -311,34 +311,27 @@ static inline void
 lnet_ni_addref_locked(struct lnet_ni *ni, int cpt)
 {
 	LASSERT(cpt >= 0 && cpt < LNET_CPT_NUMBER);
-	LASSERT(*ni->ni_refs[cpt] >= 0);
-
-	(*ni->ni_refs[cpt])++;
+	percpu_ref_get(&ni->ni_refs);
 }
 
 static inline void
 lnet_ni_addref(struct lnet_ni *ni)
 {
-	lnet_net_lock(0);
 	lnet_ni_addref_locked(ni, 0);
-	lnet_net_unlock(0);
 }
 
 static inline void
 lnet_ni_decref_locked(struct lnet_ni *ni, int cpt)
 {
 	LASSERT(cpt >= 0 && cpt < LNET_CPT_NUMBER);
-	LASSERT(*ni->ni_refs[cpt] > 0);
 
-	(*ni->ni_refs[cpt])--;
+	percpu_ref_put(&ni->ni_refs);
 }
 
 static inline void
 lnet_ni_decref(struct lnet_ni *ni)
 {
-	lnet_net_lock(0);
 	lnet_ni_decref_locked(ni, 0);
-	lnet_net_unlock(0);
 }
 
 static inline struct lnet_rsp_tracker *

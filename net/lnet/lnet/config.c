@@ -297,8 +297,7 @@ lnet_ni_free(struct lnet_ni *ni)
 
 	lnet_net_remove_cpts(ni->ni_cpts, ni->ni_ncpts, ni->ni_net);
 
-	if (ni->ni_refs)
-		cfs_percpt_free(ni->ni_refs);
+	percpu_ref_exit(&ni->ni_refs);
 
 	if (ni->ni_tx_queues)
 		cfs_percpt_free(ni->ni_tx_queues);
@@ -421,6 +420,11 @@ lnet_ni_add_interface(struct lnet_ni *ni, char *iface)
 	return 0;
 }
 
+static void ref_release(struct percpu_ref *ref)
+{
+	wake_up_var(ref);
+}
+
 static struct lnet_ni *
 lnet_ni_alloc_common(struct lnet_net *net, char *iface)
 {
@@ -446,9 +450,7 @@ lnet_ni_alloc_common(struct lnet_net *net, char *iface)
 	INIT_LIST_HEAD(&ni->ni_netlist);
 	INIT_LIST_HEAD(&ni->ni_recovery);
 	LNetInvalidateMDHandle(&ni->ni_ping_mdh);
-	ni->ni_refs = cfs_percpt_alloc(lnet_cpt_table(),
-				       sizeof(*ni->ni_refs[0]));
-	if (!ni->ni_refs)
+	if (percpu_ref_init(&ni->ni_refs, ref_release, 0, GFP_KERNEL) < 0)
 		goto failed;
 
 	ni->ni_tx_queues = cfs_percpt_alloc(lnet_cpt_table(),

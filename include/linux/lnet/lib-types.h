@@ -417,7 +417,7 @@ struct lnet_ni {
 	struct lnet_tx_queue	**ni_tx_queues;
 
 	/* percpt reference count */
-	int			**ni_refs;
+	struct percpu_ref	  ni_refs;
 
 	/* pointer to parent network */
 	struct lnet_net		*ni_net;

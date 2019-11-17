@@ -1917,7 +1917,7 @@ lnet_ni_unlink_locked(struct lnet_ni *ni)
 	/* move it to zombie list and nobody can find it anymore */
 	LASSERT(!list_empty(&ni->ni_netlist));
 	list_move(&ni->ni_netlist, &ni->ni_net->net_ni_zombie);
-	lnet_ni_decref_locked(ni, 0);
+	percpu_ref_kill_and_confirm(&ni->ni_refs, NULL);
 }
 
 static void
@@ -1932,36 +1932,33 @@ lnet_clear_zombies_nis_locked(struct lnet_net *net)
 	 * Now wait for the NIs I just nuked to show up on the zombie
 	 * list and shut them down in guaranteed thread context
 	 */
-	i = 2;
+	i = 1;
 	while ((ni = list_first_entry_or_null(zombie_list,
 					      struct lnet_ni,
 					      ni_netlist)) != NULL) {
-		int *ref;
-		int j;
 
-		list_del_init(&ni->ni_netlist);
+
 		/* the ni should be in deleting state. If it's not it's
 		 * a bug */
 		LASSERT(ni->ni_state == LNET_NI_STATE_DELETING);
-		cfs_percpt_for_each(ref, j, ni->ni_refs) {
-			if (!*ref)
-				continue;
-			/* still busy, add it back to zombie list */
-			list_add(&ni->ni_netlist, zombie_list);
-			break;
-		}
+		if (!percpu_ref_is_zero(&ni->ni_refs)) {
+			/* still busy, wait a while */
 
-		if (!list_empty(&ni->ni_netlist)) {
 			lnet_net_unlock(LNET_LOCK_EX);
 			++i;
-			if ((i & (-i)) == i) {
+
+			if (wait_var_event_timeout(
+				    &ni->ni_refs,
+				    percpu_ref_is_zero(&ni->ni_refs),
+				    HZ << i) == 0)
 				CDEBUG(D_WARNING, "Waiting for zombie LNI %s\n",
 				       libcfs_nid2str(ni->ni_nid));
-			}
-			schedule_timeout_uninterruptible(HZ);
+
 			lnet_net_lock(LNET_LOCK_EX);
 			continue;
 		}
+
+		list_del_init(&ni->ni_netlist);
 
 		lnet_net_unlock(LNET_LOCK_EX);
 
@@ -1975,7 +1972,7 @@ lnet_clear_zombies_nis_locked(struct lnet_net *net)
 			       libcfs_nid2str(ni->ni_nid));
 
 		lnet_ni_free(ni);
-		i = 2;
+		i = 1;
 
 		lnet_net_lock(LNET_LOCK_EX);
 	}
@@ -2285,7 +2282,6 @@ lnet_startup_lndnet(struct lnet_net *net, struct lnet_lnd_tunables *tun)
 		LASSERT(ni->ni_net->net_tunables.lct_peer_timeout <= 0 ||
 			ni->ni_net->net_lnd->lnd_query);
 
-		lnet_ni_addref(ni);
 		list_add_tail(&ni->ni_netlist, &local_ni_list);
 
 		ni_count++;
