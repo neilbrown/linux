@@ -377,9 +377,9 @@ static int proc_lnet_peers(struct ctl_table *table, int write,
 			if (i)
 				lnet_net_lock(i);
 			for (hash = 0; hash < LNET_PEER_HASH_SIZE; hash++) {
-				list_for_each_entry(peer,
-						    &ptable->pt_hash[hash],
-						    lpni_hashlist) {
+				hlist_for_each_entry(peer,
+						     &ptable->pt_hash[hash],
+						     lpni_hashlist) {
 					peer->lpni_mintxcredits =
 						peer->lpni_txcredits;
 					peer->lpni_minrtrcredits =
@@ -420,7 +420,7 @@ static int proc_lnet_peers(struct ctl_table *table, int write,
 		hoff++;
 	} else {
 		struct lnet_peer_ni *peer;
-		struct list_head *p;
+		struct hlist_node *p;
 		int skip;
 again:
 		p = NULL;
@@ -440,13 +440,13 @@ again:
 
 		while (hash < LNET_PEER_HASH_SIZE) {
 			if (!p)
-				p = ptable->pt_hash[hash].next;
+				p = ptable->pt_hash[hash].first;
 
-			while (p != &ptable->pt_hash[hash]) {
+			while (p) {
 				struct lnet_peer_ni *lp;
 
-				lp = list_entry(p, struct lnet_peer_ni,
-						lpni_hashlist);
+				lp = hlist_entry(p, struct lnet_peer_ni,
+						 lpni_hashlist);
 				if (!skip) {
 					peer = lp;
 
@@ -455,8 +455,7 @@ again:
 					 * on next iteration if we've just
 					 * drained lpni_hashlist
 					 */
-					if (lp->lpni_hashlist.next ==
-					    &ptable->pt_hash[hash]) {
+					if (lp->lpni_hashlist.next == NULL) {
 						hoff = 1;
 						hash++;
 					} else {

@@ -81,7 +81,7 @@ void
 lnet_peer_tables_destroy(void)
 {
 	struct lnet_peer_table *ptable;
-	struct list_head *hash;
+	struct hlist_head *hash;
 	int i;
 	int j;
 
@@ -97,7 +97,7 @@ lnet_peer_tables_destroy(void)
 
 		ptable->pt_hash = NULL;
 		for (j = 0; j < LNET_PEER_HASH_SIZE; j++)
-			LASSERT(list_empty(&hash[j]));
+			LASSERT(hlist_empty(&hash[j]));
 
 		kvfree(hash);
 	}
@@ -122,7 +122,7 @@ lnet_peer_ni_alloc(lnet_nid_t nid)
 	INIT_LIST_HEAD(&lpni->lpni_txq);
 	INIT_LIST_HEAD(&lpni->lpni_hashlist);
 	INIT_LIST_HEAD(&lpni->lpni_peer_nis);
-	INIT_LIST_HEAD(&lpni->lpni_recovery);
+	INIT_HLIST_NODE(&lpni->lpni_recovery);
 	INIT_LIST_HEAD(&lpni->lpni_on_remote_peer_ni_list);
 	kref_init(&lpni->lpni_kref);
 	LNetInvalidateMDHandle(&lpni->lpni_recovery_ping_mdh);
@@ -345,7 +345,7 @@ lnet_peer_ni_del_locked(struct lnet_peer_ni *lpni, bool force)
 	lnet_peer_remove_from_remote_list(lpni);
 
 	/* remove peer ni from the hash list. */
-	list_del_rcu(&lpni->lpni_hashlist);
+	hlist_del_rcu(&lpni->lpni_hashlist);
 
 	/*
 	 * indicate the peer is being deleted so the monitor thread can
@@ -391,7 +391,7 @@ int
 lnet_peer_tables_create(void)
 {
 	struct lnet_peer_table *ptable;
-	struct list_head *hash;
+	struct hlist_head *hash;
 	int i;
 	int j;
 
@@ -414,7 +414,7 @@ lnet_peer_tables_create(void)
 		INIT_LIST_HEAD(&ptable->pt_peer_list);
 
 		for (j = 0; j < LNET_PEER_HASH_SIZE; j++)
-			INIT_LIST_HEAD(&hash[j]);
+			INIT_HLIST_HEAD(&hash[j]);
 		ptable->pt_hash = hash; /* sign of initialization */
 	}
 
@@ -519,13 +519,13 @@ lnet_peer_table_cleanup_locked(struct lnet_net *net,
 			       struct lnet_peer_table *ptable)
 {
 	int i;
-	struct lnet_peer_ni *next;
+	struct hlist_node *next;
 	struct lnet_peer_ni *lpni;
 	struct lnet_peer *peer;
 
 	for (i = 0; i < LNET_PEER_HASH_SIZE; i++) {
-		list_for_each_entry_safe(lpni, next, &ptable->pt_hash[i],
-					 lpni_hashlist) {
+		hlist_for_each_entry_safe(lpni, next, &ptable->pt_hash[i],
+					  lpni_hashlist) {
 			if (net && net != lpni->lpni_net)
 				continue;
 
@@ -539,11 +539,12 @@ lnet_peer_table_cleanup_locked(struct lnet_net *net,
 			 * the entire peer. Advance next beyond any
 			 * peer_ni that belongs to the same peer.
 			 */
-			list_for_each_entry_from(next, &ptable->pt_hash[i],
-						 lpni_hashlist) {
-				if (next->lpni_peer_net->lpn_peer != peer)
+			lpni = hlist_entry(next, struct lnet_peer_ni, lpni_hashlist);
+			hlist_for_each_entry_from(lpni, lpni_hashlist) {
+				if (lpni->lpni_peer_net->lpn_peer != peer)
 					break;
 			}
+			next = &lpni->lpni_hashlist;
 			lnet_peer_del_locked(peer);
 		}
 	}
@@ -570,12 +571,12 @@ lnet_peer_table_del_rtrs_locked(struct lnet_net *net,
 				struct lnet_peer_table *ptable)
 {
 	struct lnet_peer_ni *lp;
-	struct lnet_peer_ni *tmp;
+	struct hlist_node *tmp;
 	lnet_nid_t gw_nid;
 	int i;
 
 	for (i = 0; i < LNET_PEER_HASH_SIZE; i++) {
-		list_for_each_entry_safe(lp, tmp, &ptable->pt_hash[i],
+		hlist_for_each_entry_safe(lp, tmp, &ptable->pt_hash[i],
 					 lpni_hashlist) {
 			if (net != lp->lpni_net)
 				continue;
@@ -625,13 +626,13 @@ lnet_peer_tables_cleanup(struct lnet_net *net)
 static struct lnet_peer_ni *
 lnet_get_peer_ni_locked(struct lnet_peer_table *ptable, lnet_nid_t nid)
 {
-	struct list_head *peers;
+	struct hlist_head *peers;
 	struct lnet_peer_ni *lp;
 
 	LASSERT(the_lnet.ln_state == LNET_STATE_RUNNING);
 
 	peers = &ptable->pt_hash[lnet_nid2peerhash(nid)];
-	list_for_each_entry(lp, peers, lpni_hashlist) {
+	hlist_for_each_entry(lp, peers, lpni_hashlist) {
 		if (lp->lpni_nid == nid) {
 			lnet_peer_ni_addref_locked(lp);
 			return lp;
@@ -1226,11 +1227,11 @@ lnet_peer_attach_peer_ni(struct lnet_peer *lp,
 	/* Install the new peer_ni */
 	lnet_net_lock(LNET_LOCK_EX);
 	/* Add peer_ni to global peer table hash, if necessary. */
-	if (list_empty(&lpni->lpni_hashlist)) {
+	if (hlist_unhashed(&lpni->lpni_hashlist)) {
 		int hash = lnet_nid2peerhash(lpni->lpni_nid);
 
 		ptable = the_lnet.ln_peer_tables[lpni->lpni_cpt];
-		list_add_tail(&lpni->lpni_hashlist, &ptable->pt_hash[hash]);
+		hlist_add_head(&lpni->lpni_hashlist, &ptable->pt_hash[hash]);
 		ptable->pt_version++;
 		atomic_inc(&ptable->pt_number);
 	}
@@ -3526,9 +3527,9 @@ lnet_get_peer_ni_info(u32 peer_index, u64 *nid,
 	lnet_net_lock(*cpt_iter);
 
 	for (j = 0; j < LNET_PEER_HASH_SIZE && !found; j++) {
-		struct list_head *peers = &peer_table->pt_hash[j];
+		struct hlist_head *peers = &peer_table->pt_hash[j];
 
-		list_for_each_entry(lp, peers, lpni_hashlist) {
+		hlist_for_each_entry(lp, peers, lpni_hashlist) {
 			if (peer_index-- > 0)
 				continue;
 

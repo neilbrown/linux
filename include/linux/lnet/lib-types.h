@@ -506,7 +506,7 @@ struct lnet_peer_ni {
 	/* chain on recovery queue */
 	struct list_head	lpni_recovery;
 	/* chain on peer hash */
-	struct list_head	 lpni_hashlist;
+	struct hlist_node	 lpni_hashlist;
 	/* messages blocking for tx credits */
 	union {
 		struct list_head	lpni_txq;
@@ -770,7 +770,7 @@ struct lnet_peer_table {
 	/* # zombies to go to deathrow (and not there yet) */
 	atomic_t		 pt_zombies;
 	/* NID->peer hash */
-	struct list_head	*pt_hash;
+	struct hlist_head	*pt_hash;
 };
 
 /*
