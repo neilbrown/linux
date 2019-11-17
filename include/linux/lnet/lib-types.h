@@ -377,8 +377,8 @@ struct lnet_net {
 	/* list of NIs being added, but not started yet */
 	struct list_head	net_ni_added;
 
-	/* dying LND instances */
-	struct list_head	net_ni_zombie;
+	/* dying LND instances, linked on ni_netlist.prev */
+	struct list_head	*net_ni_zombie;
 
 	/* when I was last alive */
 	time64_t		net_last_alive;
@@ -407,8 +407,12 @@ struct lnet_ni {
 	/* interface's NID */
 	lnet_nid_t		ni_nid;
 
-	/* instance-specific data */
-	void			*ni_data;
+	union {
+		/* instance-specific data */
+		void			*ni_data;
+		/* handle for kfree_rcu */
+		struct rcu_head		ni_rcu;
+	};
 
 	/* per ni credits */
 	atomic_t		ni_tx_credits;

@@ -1916,7 +1916,10 @@ lnet_ni_unlink_locked(struct lnet_ni *ni)
 {
 	/* move it to zombie list and nobody can find it anymore */
 	LASSERT(!list_empty(&ni->ni_netlist));
-	list_move(&ni->ni_netlist, &ni->ni_net->net_ni_zombie);
+	list_del_rcu(&ni->ni_netlist);
+	/* ->next pointer must not be changed, ->prev is free for use */
+	ni->ni_netlist.prev = ni->ni_net->net_ni_zombie;
+	ni->ni_net->net_ni_zombie = &ni->ni_netlist;
 	percpu_ref_kill_and_confirm(&ni->ni_refs, NULL);
 }
 
@@ -1926,18 +1929,15 @@ lnet_clear_zombies_nis_locked(struct lnet_net *net)
 	int i;
 	int islo;
 	struct lnet_ni *ni;
-	struct list_head *zombie_list = &net->net_ni_zombie;
+	struct list_head **zombie_list = &net->net_ni_zombie;
 
 	/*
 	 * Now wait for the NIs I just nuked to show up on the zombie
 	 * list and shut them down in guaranteed thread context
 	 */
 	i = 1;
-	while ((ni = list_first_entry_or_null(zombie_list,
-					      struct lnet_ni,
-					      ni_netlist)) != NULL) {
-
-
+	while (*zombie_list != NULL) {
+		ni = list_entry(*zombie_list, struct lnet_ni, ni_netlist);
 		/* the ni should be in deleting state. If it's not it's
 		 * a bug */
 		LASSERT(ni->ni_state == LNET_NI_STATE_DELETING);
@@ -1958,7 +1958,7 @@ lnet_clear_zombies_nis_locked(struct lnet_net *net)
 			continue;
 		}
 
-		list_del_init(&ni->ni_netlist);
+		*zombie_list = ni->ni_netlist.prev;
 
 		lnet_net_unlock(LNET_LOCK_EX);
 

@@ -311,7 +311,7 @@ lnet_ni_free(struct lnet_ni *ni)
 	if (ni->ni_net_ns)
 		put_net(ni->ni_net_ns);
 
-	kfree(ni);
+	kfree_rcu(ni, ni_rcu);
 }
 
 void
@@ -320,7 +320,7 @@ lnet_net_free(struct lnet_net *net)
 	struct list_head *tmp, *tmp2;
 	struct lnet_ni *ni;
 
-	LASSERT(list_empty(&net->net_ni_zombie));
+	LASSERT(net->net_ni_zombie == NULL);
 
 	/*
 	 * delete any nis that haven't been added yet. This could happen
@@ -335,7 +335,7 @@ lnet_net_free(struct lnet_net *net)
 	/* delete any nis which have been started. */
 	list_for_each_safe(tmp, tmp2, &net->net_ni_list) {
 		ni = list_entry(tmp, struct lnet_ni, ni_netlist);
-		list_del_init(&ni->ni_netlist);
+		list_del_rcu(&ni->ni_netlist);
 		lnet_ni_free(ni);
 	}
 
@@ -364,7 +364,7 @@ lnet_net_alloc(u32 net_id, struct list_head *net_list)
 	INIT_LIST_HEAD(&net->net_list);
 	INIT_LIST_HEAD(&net->net_ni_list);
 	INIT_LIST_HEAD(&net->net_ni_added);
-	INIT_LIST_HEAD(&net->net_ni_zombie);
+	net->net_ni_zombie = NULL;
 	spin_lock_init(&net->net_lock);
 
 	net->net_id = net_id;
@@ -472,7 +472,7 @@ lnet_ni_alloc_common(struct lnet_net *net, char *iface)
 		ni->ni_net_ns = NULL;
 
 	ni->ni_state = LNET_NI_STATE_INIT;
-	list_add_tail(&ni->ni_netlist, &net->net_ni_added);
+	list_add_tail_rcu(&ni->ni_netlist, &net->net_ni_added);
 
 	/*
 	 * if an interface name is provided then make sure to add in that
