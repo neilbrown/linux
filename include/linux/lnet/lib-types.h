@@ -508,7 +508,10 @@ struct lnet_peer_ni {
 	/* chain on peer hash */
 	struct list_head	 lpni_hashlist;
 	/* messages blocking for tx credits */
-	struct list_head	 lpni_txq;
+	union {
+		struct list_head	lpni_txq;
+		struct rcu_head		lpni_rcu;
+	};
 	/* statistics kept on each peer NI */
 	struct lnet_element_stats lpni_stats;
 	struct lnet_health_remote_stats lpni_hstats;

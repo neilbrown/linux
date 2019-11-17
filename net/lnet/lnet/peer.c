@@ -345,7 +345,7 @@ lnet_peer_ni_del_locked(struct lnet_peer_ni *lpni, bool force)
 	lnet_peer_remove_from_remote_list(lpni);
 
 	/* remove peer ni from the hash list. */
-	list_del_init(&lpni->lpni_hashlist);
+	list_del_rcu(&lpni->lpni_hashlist);
 
 	/*
 	 * indicate the peer is being deleted so the monitor thread can
@@ -1696,7 +1696,7 @@ lnet_destroy_peer_ni_locked(struct kref *ref)
 
 	if (lpni->lpni_pref_nnids > 1)
 		kfree(lpni->lpni_pref.nids);
-	kfree(lpni);
+	kfree_rcu(lpni, lpni_rcu);
 
 	lnet_peer_net_decref_locked(lpn);
 }
