@@ -2061,7 +2061,6 @@ lnet_shutdown_lndnets(void)
 	LASSERT(the_lnet.ln_state == LNET_STATE_RUNNING);
 	LASSERT(!the_lnet.ln_refcount);
 
-	lnet_net_lock(LNET_LOCK_EX);
 	/*
 	 * If ln_state is not LNET_STATE_RUNNING, code that walks
 	 * ln_nets without holding ln_api_mutex will act as though
@@ -2074,7 +2073,6 @@ lnet_shutdown_lndnets(void)
 		lnet_ni_decref(the_lnet.ln_loni);
 		the_lnet.ln_loni = NULL;
 	}
-	lnet_net_unlock(LNET_LOCK_EX);
 
 	/* iterate through the net list and delete each net */
 	while ((net = list_first_entry_or_null(&the_lnet.ln_nets,
