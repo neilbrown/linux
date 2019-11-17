@@ -472,7 +472,7 @@ static const struct rhashtable_params ns_rs_hash_params = {
 	.head_offset	= offsetof(struct ldlm_resource, lr_hash),
 	.obj_cmpfn	= rs_cmp,
 	.automatic_shrinking = true,
-	.percpu_count	= true,
+//	.percpu_count	= true,
 };
 
 static struct {

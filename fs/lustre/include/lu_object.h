@@ -553,6 +553,11 @@ struct lu_site {
 	 * objects hash table
 	 */
 	struct cfs_hash	       *ls_obj_hash;
+	/*
+	 * buckets for summary data
+	 */
+	struct lu_site_bkt_data *ls_bkts;
+	int			ls_bkt_cnt;
 	/**
 	 * index of bucket on hash table while purging
 	 */
