@@ -507,9 +507,9 @@ struct lu_object_header {
 	 */
 	u32			loh_attr;
 	/**
-	 * Linkage into per-site hash table. Protected by lu_site::ls_guard.
+	 * Linkage into per-site hash table.
 	 */
-	struct hlist_node	loh_hash;
+	struct rhash_head	loh_hash;
 	/**
 	 * Linkage into per-site LRU list. Protected by lu_site::ls_guard.
 	 * memory shared with lru_head for delayed freeing;
@@ -556,7 +556,7 @@ struct lu_site {
 	/**
 	 * objects hash table
 	 */
-	struct cfs_hash	       *ls_obj_hash;
+	struct rhashtable	ls_obj_hash;
 	/*
 	 * buckets for summary data
 	 */
@@ -632,6 +632,8 @@ int lu_object_init(struct lu_object *o,
 void lu_object_fini(struct lu_object *o);
 void lu_object_add_top(struct lu_object_header *h, struct lu_object *o);
 void lu_object_add(struct lu_object *before, struct lu_object *o);
+struct lu_object *lu_object_get_first(struct lu_object_header *h,
+				      struct lu_device *dev);
 
 /**
  * Helpers to initialize and finalize device types.
