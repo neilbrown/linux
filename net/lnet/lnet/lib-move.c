@@ -869,7 +869,7 @@ lnet_return_tx_credits_locked(struct lnet_msg *msg)
 
 	if (txni) {
 		msg->msg_txni = NULL;
-		lnet_ni_decref_locked(txni, msg->msg_tx_cpt);
+		lnet_ni_decref(txni);
 	}
 
 	if (txpeer) {
@@ -1026,7 +1026,7 @@ routing_off:
 	}
 	if (rxni) {
 		msg->msg_rxni = NULL;
-		lnet_ni_decref_locked(rxni, msg->msg_rx_cpt);
+		lnet_ni_decref(rxni);
 	}
 	if (rxpeerni) {
 		msg->msg_rxpeer = NULL;
@@ -1505,7 +1505,7 @@ lnet_handle_send(struct lnet_send_data *sd)
 	 * grab a reference for the best_ni since now it's in use in this
 	 * send. The reference will be dropped in lnet_finalize()
 	 */
-	lnet_ni_addref_locked(msg->msg_txni, sd->sd_cpt);
+	lnet_ni_addref(msg->msg_txni, sd->sd_cpt);
 
 	/*
 	 * Always set the target.nid to the best peer picked. Either the
@@ -2950,7 +2950,7 @@ lnet_recover_local_nis(void)
 			if (list_empty(&ni->ni_recovery)) {
 				list_add_tail(&ni->ni_recovery,
 					      &processed_list);
-				lnet_ni_addref_locked(ni, 0);
+				lnet_ni_addref(ni, 0);
 			}
 			lnet_net_unlock(0);
 
@@ -4211,7 +4211,7 @@ lnet_parse(struct lnet_ni *ni, struct lnet_hdr *hdr, lnet_nid_t from_nid,
 
 	msg->msg_rxpeer = lpni;
 	msg->msg_rxni = ni;
-	lnet_ni_addref_locked(ni, cpt);
+	lnet_ni_addref(ni);
 	/* Multi-Rail: Primary NID of source. */
 	msg->msg_initiator = lnet_peer_primary_nid_locked(src_nid);
 

@@ -487,7 +487,7 @@ lnet_handle_local_failure(struct lnet_ni *local_ni)
 		       atomic_read(&local_ni->ni_healthv));
 		list_add_tail(&local_ni->ni_recovery,
 			      &the_lnet.ln_mt_localNIRecovq);
-		lnet_ni_addref_locked(local_ni, 0);
+		lnet_ni_addref(local_ni, 0);
 	}
 	lnet_net_unlock(0);
 }

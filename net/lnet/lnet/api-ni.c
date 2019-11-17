@@ -1237,7 +1237,7 @@ lnet_net2ni_addref(u32 net)
 	lnet_net_lock(0);
 	ni = lnet_net2ni_locked(net, 0);
 	if (ni)
-		lnet_ni_addref_locked(ni, 0);
+		lnet_ni_addref(ni);
 	lnet_net_unlock(0);
 
 	return ni;
@@ -1378,7 +1378,7 @@ lnet_nid2ni_addref(lnet_nid_t nid)
 	lnet_net_lock(0);
 	ni = lnet_nid2ni_locked(nid, 0);
 	if (ni)
-		lnet_ni_addref_locked(ni, 0);
+		lnet_ni_addref(ni);
 	lnet_net_unlock(0);
 
 	return ni;
@@ -2063,7 +2063,7 @@ lnet_shutdown_lndnets(void)
 
 	/* Drop the cached loopback Net. */
 	if (the_lnet.ln_loni) {
-		lnet_ni_decref_locked(the_lnet.ln_loni, 0);
+		lnet_ni_decref(the_lnet.ln_loni);
 		the_lnet.ln_loni = NULL;
 	}
 	lnet_net_unlock(LNET_LOCK_EX);
@@ -3368,7 +3368,7 @@ lnet_ni_set_healthv(lnet_nid_t nid, int value, bool all)
 					       libcfs_nid2str(ni->ni_nid));
 					list_add_tail(&ni->ni_recovery,
 						      &the_lnet.ln_mt_localNIRecovq);
-					lnet_ni_addref_locked(ni, 0);
+					lnet_ni_addref(ni, 0);
 				}
 				if (!all) {
 					lnet_net_unlock(LNET_LOCK_EX);

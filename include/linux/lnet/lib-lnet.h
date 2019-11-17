@@ -308,30 +308,15 @@ lnet_isrouter(struct lnet_peer_ni *lpni)
 }
 
 static inline void
-lnet_ni_addref_locked(struct lnet_ni *ni, int cpt)
-{
-	LASSERT(cpt >= 0 && cpt < LNET_CPT_NUMBER);
-	percpu_ref_get(&ni->ni_refs);
-}
-
-static inline void
 lnet_ni_addref(struct lnet_ni *ni)
 {
-	lnet_ni_addref_locked(ni, 0);
-}
-
-static inline void
-lnet_ni_decref_locked(struct lnet_ni *ni, int cpt)
-{
-	LASSERT(cpt >= 0 && cpt < LNET_CPT_NUMBER);
-
-	percpu_ref_put(&ni->ni_refs);
+	percpu_ref_get(&ni->ni_refs);
 }
 
 static inline void
 lnet_ni_decref(struct lnet_ni *ni)
 {
-	lnet_ni_decref_locked(ni, 0);
+	percpu_ref_put(&ni->ni_refs);
 }
 
 static inline struct lnet_rsp_tracker *
