@@ -35,7 +35,6 @@
 
 #include <linux/workqueue.h>
 #include <linux/highmem.h>
-#include <linux/libcfs/libcfs_hash.h>
 #include <linux/sched/mm.h>
 
 #include <lustre_dlm.h>

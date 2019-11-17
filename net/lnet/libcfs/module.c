@@ -729,13 +729,6 @@ int libcfs_setup(void)
 	if (rc)
 		goto err;
 
-	cfs_rehash_wq = alloc_workqueue("cfs_rh", WQ_SYSFS, 4);
-	if (!cfs_rehash_wq) {
-		CERROR("Failed to start rehash workqueue.\n");
-		rc = -ENOMEM;
-		goto err;
-	}
-
 	rc = cfs_crypto_register();
 	if (rc) {
 		CERROR("cfs_crypto_register: error %d\n", rc);
@@ -749,8 +742,6 @@ out:
 	return 0;
 err:
 	cfs_crypto_unregister();
-	if (cfs_rehash_wq)
-		destroy_workqueue(cfs_rehash_wq);
 	cfs_cpu_fini();
 	libcfs_debug_cleanup();
 	mutex_unlock(&libcfs_startup);
@@ -781,9 +772,6 @@ static void libcfs_exit(void)
 	/* Remove everthing */
 	debugfs_remove_recursive(lnet_debugfs_root);
 	lnet_debugfs_root = NULL;
-
-	if (cfs_rehash_wq)
-		destroy_workqueue(cfs_rehash_wq);
 
 	cfs_crypto_unregister();
 
