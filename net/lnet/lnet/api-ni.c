@@ -1222,6 +1222,8 @@ lnet_net2ni_locked(u32 net_id, int cpt)
 		if (net->net_id == net_id) {
 			ni = list_first_entry(&net->net_ni_list, struct lnet_ni,
 					      ni_netlist);
+			if (smp_load_acquire(&the_lnet.ln_state) != LNET_STATE_RUNNING)
+				return NULL;
 			return ni;
 		}
 	}
@@ -1250,8 +1252,12 @@ lnet_get_net_locked(u32 net_id)
 	struct lnet_net *net;
 
 	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
-		if (net->net_id == net_id)
+		if (net->net_id == net_id) {
+			if (smp_load_acquire(&the_lnet.ln_state) !=
+			    LNET_STATE_RUNNING)
+				return NULL;
 			return net;
+		}
 	}
 
 	return NULL;
@@ -1362,8 +1368,12 @@ lnet_nid2ni_locked(lnet_nid_t nid, int cpt)
 
 	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
 		list_for_each_entry(ni, &net->net_ni_list, ni_netlist) {
-			if (ni->ni_nid == nid)
+			if (ni->ni_nid == nid) {
+				if (smp_load_acquire(&the_lnet.ln_state) !=
+				    LNET_STATE_RUNNING)
+					return NULL;
 				return ni;
+			}
 		}
 	}
 
@@ -2052,14 +2062,12 @@ lnet_shutdown_lndnets(void)
 	LASSERT(!the_lnet.ln_refcount);
 
 	lnet_net_lock(LNET_LOCK_EX);
-	the_lnet.ln_state = LNET_STATE_STOPPING;
-
 	/*
-	 * move the nets to the zombie list to avoid them being
-	 * picked up for new work. LONET is also included in the
-	 * Nets that will be moved to the zombie list
+	 * If ln_state is not LNET_STATE_RUNNING, code that walks
+	 * ln_nets without holding ln_api_mutex will act as though
+	 * the list is empty.
 	 */
-	list_splice_init(&the_lnet.ln_nets, &the_lnet.ln_net_zombie);
+	smp_store_release(&the_lnet.ln_state, LNET_STATE_STOPPING);
 
 	/* Drop the cached loopback Net. */
 	if (the_lnet.ln_loni) {
@@ -2068,8 +2076,8 @@ lnet_shutdown_lndnets(void)
 	}
 	lnet_net_unlock(LNET_LOCK_EX);
 
-	/* iterate through the net zombie list and delete each net */
-	while ((net = list_first_entry_or_null(&the_lnet.ln_net_zombie,
+	/* iterate through the net list and delete each net */
+	while ((net = list_first_entry_or_null(&the_lnet.ln_nets,
 					       struct lnet_net,
 					       net_list)) != NULL)
 		lnet_shutdown_lndnet(net);
@@ -2413,7 +2421,6 @@ int lnet_lib_init(void)
 
 	the_lnet.ln_refcount = 0;
 	INIT_LIST_HEAD(&the_lnet.ln_lnds);
-	INIT_LIST_HEAD(&the_lnet.ln_net_zombie);
 	INIT_LIST_HEAD(&the_lnet.ln_msg_resend);
 
 	/*
@@ -2819,8 +2826,12 @@ lnet_get_ni_idx_locked(int idx)
 
 	list_for_each_entry(net, &the_lnet.ln_nets, net_list) {
 		list_for_each_entry(ni, &net->net_ni_list, ni_netlist) {
-			if (idx-- == 0)
+			if (idx-- == 0) {
+				if (smp_load_acquire(&the_lnet.ln_state) !=
+				    LNET_STATE_RUNNING)
+					return NULL;
 				return ni;
+			}
 		}
 	}
 
@@ -2843,10 +2854,14 @@ lnet_get_next_ni_locked(struct lnet_net *mynet, struct lnet_ni *prev)
 			net = list_first_entry(&the_lnet.ln_nets,
 					       struct lnet_net,
 					       net_list);
-		if (list_empty(&net->net_ni_list))
+
+		if (!net || (smp_load_acquire(&the_lnet.ln_state) !=
+			     LNET_STATE_RUNNING))
 			return NULL;
-		ni = list_first_entry(&net->net_ni_list, struct lnet_ni,
-				      ni_netlist);
+
+		ni = list_first_entry_or_null(&net->net_ni_list,
+					      struct lnet_ni,
+					      ni_netlist);
 
 		return ni;
 	}
@@ -2866,11 +2881,14 @@ lnet_get_next_ni_locked(struct lnet_net *mynet, struct lnet_ni *prev)
 		/* get the next net */
 		net = list_first_entry(&prev->ni_net->net_list, struct lnet_net,
 				       net_list);
-		if (list_empty(&net->net_ni_list))
+
+		if (smp_load_acquire(&the_lnet.ln_state) != LNET_STATE_RUNNING)
 			return NULL;
+
 		/* get the ni on it */
-		ni = list_first_entry(&net->net_ni_list, struct lnet_ni,
-				      ni_netlist);
+		ni = list_first_entry_or_null(&net->net_ni_list,
+					      struct lnet_ni,
+					      ni_netlist);
 
 		return ni;
 	}
@@ -3962,6 +3980,8 @@ LNetGetId(unsigned int index, struct lnet_process_id *id)
 	}
 
 	lnet_net_unlock(cpt);
+	if (smp_load_acquire(&the_lnet.ln_state) != LNET_STATE_RUNNING)
+		return -ENOENT;
 	return rc;
 }
 EXPORT_SYMBOL(LNetGetId);

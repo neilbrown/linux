@@ -1033,8 +1033,6 @@ struct lnet {
 
 	/* LND instances */
 	struct list_head		ln_nets;
-	/* network zombie list */
-	struct list_head		ln_net_zombie;
 	/* the loopback NI */
 	struct lnet_ni		       *ln_loni;
 	/* resend messages list */
