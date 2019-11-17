@@ -261,13 +261,20 @@ static int vvp_object_init(const struct lu_env *env, struct lu_object *obj,
 	return result;
 }
 
+static void __vvp_object_free(struct rcu_head *rcu)
+{
+	struct vvp_object *vob = container_of(rcu, struct vvp_object, vob_header.coh_lu.loh_rcu);
+
+	kmem_cache_free(vvp_object_kmem, vob);
+}
+
 static void vvp_object_free(const struct lu_env *env, struct lu_object *obj)
 {
 	struct vvp_object *vob = lu2vvp(obj);
 
 	lu_object_fini(obj);
 	lu_object_header_fini(obj->lo_header);
-	kmem_cache_free(vvp_object_kmem, vob);
+	call_rcu(&vob->vob_header.coh_lu.loh_rcu, __vvp_object_free);
 }
 
 static const struct lu_object_operations vvp_lu_obj_ops = {

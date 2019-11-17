@@ -444,6 +444,12 @@ static int echo_object_init(const struct lu_env *env, struct lu_object *obj,
 	return 0;
 }
 
+static void __echo_object_free(struct rcu_head *rcu)
+{
+	struct echo_object *eco = container_of(rcu, struct echo_object, eo_hdr.coh_lu.loh_rcu);
+	kmem_cache_free(echo_object_kmem, eco);
+}
+
 static void echo_object_delete(const struct lu_env *env, struct lu_object *obj)
 {
 	struct echo_object *eco = cl2echo_obj(lu2cl(obj));
@@ -471,7 +477,7 @@ static void echo_object_free(const struct lu_env *env, struct lu_object *obj)
 	lu_object_fini(obj);
 	lu_object_header_fini(obj->lo_header);
 
-	kmem_cache_free(echo_object_kmem, eco);
+	call_rcu(&eco->eo_hdr.coh_lu.loh_rcu, __echo_object_free);
 }
 
 static int echo_object_print(const struct lu_env *env, void *cookie,

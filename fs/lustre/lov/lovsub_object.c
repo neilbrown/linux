@@ -69,6 +69,13 @@ int lovsub_object_init(const struct lu_env *env, struct lu_object *obj,
 	return result;
 }
 
+static void __lovsub_object_free(struct rcu_head *rcu)
+{
+	struct lovsub_object *los = container_of(rcu, struct lovsub_object,
+						 lso_header.coh_lu.loh_rcu);
+	kmem_cache_free(lovsub_object_kmem, los);
+}
+
 static void lovsub_object_free(const struct lu_env *env, struct lu_object *obj)
 {
 	struct lovsub_object *los = lu2lovsub(obj);
@@ -91,7 +98,7 @@ static void lovsub_object_free(const struct lu_env *env, struct lu_object *obj)
 
 	lu_object_fini(obj);
 	lu_object_header_fini(&los->lso_header.coh_lu);
-	kmem_cache_free(lovsub_object_kmem, los);
+	call_rcu(&los->lso_header.coh_lu.loh_rcu, __lovsub_object_free);
 }
 
 static int lovsub_object_print(const struct lu_env *env, void *cookie,

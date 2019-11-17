@@ -512,8 +512,12 @@ struct lu_object_header {
 	struct hlist_node	loh_hash;
 	/**
 	 * Linkage into per-site LRU list. Protected by lu_site::ls_guard.
+	 * memory shared with lru_head for delayed freeing;
 	 */
-	struct list_head	loh_lru;
+	union {
+		struct list_head	loh_lru;
+		struct rcu_head		loh_rcu;
+	};
 	/**
 	 * Linkage into list of layers. Never modified once set (except lately
 	 * during object destruction). No locking is necessary.
