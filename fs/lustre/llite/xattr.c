@@ -529,11 +529,12 @@ out_env:
 		return rc;
 	} else if (S_ISDIR(inode->i_mode)) {
 		struct ptlrpc_request *req = NULL;
+		struct ptlrpc_request *root_req = NULL;
 		struct lov_mds_md *lmm = NULL;
 		int lmm_size = 0;
 
-		rc = ll_dir_getstripe(inode, (void **)&lmm, &lmm_size,
-				      &req, 0);
+		rc = ll_dir_getstripe_default(inode, (void **)&lmm, &lmm_size,
+					      &req, &root_req, 0);
 		if (rc < 0)
 			goto out_req;
 
@@ -552,6 +553,8 @@ out_env:
 out_req:
 		if (req)
 			ptlrpc_req_finished(req);
+		if (root_req)
+			ptlrpc_req_finished(root_req);
 
 		return rc;
 	} else {

@@ -135,6 +135,13 @@ static inline bool fid_is_mdt0(const struct lu_fid *fid)
 	return fid_seq_is_mdt0(fid_seq(fid));
 }
 
+static inline void lu_root_fid(struct lu_fid *fid)
+{
+	fid->f_seq = FID_SEQ_ROOT;
+	fid->f_oid = FID_OID_ROOT;
+	fid->f_ver = 0;
+}
+
 /**
  * Check if a fid is igif or not.
  *

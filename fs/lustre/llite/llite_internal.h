@@ -874,6 +874,11 @@ struct page *ll_get_dir_page(struct inode *dir, struct md_op_data *op_data,
 			     u64 offset);
 void ll_release_page(struct inode *inode, struct page *page, bool remove);
 
+enum get_default_layout_type {
+	GET_DEFAULT_LAYOUT_ROOT = 1,
+};
+
+
 /* llite/namei.c */
 extern const struct inode_operations ll_special_inode_operations;
 
@@ -945,7 +950,10 @@ int ll_lov_getstripe_ea_info(struct inode *inode, const char *filename,
 			     struct ptlrpc_request **request);
 int ll_dir_setstripe(struct inode *inode, struct lov_user_md *lump,
 		     int set_default);
-int ll_dir_getstripe(struct inode *inode, void **lmmp, int *lmm_size,
+int ll_dir_getstripe_default(struct inode *inode, void **lmmp,
+			     int *lmm_size, struct ptlrpc_request **request,
+			     struct ptlrpc_request **root_request, u64 valid);
+int ll_dir_getstripe(struct inode *inode, void **plmm, int *plmm_size,
 		     struct ptlrpc_request **request, u64 valid);
 int ll_fsync(struct file *file, loff_t start, loff_t end, int data);
 int ll_merge_attr(const struct lu_env *env, struct inode *inode);
