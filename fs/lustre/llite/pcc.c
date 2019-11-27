@@ -2042,16 +2042,21 @@ out:
 	return rc;
 }
 
-/* TODO: Set the project ID for PCC copy */
-int pcc_inode_store_ugpid(struct dentry *dentry, kuid_t uid, kgid_t gid)
+/*
+ * Reset uid, gid or size for the PCC copy masked by @valid.
+ * TODO: Set the project ID for PCC copy.
+ */
+int pcc_inode_reset_iattr(struct dentry *dentry, unsigned int valid,
+			  kuid_t uid, kgid_t gid, loff_t size)
 {
 	struct inode *inode = dentry->d_inode;
 	struct iattr attr;
 	int rc;
 
-	attr.ia_valid = ATTR_UID | ATTR_GID;
+	attr.ia_valid = valid;
 	attr.ia_uid = uid;
 	attr.ia_gid = gid;
+	attr.ia_size = size;
 
 	inode_lock(inode);
 	rc = notify_change(dentry, &attr, NULL);
@@ -2096,8 +2101,8 @@ int pcc_inode_create_fini(struct inode *inode, struct pcc_create_attach *pca)
 		goto out_put;
 	}
 
-	rc = pcc_inode_store_ugpid(pcc_dentry, old_cred->suid,
-				   old_cred->sgid);
+	rc = pcc_inode_reset_iattr(pcc_dentry, ATTR_UID | ATTR_GID,
+				   old_cred->suid, old_cred->sgid, 0);
 	if (rc)
 		goto out_put;
 
@@ -2171,9 +2176,9 @@ static int pcc_filp_write(struct file *filp, const void *buf, ssize_t count,
 	return 0;
 }
 
-static int pcc_copy_data(struct file *src, struct file *dst)
+static ssize_t pcc_copy_data(struct file *src, struct file *dst)
 {
-	int rc = 0;
+	ssize_t rc = 0;
 	ssize_t rc2;
 	loff_t pos, offset = 0;
 	size_t buf_len = 1048576;
@@ -2184,6 +2189,11 @@ static int pcc_copy_data(struct file *src, struct file *dst)
 		return -ENOMEM;
 
 	while (1) {
+		if (signal_pending(current)) {
+			rc = -EINTR;
+			goto out_free;
+		}
+
 		pos = offset;
 		rc2 = kernel_read(src, buf, buf_len, &pos);
 		if (rc2 < 0) {
@@ -2199,6 +2209,7 @@ static int pcc_copy_data(struct file *src, struct file *dst)
 		offset += rc2;
 	}
 
+	rc = offset;
 out_free:
 	kvfree(buf);
 	return rc;
@@ -2238,6 +2249,7 @@ int pcc_readwrite_attach(struct file *file, struct inode *inode,
 	struct dentry *dentry;
 	struct file *pcc_filp;
 	struct path path;
+	ssize_t ret;
 	int rc;
 
 	rc = pcc_attach_allowed_check(inode);
@@ -2251,27 +2263,35 @@ int pcc_readwrite_attach(struct file *file, struct inode *inode,
 
 	old_cred = override_creds(pcc_super_cred(inode->i_sb));
 	rc = __pcc_inode_create(dataset, &lli->lli_fid, &dentry);
-	if (rc) {
-		revert_creds(old_cred);
+	if (rc)
 		goto out_dataset_put;
-	}
 
 	path.mnt = dataset->pccd_path.mnt;
 	path.dentry = dentry;
-	pcc_filp = dentry_open(&path, O_TRUNC | O_WRONLY | O_LARGEFILE,
-			       current_cred());
+	pcc_filp = dentry_open(&path, O_WRONLY | O_LARGEFILE, current_cred());
 	if (IS_ERR_OR_NULL(pcc_filp)) {
 		rc = pcc_filp ? PTR_ERR(pcc_filp) : -EINVAL;
-		revert_creds(old_cred);
 		goto out_dentry;
 	}
 
-	rc = pcc_inode_store_ugpid(dentry, old_cred->uid, old_cred->gid);
-	revert_creds(old_cred);
+	rc = pcc_inode_reset_iattr(dentry, ATTR_UID | ATTR_GID,
+				   old_cred->uid, old_cred->gid, 0);
 	if (rc)
 		goto out_fput;
 
-	rc = pcc_copy_data(file, pcc_filp);
+	ret = pcc_copy_data(file, pcc_filp);
+	if (ret < 0) {
+		rc = ret;
+		goto out_fput;
+	}
+
+	/*
+	 * It must to truncate the PCC copy to the same size of the Lustre
+	 * copy after copy data. Otherwise, it may get wrong file size after
+	 * re-attach a file. See LU-13023 for details.
+	 */
+	rc = pcc_inode_reset_iattr(dentry, ATTR_SIZE, KUIDT_INIT(0),
+				   KGIDT_INIT(0), ret);
 	if (rc)
 		goto out_fput;
 
@@ -2295,13 +2315,13 @@ out_fput:
 	fput(pcc_filp);
 out_dentry:
 	if (rc) {
-		old_cred = override_creds(pcc_super_cred(inode->i_sb));
 		(void) pcc_inode_remove(inode, dentry);
-		revert_creds(old_cred);
 		dput(dentry);
 	}
 out_dataset_put:
 	pcc_dataset_put(dataset);
+	revert_creds(old_cred);
+
 	return rc;
 }
 
