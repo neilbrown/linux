@@ -810,6 +810,8 @@ struct lnet_route {
 	unsigned int		lr_priority;
 	/* cached route aliveness */
 	bool			lr_alive;
+	/* this route is single-hop */
+	bool			lr_single_hop;
 };
 
 #define LNET_REMOTE_NETS_HASH_DEFAULT	(1U << 7)

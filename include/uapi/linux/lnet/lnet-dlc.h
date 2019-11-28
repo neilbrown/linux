@@ -38,6 +38,9 @@
 #define LNET_MAX_SHOW_NUM_NID	128
 #define LNET_UNDEFINED_HOPS	((__u32)(-1))
 
+#define LNET_RT_ALIVE		BIT(0)
+#define LNET_RT_MULTI_HOP	BIT(1)
+
 /*
  * To allow for future enhancements to extend the tunables
  * add a hdr to this structure, so that the version can be set
