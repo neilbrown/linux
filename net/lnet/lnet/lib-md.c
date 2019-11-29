@@ -479,6 +479,9 @@ LNetMDUnlink(struct lnet_handle_md mdh)
 		md->md_eq(&ev);
 	}
 
+	if (md->md_rspt_ptr)
+		lnet_detach_rsp_tracker(md, cpt);
+
 	lnet_md_unlink(md);
 
 	lnet_res_unlock(cpt);
