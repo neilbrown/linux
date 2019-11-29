@@ -4393,7 +4393,7 @@ lnet_attach_rsp_tracker(struct lnet_rsp_tracker *rspt, int cpt,
 		 * we already have an rspt attached to the md, so we'll
 		 * update the deadline on that one.
 		 */
-		kfree(rspt);
+		lnet_rspt_free(rspt, cpt);
 		new_entry = false;
 	} else {
 		/* new md */
@@ -4515,7 +4515,7 @@ LNetPut(lnet_nid_t self, struct lnet_handle_md mdh, enum lnet_ack_req ack,
 			       md->md_me->me_portal);
 		lnet_res_unlock(cpt);
 
-		kfree(rspt);
+		lnet_rspt_free(rspt, cpt);
 		kfree(msg);
 		return -ENOENT;
 	}
@@ -4752,7 +4752,7 @@ LNetGet(lnet_nid_t self, struct lnet_handle_md mdh,
 		lnet_res_unlock(cpt);
 
 		kfree(msg);
-		kfree(rspt);
+		lnet_rspt_free(rspt, cpt);
 		return -ENOENT;
 	}
 

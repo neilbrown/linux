@@ -347,9 +347,11 @@ lnet_rspt_alloc(int cpt)
 	struct lnet_rsp_tracker *rspt;
 
 	rspt = kzalloc(sizeof(*rspt), GFP_NOFS);
-	lnet_net_lock(cpt);
-	the_lnet.ln_counters[cpt]->lct_health.lch_rst_alloc++;
-	lnet_net_unlock(cpt);
+	if (rspt) {
+		lnet_net_lock(cpt);
+		the_lnet.ln_counters[cpt]->lct_health.lch_rst_alloc++;
+		lnet_net_unlock(cpt);
+	}
 	return rspt;
 }
 
