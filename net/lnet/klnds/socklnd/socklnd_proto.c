@@ -367,7 +367,7 @@ ksocknal_match_tx_v3(struct ksock_conn *conn, struct ksock_tx *tx, int nonblk)
 static int
 ksocknal_handle_zcreq(struct ksock_conn *c, u64 cookie, int remote)
 {
-	struct ksock_peer *peer_ni = c->ksnc_peer;
+	struct ksock_peer_ni *peer_ni = c->ksnc_peer;
 	struct ksock_conn *conn;
 	struct ksock_tx *tx;
 	int rc;
@@ -411,7 +411,7 @@ ksocknal_handle_zcreq(struct ksock_conn *c, u64 cookie, int remote)
 static int
 ksocknal_handle_zcack(struct ksock_conn *conn, u64 cookie1, u64 cookie2)
 {
-	struct ksock_peer *peer_ni = conn->ksnc_peer;
+	struct ksock_peer_ni *peer_ni = conn->ksnc_peer;
 	struct ksock_tx *tx;
 	struct ksock_tx *tmp;
 	LIST_HEAD(zlist);
