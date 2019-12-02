@@ -719,6 +719,9 @@ struct lnet_peer {
 /* gw has undergone discovery (does not indicate success or failure) */
 #define LNET_PEER_RTR_DISCOVERED BIT(17)
 
+/* peer is marked for deletion */
+#define LNET_PEER_MARK_DELETION BIT(18)
+
 struct lnet_peer_net {
 	/* chain on lp_peer_nets */
 	struct list_head	lpn_peer_nets;
