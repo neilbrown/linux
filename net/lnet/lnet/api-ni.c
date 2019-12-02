@@ -731,7 +731,6 @@ static void lnet_assert_wire_constants(void)
 
 struct {
 	const struct lnet_lnd	*lnd;
-	int			lnd_refcount;
 } lnet_lnds[NUM_LNDS];
 
 static const struct lnet_lnd *
@@ -755,19 +754,9 @@ lnet_find_lnd_by_type(u32 type)
 
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 	lnd = __lnet_find_lnd_by_type(type);
-	if (lnd)
-		lnet_lnds[type].lnd_refcount ++;
 	mutex_unlock(&the_lnet.ln_lnd_mutex);
 
 	return lnd;
-}
-
-static void
-lnet_put_lnd(const struct lnet_lnd *lnd)
-{
-	mutex_lock(&the_lnet.ln_lnd_mutex);
-	lnet_lnds[lnd->lnd_type].lnd_refcount --;
-	mutex_unlock(&the_lnet.ln_lnd_mutex);
 }
 
 unsigned int
@@ -786,7 +775,6 @@ lnet_register_lnd(const struct lnet_lnd *lnd)
 	LASSERT(!__lnet_find_lnd_by_type(lnd->lnd_type));
 
 	lnet_lnds[lnd->lnd_type].lnd = lnd;
-	lnet_lnds[lnd->lnd_type].lnd_refcount = 0;
 
 	CDEBUG(D_NET, "%s LND registered\n", libcfs_lnd2str(lnd->lnd_type));
 
@@ -800,7 +788,6 @@ lnet_unregister_lnd(const struct lnet_lnd *lnd)
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 
 	LASSERT(__lnet_find_lnd_by_type(lnd->lnd_type) == lnd);
-	LASSERT(!lnet_lnds[lnd->lnd_type].lnd_refcount);
 
 	lnet_lnds[lnd->lnd_type].lnd = NULL;
 	CDEBUG(D_NET, "%s LND unregistered\n", libcfs_lnd2str(lnd->lnd_type));
@@ -2025,11 +2012,6 @@ lnet_shutdown_lndnet(struct lnet_net *net)
 	lnet_peer_tables_cleanup(net);
 
 	lnet_net_lock(LNET_LOCK_EX);
-	/*
-	 * decrement ref count on lnd only when the entire network goes
-	 * away
-	 */
-	lnet_put_lnd(net->net_lnd);
 
 	lnet_net_unlock(LNET_LOCK_EX);
 
@@ -2109,9 +2091,6 @@ lnet_startup_lndni(struct lnet_ni *ni, struct lnet_lnd_tunables *tun)
 	if (rc) {
 		LCONSOLE_ERROR_MSG(0x105, "Error %d starting up LNI %s\n",
 				   rc, libcfs_lnd2str(net->net_lnd->lnd_type));
-		lnet_net_lock(LNET_LOCK_EX);
-		lnet_put_lnd(net->net_lnd);
-		lnet_net_unlock(LNET_LOCK_EX);
 		goto failed0;
 	}
 
