@@ -47,6 +47,7 @@
 #include <uapi/linux/lnet/lnet-types.h>
 #include <uapi/linux/lnet/lnetctl.h>
 #include <uapi/linux/lnet/lnet-dlc.h>
+#include <uapi/linux/lnet/nidstr.h>
 
 /* Max payload size */
 #define LNET_MAX_PAYLOAD	LNET_MTU
@@ -1109,7 +1110,7 @@ struct lnet {
 	/* uniquely identifies this ni in this epoch */
 	u64				ln_interface_cookie;
 	/* registered LNDs */
-	struct list_head		ln_lnds;
+	const struct lnet_lnd		*ln_lnds[NUM_LNDS];
 
 	/* test protocol compatibility flags */
 	unsigned long			ln_testprotocompat;
