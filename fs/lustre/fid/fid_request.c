@@ -117,22 +117,22 @@ static int seq_client_rpc(struct lu_client_seq *seq,
 		goto out_req;
 
 	out = req_capsule_server_get(&req->rq_pill, &RMF_SEQ_RANGE);
-
-	if (!lu_seq_range_is_sane(out)) {
-		CERROR("%s: Invalid range received from server: "
-		       DRANGE "\n", seq->lcs_name, PRANGE(out));
-		rc = -EINVAL;
-		goto out_req;
-	}
-
-	if (lu_seq_range_is_exhausted(out)) {
-		CERROR("%s: Range received from server is exhausted: "
-		       DRANGE "]\n", seq->lcs_name, PRANGE(out));
-		rc = -EINVAL;
-		goto out_req;
-	}
-
 	*output = *out;
+
+	if (!lu_seq_range_is_sane(output)) {
+		CERROR("%s: Invalid range received from server: "
+		       DRANGE "\n", seq->lcs_name, PRANGE(output));
+		rc = -EINVAL;
+		goto out_req;
+	}
+
+	if (lu_seq_range_is_exhausted(output)) {
+		CERROR("%s: Range received from server is exhausted: "
+		       DRANGE "]\n", seq->lcs_name, PRANGE(output));
+		rc = -EINVAL;
+		goto out_req;
+	}
+
 	CDEBUG_LIMIT(debug_mask, "%s: Allocated %s-sequence " DRANGE "]\n",
 		     seq->lcs_name, opcname, PRANGE(output));
 
