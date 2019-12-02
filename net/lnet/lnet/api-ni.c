@@ -891,12 +891,11 @@ lnet_res_container_cleanup(struct lnet_res_container *rec)
 		struct list_head *e = rec->rec_active.next;
 
 		list_del_init(e);
-		if (rec->rec_type == LNET_COOKIE_TYPE_MD) {
-			kfree(list_entry(e, struct lnet_libmd, md_list));
-
-		} else { /* NB: Active MEs should be attached on portals */
+		if (rec->rec_type == LNET_COOKIE_TYPE_MD)
+			lnet_md_free(list_entry(e, struct lnet_libmd, md_list));
+		else /* NB: Active MEs should be attached on portals */
 			LBUG();
-		}
+
 		count++;
 	}
 
