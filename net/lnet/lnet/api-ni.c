@@ -730,7 +730,7 @@ static void lnet_assert_wire_constants(void)
 }
 
 static const struct lnet_lnd *
-__lnet_find_lnd_by_type(u32 type)
+lnet_find_lnd_by_type(u32 type)
 {
 	const struct lnet_lnd *lnd;
 
@@ -739,18 +739,6 @@ __lnet_find_lnd_by_type(u32 type)
 		return NULL;
 	lnd = the_lnet.ln_lnds[type];
 	LASSERT(!lnd || lnd->lnd_type == type);
-
-	return lnd;
-}
-
-static const struct lnet_lnd *
-lnet_find_lnd_by_type(u32 type)
-{
-	const struct lnet_lnd *lnd;
-
-	mutex_lock(&the_lnet.ln_lnd_mutex);
-	lnd = __lnet_find_lnd_by_type(type);
-	mutex_unlock(&the_lnet.ln_lnd_mutex);
 
 	return lnd;
 }
@@ -768,7 +756,7 @@ lnet_register_lnd(const struct lnet_lnd *lnd)
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 
 	LASSERT(libcfs_isknown_lnd(lnd->lnd_type));
-	LASSERT(!__lnet_find_lnd_by_type(lnd->lnd_type));
+	LASSERT(!lnet_find_lnd_by_type(lnd->lnd_type));
 
 	the_lnet.ln_lnds[lnd->lnd_type] = lnd;
 
@@ -783,7 +771,7 @@ lnet_unregister_lnd(const struct lnet_lnd *lnd)
 {
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 
-	LASSERT(__lnet_find_lnd_by_type(lnd->lnd_type) == lnd);
+	LASSERT(lnet_find_lnd_by_type(lnd->lnd_type) == lnd);
 
 	the_lnet.ln_lnds[lnd->lnd_type] = NULL;
 	CDEBUG(D_NET, "%s LND unregistered\n", libcfs_lnd2str(lnd->lnd_type));
@@ -1948,7 +1936,9 @@ lnet_clear_zombies_nis_locked(struct lnet_net *net)
 		islo = ni->ni_net->net_lnd->lnd_type == LOLND;
 
 		LASSERT(!in_interrupt());
+		mutex_lock(&the_lnet.ln_lnd_mutex);
 		net->net_lnd->lnd_shutdown(ni);
+		mutex_unlock(&the_lnet.ln_lnd_mutex);
 
 		if (!islo)
 			CDEBUG(D_LNI, "Removed LNI %s\n",
@@ -2076,6 +2066,8 @@ lnet_startup_lndni(struct lnet_ni *ni, struct lnet_lnd_tunables *tun)
 	struct lnet_net *net = ni->ni_net;
 	u32 seed;
 
+	mutex_lock(&the_lnet.ln_lnd_mutex);
+
 	if (tun) {
 		memcpy(&ni->ni_lnd_tunables, tun,
 		       sizeof(*tun));
@@ -2083,6 +2075,8 @@ lnet_startup_lndni(struct lnet_ni *ni, struct lnet_lnd_tunables *tun)
 	}
 
 	rc = net->net_lnd->lnd_startup(ni);
+
+	mutex_unlock(&the_lnet.ln_lnd_mutex);
 
 	if (rc) {
 		LCONSOLE_ERROR_MSG(0x105, "Error %d starting up LNI %s\n",
@@ -2178,13 +2172,17 @@ lnet_startup_lndnet(struct lnet_net *net, struct lnet_lnd_tunables *tun)
 	if (lnet_net_unique(net->net_id, &the_lnet.ln_nets, &net_l)) {
 		lnd_type = LNET_NETTYP(net->net_id);
 
+		mutex_lock(&the_lnet.ln_lnd_mutex);
 		lnd = lnet_find_lnd_by_type(lnd_type);
 
 		if (!lnd) {
+			mutex_unlock(&the_lnet.ln_lnd_mutex);
 			rc = request_module("%s", libcfs_lnd2modname(lnd_type));
+			mutex_lock(&the_lnet.ln_lnd_mutex);
 
 			lnd = lnet_find_lnd_by_type(lnd_type);
 			if (!lnd) {
+				mutex_unlock(&the_lnet.ln_lnd_mutex);
 				CERROR("Can't load LND %s, module %s, rc=%d\n",
 				libcfs_lnd2str(lnd_type),
 				libcfs_lnd2modname(lnd_type), rc);
@@ -2194,6 +2192,8 @@ lnet_startup_lndnet(struct lnet_net *net, struct lnet_lnd_tunables *tun)
 		}
 
 		net->net_lnd = lnd;
+
+		mutex_unlock(&the_lnet.ln_lnd_mutex);
 
 		net_l = net;
 	}
