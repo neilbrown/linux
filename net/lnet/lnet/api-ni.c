@@ -294,7 +294,7 @@ discovery_set(const char *val, const struct kernel_param *kp)
 
 	*discovery = value;
 
-	if (the_lnet.ln_state == LNET_STATE_SHUTDOWN) {
+	if (the_lnet.ln_state != LNET_STATE_RUNNING) {
 		mutex_unlock(&the_lnet.ln_api_mutex);
 		return 0;
 	}

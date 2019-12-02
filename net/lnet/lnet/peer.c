@@ -822,7 +822,7 @@ lnet_get_peer_list(u32 *countp, u32 *sizep,
 	int rc;
 
 	rc = -ESHUTDOWN;
-	if (the_lnet.ln_state == LNET_STATE_SHUTDOWN)
+	if (the_lnet.ln_state != LNET_STATE_RUNNING)
 		goto done;
 
 	lncpt = cfs_percpt_number(the_lnet.ln_peer_tables);
@@ -1816,7 +1816,7 @@ out_mutex_unlock:
 	lnet_net_lock(cpt);
 
 	/* Lock has been dropped, check again for shutdown. */
-	if (the_lnet.ln_state == LNET_STATE_SHUTDOWN) {
+	if (the_lnet.ln_state != LNET_STATE_RUNNING) {
 		if (!IS_ERR(lpni))
 			lnet_peer_ni_decref_locked(lpni);
 		lpni = ERR_PTR(-ESHUTDOWN);
@@ -2822,7 +2822,7 @@ __must_hold(&lp->lp_lock)
 	 * LNET_LOCK_EX mode is used.
 	 */
 	mutex_lock(&the_lnet.ln_api_mutex);
-	if (the_lnet.ln_state == LNET_STATE_SHUTDOWN) {
+	if (the_lnet.ln_state != LNET_STATE_RUNNING) {
 		rc = -ESHUTDOWN;
 		goto out;
 	}
