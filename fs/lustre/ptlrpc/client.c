@@ -1675,13 +1675,12 @@ static inline int ptlrpc_set_producer(struct ptlrpc_request_set *set)
 int ptlrpc_check_set(const struct lu_env *env, struct ptlrpc_request_set *set)
 {
 	struct ptlrpc_request *req, *next;
-	struct list_head comp_reqs;
+	LIST_HEAD(comp_reqs);
 	int force_timer_recalc = 0;
 
 	if (atomic_read(&set->set_remaining) == 0)
 		return 1;
 
-	INIT_LIST_HEAD(&comp_reqs);
 	list_for_each_entry_safe(req, next, &set->set_requests, rq_set_chain) {
 		struct obd_import *imp = req->rq_import;
 		int unregistered = 0;

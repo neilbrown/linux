@@ -1204,7 +1204,7 @@ static void ptlrpc_at_check_timed(struct ptlrpc_service_part *svcpt)
 {
 	struct ptlrpc_at_array *array = &svcpt->scp_at_array;
 	struct ptlrpc_request *rq, *n;
-	struct list_head work_list;
+	LIST_HEAD(work_list);
 	u32 index, count;
 	time64_t deadline;
 	time64_t now = ktime_get_real_seconds();
@@ -1237,7 +1237,6 @@ static void ptlrpc_at_check_timed(struct ptlrpc_service_part *svcpt)
 	 * We're close to a timeout, and we don't know how much longer the
 	 * server will take. Send early replies to everyone expiring soon.
 	 */
-	INIT_LIST_HEAD(&work_list);
 	deadline = -1;
 	div_u64_rem(array->paa_deadline, array->paa_size, &index);
 	count = array->paa_count;
