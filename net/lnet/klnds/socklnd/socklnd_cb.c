@@ -2457,14 +2457,13 @@ ksocknal_reaper(void *arg)
 {
 	struct ksock_conn *conn;
 	struct ksock_sched *sched;
-	struct list_head enomem_conns;
+	LIST_HEAD(enomem_conns);
 	long timeout;
 	int i;
 	int peer_index = 0;
 	unsigned long deadline = jiffies;
 	unsigned long enomem_retry = 0;
 
-	INIT_LIST_HEAD(&enomem_conns);
 	while (!ksocknal_data.ksnd_shuttingdown) {
 		unsigned long now;
 

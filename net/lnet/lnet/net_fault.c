@@ -201,10 +201,8 @@ lnet_drop_rule_del(lnet_nid_t src, lnet_nid_t dst)
 {
 	struct lnet_drop_rule *rule;
 	struct lnet_drop_rule *tmp;
-	struct list_head zombies;
+	LIST_HEAD(zombies);
 	int n = 0;
-
-	INIT_LIST_HEAD(&zombies);
 
 	lnet_net_lock(LNET_LOCK_EX);
 	list_for_each_entry_safe(rule, tmp, &the_lnet.ln_drop_rules, dr_link) {
@@ -729,9 +727,8 @@ void
 lnet_delay_rule_check(void)
 {
 	struct lnet_delay_rule *rule;
-	struct list_head msgs;
+	LIST_HEAD(msgs);
 
-	INIT_LIST_HEAD(&msgs);
 	while (1) {
 		if (list_empty(&delay_dd.dd_sched_rules))
 			break;
@@ -890,13 +887,10 @@ lnet_delay_rule_del(lnet_nid_t src, lnet_nid_t dst, bool shutdown)
 {
 	struct lnet_delay_rule *rule;
 	struct lnet_delay_rule *tmp;
-	struct list_head rule_list;
-	struct list_head msg_list;
+	LIST_HEAD(rule_list);
+	LIST_HEAD(msg_list);
 	int n = 0;
 	bool cleanup;
-
-	INIT_LIST_HEAD(&rule_list);
-	INIT_LIST_HEAD(&msg_list);
 
 	if (shutdown) {
 		src = 0;
