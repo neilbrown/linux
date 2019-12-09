@@ -123,6 +123,7 @@ void req_layout_fini(void);
 
 extern struct req_format RQF_OBD_PING;
 extern struct req_format RQF_OBD_SET_INFO;
+extern struct req_format RQF_MDT_SET_INFO;
 extern struct req_format RQF_SEC_CTX;
 /* MGS req_format */
 extern struct req_format RQF_MGS_TARGET_REG;
