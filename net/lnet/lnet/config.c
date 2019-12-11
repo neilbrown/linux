@@ -171,7 +171,7 @@ lnet_net_append_cpts(u32 *cpts, u32 ncpts, struct lnet_net *net)
 	}
 
 	if (!net->net_cpts) {
-		net->net_cpts = kmalloc_array(ncpts, sizeof(net->net_cpts),
+		net->net_cpts = kmalloc_array(ncpts, sizeof(*net->net_cpts),
 					      GFP_KERNEL);
 		if (!net->net_cpts)
 			return -ENOMEM;
@@ -197,7 +197,7 @@ lnet_net_append_cpts(u32 *cpts, u32 ncpts, struct lnet_net *net)
 		u32 *array = NULL, *loc;
 		u32 total_entries = j + net->net_ncpts;
 
-		array = kmalloc_array(total_entries, sizeof(*net->net_cpts),
+		array = kmalloc_array(total_entries, sizeof(*array),
 				      GFP_KERNEL);
 		if (!array) {
 			rc = -ENOMEM;
@@ -545,7 +545,7 @@ lnet_ni_alloc_w_cpt_array(struct lnet_net *net, u32 *cpts, u32 ncpts,
 	} else {
 		size_t array_size = ncpts * sizeof(ni->ni_cpts[0]);
 
-		ni->ni_cpts = kmalloc_array(ncpts, sizeof(ni->ni_cpts[0]),
+		ni->ni_cpts = kmalloc_array(ncpts, sizeof(*ni->ni_cpts),
 					    GFP_KERNEL);
 		if (!ni->ni_cpts)
 			goto failed;
