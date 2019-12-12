@@ -165,6 +165,12 @@ static inline bool fid_is_zero(const struct lu_fid *fid)
 	return !fid->f_seq && !fid->f_oid;
 }
 
+/* The data name_to_handle_at() places in a struct file_handle (at f_handle) */
+struct lustre_file_handle {
+	struct lu_fid lfh_child;
+	struct lu_fid lfh_parent;
+};
+
 struct ost_layout {
 	__u32	ol_stripe_size;
 	__u32	ol_stripe_count;
