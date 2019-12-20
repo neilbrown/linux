@@ -495,9 +495,11 @@ struct kmem_cache *lnet_mes_cachep;	   /* MEs kmem_cache */
 struct kmem_cache *lnet_small_mds_cachep;  /* <= LNET_SMALL_MD_SIZE bytes
 					    *  MDs kmem_cache
 					    */
+struct kmem_cache *lnet_rspt_cachep;	   /* response tracker cache */
+struct kmem_cache *lnet_msg_cachep;
 
 static int
-lnet_descriptor_setup(void)
+lnet_slab_setup(void)
 {
 	/* create specific kmem_cache for MEs and small MDs (i.e., originally
 	 * allocated in <size-xxx> kmem_cache).
@@ -513,12 +515,30 @@ lnet_descriptor_setup(void)
 	if (!lnet_small_mds_cachep)
 		return -ENOMEM;
 
+	lnet_rspt_cachep = kmem_cache_create("lnet_rspt",
+					     sizeof(struct lnet_rsp_tracker),
+					     0, 0, NULL);
+	if (!lnet_rspt_cachep)
+		return -ENOMEM;
+
+	lnet_msg_cachep = kmem_cache_create("lnet_msg",
+					    sizeof(struct lnet_msg),
+					    0, 0, NULL);
+	if (!lnet_msg_cachep)
+		return -ENOMEM;
+
 	return 0;
 }
 
 static void
-lnet_descriptor_cleanup(void)
+lnet_slab_cleanup(void)
 {
+	kmem_cache_destroy(lnet_msg_cachep);
+	lnet_msg_cachep = NULL;
+
+	kmem_cache_destroy(lnet_rspt_cachep);
+	lnet_rspt_cachep = NULL;
+
 	kmem_cache_destroy(lnet_small_mds_cachep);
 	lnet_small_mds_cachep = NULL;
 
@@ -1077,7 +1097,7 @@ lnet_prepare(lnet_pid_t requested_pid)
 	init_waitqueue_head(&the_lnet.ln_dc_waitq);
 	init_completion(&the_lnet.ln_started);
 
-	rc = lnet_descriptor_setup();
+	rc = lnet_slab_setup();
 	if (rc != 0)
 		goto failed;
 
@@ -1176,7 +1196,7 @@ lnet_unprepare(void)
 		the_lnet.ln_counters = NULL;
 	}
 	lnet_destroy_remote_nets_table();
-	lnet_descriptor_cleanup();
+	lnet_slab_cleanup();
 
 	return 0;
 }
