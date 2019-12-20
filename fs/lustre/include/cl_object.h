@@ -1908,13 +1908,17 @@ struct cl_io {
 	/**
 	 * Ignore lockless and do normal locking for this io.
 	 */
-			     ci_ignore_lockless:1,
+				ci_ignore_lockless:1,
 	/**
 	 * Set if we've tried all mirrors for this read IO, if it's not set,
 	 * the read IO will check to-be-read OSCs' status, and make fast-switch
 	 * another mirror if some of the OSTs are not healthy.
 	 */
 				ci_tried_all_mirrors:1;
+	/**
+	 * Bypass quota check
+	 */
+	unsigned		ci_noquota:1;
 	/**
 	 * How many times the read has retried before this one.
 	 * Set by the top level and consumed by the LOV.
@@ -1923,7 +1927,7 @@ struct cl_io {
 	/**
 	 * Designated mirror index for this I/O.
 	 */
-	unsigned int	     ci_designated_mirror;
+	unsigned int		ci_designated_mirror;
 	/**
 	 * Number of pages owned by this IO. For invariant checking.
 	 */

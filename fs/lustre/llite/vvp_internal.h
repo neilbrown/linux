@@ -83,6 +83,7 @@ struct vvp_io {
 			 * check that flags are from filemap_fault
 			 */
 			bool			ft_flags_valid;
+			struct cl_page_list	ft_queue;
 		} fault;
 		struct {
 			struct cl_page_list	vui_queue;
