@@ -1538,10 +1538,15 @@ int ptlrpc_import_recovery_state_machine(struct obd_import *imp)
 
 		deuuidify(obd2cli_tgt(imp->imp_obd), NULL,
 			  &target_start, &target_len);
-		LCONSOLE_INFO("%s: Connection restored to %.*s (at %s)\n",
-			      imp->imp_obd->obd_name,
-			      target_len, target_start,
-			      obd_import_nid2str(imp));
+		CDEBUG_LIMIT(imp->imp_was_idle ?
+				imp->imp_idle_debug : D_CONSOLE,
+			     "%s: Connection restored to %.*s (at %s)\n",
+			     imp->imp_obd->obd_name,
+			     target_len, target_start,
+			     obd_import_nid2str(imp));
+		spin_lock(&imp->imp_lock);
+		imp->imp_was_idle = 0;
+		spin_unlock(&imp->imp_lock);
 	}
 
 	if (imp->imp_state == LUSTRE_IMP_FULL) {
@@ -1757,6 +1762,12 @@ int ptlrpc_disconnect_and_idle_import(struct obd_import *imp)
 	CDEBUG_LIMIT(imp->imp_idle_debug, "%s: disconnect after %llus idle\n",
 		     imp->imp_obd->obd_name,
 		     ktime_get_real_seconds() - imp->imp_last_reply_time);
+
+	/* don't make noise at reconnection */
+	spin_lock(&imp->imp_lock);
+	imp->imp_was_idle = 1;
+	spin_unlock(&imp->imp_lock);
+
 	req->rq_interpret_reply = ptlrpc_disconnect_idle_interpret;
 	ptlrpcd_add_req(req);
 
