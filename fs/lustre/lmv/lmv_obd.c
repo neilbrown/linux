@@ -3346,7 +3346,7 @@ static int lmv_intent_getattr_async(struct obd_export *exp,
 	if (IS_ERR(ptgt))
 		return PTR_ERR(ptgt);
 
-	ctgt = lmv_fid2tgt(lmv, &op_data->op_fid1);
+	ctgt = lmv_fid2tgt(lmv, &op_data->op_fid2);
 	if (IS_ERR(ctgt))
 		return PTR_ERR(ctgt);
 
