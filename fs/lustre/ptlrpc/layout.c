@@ -797,10 +797,16 @@ struct req_msg_field {
 	 * @RMF_F_STRUCT_ARRAY flag is set the field is also variable-length,
 	 * but the actual size must be a whole multiple of @rmf_size.
 	 */
-	const int   rmf_size;
-	void	(*rmf_swabber)(void *value);
-	void	(*rmf_dumper)(void *value);
-	int	 rmf_offset[ARRAY_SIZE(req_formats)][RCL_NR];
+	const int	rmf_size;
+	void		(*rmf_swabber)(void *value);
+	/**
+	 * Pass buffer size to swabbing function
+	 * \retval	> 0		the number of bytes swabbed
+	 *		-EOVERFLOW	on error
+	 */
+	int		(*rmf_swab_len)(void *value, u32 len);
+	void		(*rmf_dumper)(void *value);
+	int		rmf_offset[ARRAY_SIZE(req_formats)][RCL_NR];
 };
 
 enum rmf_flags {
@@ -831,6 +837,14 @@ struct req_capsule;
 	.rmf_size    = (size),					\
 	.rmf_swabber = (void (*)(void *))(swabber),		\
 	.rmf_dumper  = (void (*)(void *))(dumper)		\
+}
+
+#define DEFINE_MSGFL(name, flags, size, swab_len, dumper) {	\
+	.rmf_name     = (name),					\
+	.rmf_flags    = (flags),				\
+	.rmf_size     = (size),					\
+	.rmf_swab_len = (int (*)(void *, u32))(swab_len),	\
+	.rmf_dumper   = (void (*)(void *))(dumper)		\
 }
 
 struct req_msg_field RMF_GENERIC_DATA =
@@ -1139,7 +1153,7 @@ struct req_msg_field RMF_FIEMAP_KEY =
 EXPORT_SYMBOL(RMF_FIEMAP_KEY);
 
 struct req_msg_field RMF_FIEMAP_VAL =
-	DEFINE_MSGF("fiemap", 0, -1, lustre_swab_fiemap, NULL);
+	DEFINE_MSGFL("fiemap", 0, -1, lustre_swab_fiemap, NULL);
 EXPORT_SYMBOL(RMF_FIEMAP_VAL);
 
 struct req_msg_field RMF_SHORT_IO =
@@ -1855,8 +1869,7 @@ u32 __req_capsule_offset(const struct req_capsule *pill,
  * Helper for __req_capsule_get(); swabs value / array of values and/or dumps
  * them if desired.
  */
-static
-void
+static int
 swabber_dumper_helper(struct req_capsule *pill,
 		      const struct req_msg_field *field,
 		      enum req_location loc,
@@ -1866,13 +1879,15 @@ swabber_dumper_helper(struct req_capsule *pill,
 	void *p;
 	int i;
 	int n;
+	int size;
+	int rc = 0;
 	int do_swab;
 	int inout = loc == RCL_CLIENT;
 
 	swabber = swabber ?: field->rmf_swabber;
 
 	if (ptlrpc_buf_need_swab(pill->rc_req, inout, offset) &&
-	    swabber && value)
+	    (swabber || field->rmf_swab_len) && value)
 		do_swab = 1;
 	else
 		do_swab = 0;
@@ -1887,23 +1902,37 @@ swabber_dumper_helper(struct req_capsule *pill,
 			field->rmf_dumper(value);
 		}
 		if (!do_swab)
-			return;
-		swabber(value);
+			return 0;
+		if (!field->rmf_swab_len) {
+			swabber(value);
+		} else {
+			size = field->rmf_swab_len(value, len);
+			if (size < 0)
+				rc = size;
+		}
 		ptlrpc_buf_set_swabbed(pill->rc_req, inout, offset);
-		if (dump && field->rmf_dumper) {
+		if (dump) {
 			CDEBUG(D_RPCTRACE, "Dump of swabbed field %s follows\n",
 			       field->rmf_name);
 			field->rmf_dumper(value);
 		}
 
-		return;
+		return rc;
 	}
 
 	/*
 	 * We're swabbing an array; swabber() swabs a single array element, so
 	 * swab every element.
 	 */
-	LASSERT((len % field->rmf_size) == 0);
+	if (len % field->rmf_size) {
+		static const struct req_msg_field *last_field;
+
+		if (field != last_field) {
+			CERROR("%s: array buffer size %u is not a multiple of element size %u\n",
+			       field->rmf_name, len, field->rmf_size);
+			last_field = field;
+		}
+	}
 	for (p = value, i = 0, n = len / field->rmf_size;
 	     i < n;
 	     i++, p += field->rmf_size) {
@@ -1915,7 +1944,17 @@ swabber_dumper_helper(struct req_capsule *pill,
 		}
 		if (!do_swab)
 			continue;
-		swabber(p);
+		if (!field->rmf_swab_len) {
+			swabber(p);
+		} else {
+			size = field->rmf_swab_len(p, len);
+			if (size > 0) {
+				len -= size;
+			} else {
+				rc = size;
+				break;
+			}
+		}
 		if (dump) {
 			CDEBUG(D_RPCTRACE,
 			       "Dump of swabbed array field %s, element %d follows\n",
@@ -1925,6 +1964,8 @@ swabber_dumper_helper(struct req_capsule *pill,
 	}
 	if (do_swab)
 		ptlrpc_buf_set_swabbed(pill->rc_req, inout, offset);
+
+	return rc;
 }
 
 /**
