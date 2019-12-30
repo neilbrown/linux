@@ -490,6 +490,24 @@ static inline size_t lu_dirent_calc_size(size_t namelen, __u16 attr)
 	return (size + 7) & ~7;
 }
 
+static inline __u16 lu_dirent_type_get(struct lu_dirent *ent)
+{
+	__u16 type = 0;
+	struct luda_type *lt;
+	int len = 0;
+
+	if (__le32_to_cpu(ent->lde_attrs) & LUDA_TYPE) {
+		const unsigned int align = sizeof(struct luda_type) - 1;
+
+		len = __le16_to_cpu(ent->lde_namelen);
+		len = (len + align) & ~align;
+		lt = (void *)ent->lde_name + len;
+		type = __le16_to_cpu(lt->lt_type);
+	}
+
+	return type;
+}
+
 #define MDS_DIR_END_OFF 0xfffffffffffffffeULL
 
 /**

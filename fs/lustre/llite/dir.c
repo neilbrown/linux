@@ -174,28 +174,6 @@ void ll_release_page(struct inode *inode, struct page *page, bool remove)
 	put_page(page);
 }
 
-/**
- * return IF_* type for given lu_dirent entry.
- * IF_* flag shld be converted to particular OS file type in
- * platform llite module.
- */
-static u16 ll_dirent_type_get(struct lu_dirent *ent)
-{
-	u16 type = 0;
-	struct luda_type *lt;
-	int len = 0;
-
-	if (le32_to_cpu(ent->lde_attrs) & LUDA_TYPE) {
-		const unsigned int align = sizeof(struct luda_type) - 1;
-
-		len = le16_to_cpu(ent->lde_namelen);
-		len = (len + align) & ~align;
-		lt = (void *)ent->lde_name + len;
-		type = IFTODT(le16_to_cpu(lt->lt_type));
-	}
-	return type;
-}
-
 int ll_dir_read(struct inode *inode, u64 *ppos, struct md_op_data *op_data,
 		struct dir_context *ctx)
 {
@@ -246,7 +224,7 @@ int ll_dir_read(struct inode *inode, u64 *ppos, struct md_op_data *op_data,
 				lhash = hash;
 			fid_le_to_cpu(&fid, &ent->lde_fid);
 			ino = cl_fid_build_ino(&fid, is_api32);
-			type = ll_dirent_type_get(ent);
+			type = IFTODT(lu_dirent_type_get(ent));
 			ctx->pos = lhash;
 			/* For 'll_nfs_get_name_filldir()', it will try
 			 * to access the 'ent' through its 'lde_name',
