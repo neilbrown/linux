@@ -470,8 +470,8 @@ mt7530_pad_clk_setup(struct dsa_switch *ds, int mode)
 	else
 		ssc_delta = 0x87;
 
-	mt7530_rmw(priv, MT7530_P6ECR, P6_INTF_MODE_MASK,
-		   P6_INTF_MODE(trgint));
+	//mt7530_rmw(priv, MT7530_P6ECR, P6_INTF_MODE_MASK,
+	//	   P6_INTF_MODE(trgint));
 
 	/* Lower Tx Driving for TRGMII path */
 	for (i = 0 ; i < NUM_TRGMII_CTRL ; i++)
