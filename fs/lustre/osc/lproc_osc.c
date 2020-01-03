@@ -213,7 +213,9 @@ static ssize_t osc_cached_mb_seq_write(struct file *file,
 	struct seq_file *m = file->private_data;
 	struct obd_device *obd = m->private;
 	struct client_obd *cli = &obd->u.cli;
-	long pages_number, rc;
+	u64 pages_number;
+	const char *tmp;
+	long rc;
 	char kernbuf[128];
 	int mult;
 	u64 val;
@@ -226,18 +228,14 @@ static ssize_t osc_cached_mb_seq_write(struct file *file,
 	kernbuf[count] = 0;
 
 	mult = 1 << (20 - PAGE_SHIFT);
-	buffer += lprocfs_find_named_value(kernbuf, "used_mb:", &count) -
-		  kernbuf;
-	rc = lprocfs_write_frac_u64_helper(buffer, count, &val, mult);
-	if (rc)
+	tmp = lprocfs_find_named_value(kernbuf, "used_mb:", &count);
+	rc = sysfs_memparse(tmp, count, &pages_number, "MiB");
+	if (rc < 0)
 		return rc;
 
 	if (val > LONG_MAX)
 		return -ERANGE;
 	pages_number = (long)val;
-
-	if (pages_number < 0)
-		return -ERANGE;
 
 	rc = atomic_long_read(&cli->cl_lru_in_list) - pages_number;
 	if (rc > 0) {
@@ -287,11 +285,11 @@ static ssize_t cur_grant_bytes_store(struct kobject *kobj,
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct client_obd *cli = &obd->u.cli;
+	u64 val;
 	int rc;
-	unsigned long long val;
 
-	rc = kstrtoull(buffer, 10, &val);
-	if (rc)
+	rc = sysfs_memparse(buffer, count, &val, "MiB");
+	if (rc < 0)
 		return rc;
 
 	/* this is only for shrinking grant */

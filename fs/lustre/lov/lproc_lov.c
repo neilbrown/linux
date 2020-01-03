@@ -57,8 +57,8 @@ static ssize_t stripesize_store(struct kobject *kobj, struct attribute *attr,
 	u64 val;
 	int rc;
 
-	rc = kstrtoull(buf, 10, &val);
-	if (rc)
+	rc = sysfs_memparse(buf, count, &val, "B");
+	if (rc < 0)
 		return rc;
 
 	lov_fix_desc_stripe_size(&val);

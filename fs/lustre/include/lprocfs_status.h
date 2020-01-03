@@ -42,6 +42,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include <linux/spinlock.h>
+#include <linux/string_helpers.h>
 #include <linux/types.h>
 #include <linux/device.h>
 
@@ -482,6 +483,9 @@ int lprocfs_write_u64_helper(const char __user *buffer,
 int lprocfs_write_frac_u64_helper(const char __user *buffer,
 				  unsigned long count,
 				  u64 *val, int mult);
+int string_to_size(u64 *size, const char *buffer, size_t count);
+int sysfs_memparse(const char *buffer, size_t count, u64 *val,
+		    const char *defunit);
 char *lprocfs_find_named_value(const char *buffer, const char *name,
 			       size_t *count);
 void lprocfs_oh_tally(struct obd_histogram *oh, unsigned int value);
