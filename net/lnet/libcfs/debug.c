@@ -412,11 +412,10 @@ void libcfs_debug_dumplog(void)
 			     "libcfs_debug_dumper");
 
 	if (IS_ERR(dumper))
-		pr_err("LustreError: cannot start log dump thread: %ld\n",
+		pr_err("LustreError: cannot start log dump thread: rc = %ld\n",
 		       PTR_ERR(dumper));
 	else
 		wait_for_completion_interruptible(&debug_complete);
-
 }
 EXPORT_SYMBOL(libcfs_debug_dumplog);
 

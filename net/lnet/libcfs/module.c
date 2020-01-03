@@ -721,7 +721,7 @@ int libcfs_setup(void)
 
 	rc = libcfs_debug_init(5 * 1024 * 1024);
 	if (rc < 0) {
-		pr_err("LustreError: libcfs_debug_init: %d\n", rc);
+		pr_err("LustreError: libcfs_debug_init: rc = %d\n", rc);
 		goto err;
 	}
 
@@ -795,7 +795,7 @@ static void libcfs_exit(void)
 	/* the below message is checked in test-framework.sh check_mem_leak() */
 	rc = libcfs_debug_cleanup();
 	if (rc)
-		pr_err("LustreError: libcfs_debug_cleanup: %d\n", rc);
+		pr_err("LustreError: libcfs_debug_cleanup: rc = %d\n", rc);
 }
 
 MODULE_AUTHOR("OpenSFS, Inc. <http://www.lustre.org/>");
