@@ -966,8 +966,8 @@ out_rqset:
 static int lov_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 			 void *karg, void __user *uarg)
 {
-	struct obd_device *obddev = class_exp2obd(exp);
-	struct lov_obd *lov = &obddev->u.lov;
+	struct obd_device *obd = class_exp2obd(exp);
+	struct lov_obd *lov = &obd->u.lov;
 	int i = 0, rc = 0, count = lov->desc.ld_tgt_count;
 	struct obd_uuid *uuidp;
 
@@ -1125,7 +1125,7 @@ static int lov_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 			 * osc. Let's pass it through
 			 */
 			osc_obd = class_exp2obd(lov->lov_tgts[i]->ltd_exp);
-			osc_obd->obd_force = obddev->obd_force;
+			osc_obd->obd_force = obd->obd_force;
 			err = obd_iocontrol(cmd, lov->lov_tgts[i]->ltd_exp,
 					    len, karg, uarg);
 			if (err) {
@@ -1153,15 +1153,15 @@ static int lov_iocontrol(unsigned int cmd, struct obd_export *exp, int len,
 static int lov_get_info(const struct lu_env *env, struct obd_export *exp,
 			u32 keylen, void *key, u32 *vallen, void *val)
 {
-	struct obd_device *obddev = class_exp2obd(exp);
-	struct lov_obd *lov = &obddev->u.lov;
+	struct obd_device *obd = class_exp2obd(exp);
+	struct lov_obd *lov = &obd->u.lov;
 	struct lov_desc *ld = &lov->desc;
 	int rc = 0;
 
 	if (!vallen || !val)
 		return -EFAULT;
 
-	lov_tgts_getref(obddev);
+	lov_tgts_getref(obd);
 
 	if (KEY_IS(KEY_MAX_EASIZE)) {
 		*((u32 *)val) = exp->exp_connect_data.ocd_max_easize;
@@ -1176,7 +1176,7 @@ static int lov_get_info(const struct lu_env *env, struct obd_export *exp,
 		rc = -EINVAL;
 	}
 
-	lov_tgts_putref(obddev);
+	lov_tgts_putref(obd);
 	return rc;
 }
 
@@ -1184,8 +1184,8 @@ static int lov_set_info_async(const struct lu_env *env, struct obd_export *exp,
 			      u32 keylen, void *key, u32 vallen,
 			      void *val, struct ptlrpc_request_set *set)
 {
-	struct obd_device *obddev = class_exp2obd(exp);
-	struct lov_obd *lov = &obddev->u.lov;
+	struct obd_device *obd = class_exp2obd(exp);
+	struct lov_obd *lov = &obd->u.lov;
 	struct lov_tgt_desc *tgt;
 	bool do_inactive = false;
 	bool no_set = false;
@@ -1200,7 +1200,7 @@ static int lov_set_info_async(const struct lu_env *env, struct obd_export *exp,
 			return -ENOMEM;
 	}
 
-	lov_tgts_getref(obddev);
+	lov_tgts_getref(obd);
 
 	if (KEY_IS(KEY_CHECKSUM))
 		do_inactive = true;
@@ -1237,7 +1237,7 @@ static int lov_set_info_async(const struct lu_env *env, struct obd_export *exp,
 			rc = err;
 	}
 
-	lov_tgts_putref(obddev);
+	lov_tgts_putref(obd);
 	if (no_set) {
 		err = ptlrpc_set_wait(set);
 		if (rc == 0)

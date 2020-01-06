@@ -93,9 +93,9 @@ struct echo_lock {
 };
 
 static int echo_client_setup(const struct lu_env *env,
-			     struct obd_device *obddev,
+			     struct obd_device *obd,
 			     struct lustre_cfg *lcfg);
-static int echo_client_cleanup(struct obd_device *obddev);
+static int echo_client_cleanup(struct obd_device *obd);
 
 /** \defgroup echo_helpers Helper functions
  * @{
@@ -1602,9 +1602,9 @@ out:
 }
 
 static int echo_client_setup(const struct lu_env *env,
-			     struct obd_device *obddev, struct lustre_cfg *lcfg)
+			     struct obd_device *obd, struct lustre_cfg *lcfg)
 {
-	struct echo_client_obd *ec = &obddev->u.echo_client;
+	struct echo_client_obd *ec = &obd->u.echo_client;
 	struct obd_device *tgt;
 	struct obd_uuid echo_uuid = { "ECHO_UUID" };
 	struct obd_connect_data *ocd = NULL;
@@ -1656,12 +1656,12 @@ static int echo_client_setup(const struct lu_env *env,
 	return rc;
 }
 
-static int echo_client_cleanup(struct obd_device *obddev)
+static int echo_client_cleanup(struct obd_device *obd)
 {
-	struct echo_client_obd *ec = &obddev->u.echo_client;
+	struct echo_client_obd *ec = &obd->u.echo_client;
 	int rc;
 
-	if (!list_empty(&obddev->obd_exports)) {
+	if (!list_empty(&obd->obd_exports)) {
 		CERROR("still has clients!\n");
 		return -EBUSY;
 	}

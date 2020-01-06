@@ -68,14 +68,14 @@ static char *sec_flags2str(unsigned long flags, char *buf, int bufsize)
 
 static int sptlrpc_info_lprocfs_seq_show(struct seq_file *seq, void *v)
 {
-	struct obd_device *dev = seq->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = seq->private;
+	struct client_obd *cli = &obd->u.cli;
 	struct ptlrpc_sec *sec = NULL;
 	char str[32];
 
-	LASSERT(strcmp(dev->obd_type->typ_name, LUSTRE_OSC_NAME) == 0 ||
-		strcmp(dev->obd_type->typ_name, LUSTRE_MDC_NAME) == 0 ||
-		strcmp(dev->obd_type->typ_name, LUSTRE_MGC_NAME) == 0);
+	LASSERT(strcmp(obd->obd_type->typ_name, LUSTRE_OSC_NAME) == 0 ||
+		strcmp(obd->obd_type->typ_name, LUSTRE_MDC_NAME) == 0 ||
+		strcmp(obd->obd_type->typ_name, LUSTRE_MGC_NAME) == 0);
 
 	if (cli->cl_import)
 		sec = sptlrpc_import_sec_ref(cli->cl_import);
@@ -108,13 +108,13 @@ LPROC_SEQ_FOPS_RO(sptlrpc_info_lprocfs);
 
 static int sptlrpc_ctxs_lprocfs_seq_show(struct seq_file *seq, void *v)
 {
-	struct obd_device *dev = seq->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = seq->private;
+	struct client_obd *cli = &obd->u.cli;
 	struct ptlrpc_sec *sec = NULL;
 
-	LASSERT(strcmp(dev->obd_type->typ_name, LUSTRE_OSC_NAME) == 0 ||
-		strcmp(dev->obd_type->typ_name, LUSTRE_MDC_NAME) == 0 ||
-		strcmp(dev->obd_type->typ_name, LUSTRE_MGC_NAME) == 0);
+	LASSERT(strcmp(obd->obd_type->typ_name, LUSTRE_OSC_NAME) == 0 ||
+		strcmp(obd->obd_type->typ_name, LUSTRE_MDC_NAME) == 0 ||
+		strcmp(obd->obd_type->typ_name, LUSTRE_MGC_NAME) == 0);
 
 	if (cli->cl_import)
 		sec = sptlrpc_import_sec_ref(cli->cl_import);
@@ -136,8 +136,8 @@ lprocfs_wr_sptlrpc_sepol(struct file *file, const char __user *buffer,
 			 size_t count, void *data)
 {
 	struct seq_file	*seq = file->private_data;
-	struct obd_device *dev = seq->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = seq->private;
+	struct client_obd *cli = &obd->u.cli;
 	struct obd_import *imp = cli->cl_import;
 	struct sepol_downcall_data *param;
 	int size = sizeof(*param);
@@ -145,7 +145,7 @@ lprocfs_wr_sptlrpc_sepol(struct file *file, const char __user *buffer,
 
 	if (count < size) {
 		CERROR("%s: invalid data count = %lu, size = %d\n",
-		       dev->obd_name, (unsigned long) count, size);
+		       obd->obd_name, (unsigned long) count, size);
 		return -EINVAL;
 	}
 
@@ -154,14 +154,14 @@ lprocfs_wr_sptlrpc_sepol(struct file *file, const char __user *buffer,
 		return -ENOMEM;
 
 	if (copy_from_user(param, buffer, size)) {
-		CERROR("%s: bad sepol data\n", dev->obd_name);
+		CERROR("%s: bad sepol data\n", obd->obd_name);
 		rc = -EFAULT;
 		goto out;
 	}
 
 	if (param->sdd_magic != SEPOL_DOWNCALL_MAGIC) {
 		CERROR("%s: sepol downcall bad params\n",
-		       dev->obd_name);
+		       obd->obd_name);
 		rc = -EINVAL;
 		goto out;
 	}
@@ -169,7 +169,7 @@ lprocfs_wr_sptlrpc_sepol(struct file *file, const char __user *buffer,
 	if (param->sdd_sepol_len == 0 ||
 	    param->sdd_sepol_len >= sizeof(imp->imp_sec->ps_sepol)) {
 		CERROR("%s: invalid sepol data returned\n",
-		       dev->obd_name);
+		       obd->obd_name);
 		rc = -EINVAL;
 		goto out;
 	}
@@ -185,7 +185,7 @@ lprocfs_wr_sptlrpc_sepol(struct file *file, const char __user *buffer,
 		return -ENOMEM;
 
 	if (copy_from_user(param, buffer, size)) {
-		CERROR("%s: bad sepol data\n", dev->obd_name);
+		CERROR("%s: bad sepol data\n", obd->obd_name);
 		rc = -EFAULT;
 		goto out;
 	}
@@ -203,21 +203,21 @@ out:
 }
 LPROC_SEQ_FOPS_WR_ONLY(srpc, sptlrpc_sepol);
 
-int sptlrpc_lprocfs_cliobd_attach(struct obd_device *dev)
+int sptlrpc_lprocfs_cliobd_attach(struct obd_device *obd)
 {
-	if (strcmp(dev->obd_type->typ_name, LUSTRE_OSC_NAME) != 0 &&
-	    strcmp(dev->obd_type->typ_name, LUSTRE_MDC_NAME) != 0 &&
-	    strcmp(dev->obd_type->typ_name, LUSTRE_MGC_NAME) != 0) {
+	if (strcmp(obd->obd_type->typ_name, LUSTRE_OSC_NAME) != 0 &&
+	    strcmp(obd->obd_type->typ_name, LUSTRE_MDC_NAME) != 0 &&
+	    strcmp(obd->obd_type->typ_name, LUSTRE_MGC_NAME) != 0) {
 		CERROR("can't register lproc for obd type %s\n",
-		       dev->obd_type->typ_name);
+		       obd->obd_type->typ_name);
 		return -EINVAL;
 	}
 
-	debugfs_create_file("srpc_info", 0444, dev->obd_debugfs_entry, dev,
+	debugfs_create_file("srpc_info", 0444, obd->obd_debugfs_entry, obd,
 			    &sptlrpc_info_lprocfs_fops);
-	debugfs_create_file("srpc_contexts", 0444, dev->obd_debugfs_entry, dev,
+	debugfs_create_file("srpc_contexts", 0444, obd->obd_debugfs_entry, obd,
 			    &sptlrpc_ctxs_lprocfs_fops);
-	debugfs_create_file("srpc_contexts", 0444, dev->obd_debugfs_entry, dev,
+	debugfs_create_file("srpc_contexts", 0444, obd->obd_debugfs_entry, obd,
 			    &srpc_sptlrpc_sepol_fops);
 
 	return 0;

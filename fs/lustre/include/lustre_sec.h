@@ -1027,7 +1027,7 @@ const char *sec2target_str(struct ptlrpc_sec *sec);
 /*
  * lprocfs
  */
-int sptlrpc_lprocfs_cliobd_attach(struct obd_device *dev);
+int sptlrpc_lprocfs_cliobd_attach(struct obd_device *obd);
 
 /*
  * server side

@@ -42,8 +42,8 @@
 
 static int mdc_max_dirty_mb_seq_show(struct seq_file *m, void *v)
 {
-	struct obd_device *dev = m->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = m->private;
+	struct client_obd *cli = &obd->u.cli;
 	unsigned long val;
 
 	spin_lock(&cli->cl_loi_list_lock);
@@ -59,8 +59,8 @@ static ssize_t mdc_max_dirty_mb_seq_write(struct file *file,
 					  size_t count, loff_t *off)
 {
 	struct seq_file *sfl = file->private_data;
-	struct obd_device *dev = sfl->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = sfl->private;
+	struct client_obd *cli = &obd->u.cli;
 	__s64 pages_number;
 	int rc;
 
@@ -87,8 +87,8 @@ LPROC_SEQ_FOPS(mdc_max_dirty_mb);
 
 static int mdc_cached_mb_seq_show(struct seq_file *m, void *v)
 {
-	struct obd_device *dev = m->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = m->private;
+	struct client_obd *cli = &obd->u.cli;
 	int shift = 20 - PAGE_SHIFT;
 
 	seq_printf(m, "used_mb: %ld\n"
@@ -108,8 +108,8 @@ mdc_cached_mb_seq_write(struct file *file, const char __user *buffer,
 			size_t count, loff_t *off)
 {
 	struct seq_file *sfl = file->private_data;
-	struct obd_device *dev = sfl->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = sfl->private;
+	struct client_obd *cli = &obd->u.cli;
 	u64 pages_number;
 	long rc;
 	char kernbuf[128];
@@ -190,8 +190,8 @@ LPROC_SEQ_FOPS(mdc_contention_seconds);
 
 static int mdc_unstable_stats_seq_show(struct seq_file *m, void *v)
 {
-	struct obd_device *dev = m->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = m->private;
+	struct client_obd *cli = &obd->u.cli;
 	long pages;
 	int mb;
 
@@ -207,12 +207,12 @@ LPROC_SEQ_FOPS_RO(mdc_unstable_stats);
 static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
 			   char *buf)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct obd_import *imp;
 	ssize_t rc;
 
-	with_imp_locked(dev, imp, rc)
+	with_imp_locked(obd, imp, rc)
 		rc =  sprintf(buf, "%u\n", !imp->imp_deactive);
 
 	return rc;
@@ -221,7 +221,7 @@ static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
 static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
 			    const char *buffer, size_t count)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct obd_import *imp;
 	bool val;
@@ -231,7 +231,7 @@ static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
 	if (rc)
 		return rc;
 
-	with_imp_locked(dev, imp, count) {
+	with_imp_locked(obd, imp, count) {
 		/* opposite senses */
 		if (imp->imp_deactive == val) {
 			rc = ptlrpc_set_import_active(imp, val);
@@ -251,10 +251,10 @@ static ssize_t max_rpcs_in_flight_show(struct kobject *kobj,
 				       struct attribute *attr,
 				       char *buf)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 
-	return sprintf(buf, "%u\n", obd_get_max_rpcs_in_flight(&dev->u.cli));
+	return sprintf(buf, "%u\n", obd_get_max_rpcs_in_flight(&obd->u.cli));
 }
 
 static ssize_t max_rpcs_in_flight_store(struct kobject *kobj,
@@ -262,7 +262,7 @@ static ssize_t max_rpcs_in_flight_store(struct kobject *kobj,
 					const char *buffer,
 					size_t count)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	unsigned int val;
 	int rc;
@@ -271,7 +271,7 @@ static ssize_t max_rpcs_in_flight_store(struct kobject *kobj,
 	if (rc)
 		return rc;
 
-	rc = obd_set_max_rpcs_in_flight(&dev->u.cli, val);
+	rc = obd_set_max_rpcs_in_flight(&obd->u.cli, val);
 	if (rc)
 		count = rc;
 
@@ -283,10 +283,10 @@ static ssize_t max_mod_rpcs_in_flight_show(struct kobject *kobj,
 					   struct attribute *attr,
 					   char *buf)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 
-	return sprintf(buf, "%hu\n", dev->u.cli.cl_max_mod_rpcs_in_flight);
+	return sprintf(buf, "%hu\n", obd->u.cli.cl_max_mod_rpcs_in_flight);
 }
 
 static ssize_t max_mod_rpcs_in_flight_store(struct kobject *kobj,
@@ -294,7 +294,7 @@ static ssize_t max_mod_rpcs_in_flight_store(struct kobject *kobj,
 					    const char *buffer,
 					    size_t count)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	u16 val;
 	int rc;
@@ -303,7 +303,7 @@ static ssize_t max_mod_rpcs_in_flight_store(struct kobject *kobj,
 	if (rc)
 		return rc;
 
-	rc = obd_set_max_mod_rpcs_in_flight(&dev->u.cli, val);
+	rc = obd_set_max_mod_rpcs_in_flight(&obd->u.cli, val);
 	if (rc)
 		count = rc;
 
@@ -321,8 +321,8 @@ static ssize_t mdc_rpc_stats_seq_write(struct file *file,
 				       size_t len, loff_t *off)
 {
 	struct seq_file *seq = file->private_data;
-	struct obd_device *dev = seq->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = seq->private;
+	struct client_obd *cli = &obd->u.cli;
 
 	lprocfs_oh_clear(&cli->cl_mod_rpcs_hist);
 
@@ -338,12 +338,12 @@ static ssize_t mdc_rpc_stats_seq_write(struct file *file,
 
 static int mdc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 {
-	struct obd_device *dev = seq->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = seq->private;
+	struct client_obd *cli = &obd->u.cli;
 	unsigned long read_tot = 0, write_tot = 0, read_cum, write_cum;
 	int i;
 
-	obd_mod_rpc_stats_seq_show(&dev->u.cli, seq);
+	obd_mod_rpc_stats_seq_show(&obd->u.cli, seq);
 
 	spin_lock(&cli->cl_loi_list_lock);
 
@@ -433,8 +433,8 @@ LPROC_SEQ_FOPS(mdc_rpc_stats);
 static int mdc_stats_seq_show(struct seq_file *seq, void *v)
 {
 	struct timespec64 now;
-	struct obd_device *dev = seq->private;
-	struct osc_stats *stats = &obd2osc_dev(dev)->od_stats;
+	struct obd_device *obd = seq->private;
+	struct osc_stats *stats = &obd2osc_dev(obd)->od_stats;
 
 	ktime_get_real_ts64(&now);
 
@@ -454,8 +454,8 @@ static ssize_t mdc_stats_seq_write(struct file *file,
 				   size_t len, loff_t *off)
 {
 	struct seq_file *seq = file->private_data;
-	struct obd_device *dev = seq->private;
-	struct osc_stats *stats = &obd2osc_dev(dev)->od_stats;
+	struct obd_device *obd = seq->private;
+	struct osc_stats *stats = &obd2osc_dev(obd)->od_stats;
 
 	memset(stats, 0, sizeof(*stats));
 	return len;
@@ -466,9 +466,9 @@ LPROC_SEQ_FOPS(mdc_stats);
 
 static int mdc_dom_min_repsize_seq_show(struct seq_file *m, void *v)
 {
-	struct obd_device *dev = m->private;
+	struct obd_device *obd = m->private;
 
-	seq_printf(m, "%u\n", dev->u.cli.cl_dom_min_inline_repsize);
+	seq_printf(m, "%u\n", obd->u.cli.cl_dom_min_inline_repsize);
 
 	return 0;
 }
@@ -477,11 +477,11 @@ static ssize_t mdc_dom_min_repsize_seq_write(struct file *file,
 					     const char __user *buffer,
 					     size_t count, loff_t *off)
 {
-	struct obd_device *dev;
+	struct obd_device *obd;
 	unsigned int val;
 	int rc;
 
-	dev =  ((struct seq_file *)file->private_data)->private;
+	obd =  ((struct seq_file *)file->private_data)->private;
 	rc = kstrtouint_from_user(buffer, count, 0, &val);
 	if (rc)
 		return rc;
@@ -489,7 +489,7 @@ static ssize_t mdc_dom_min_repsize_seq_write(struct file *file,
 	if (val > MDC_DOM_MAX_INLINE_REPSIZE)
 		return -ERANGE;
 
-	dev->u.cli.cl_dom_min_inline_repsize = val;
+	obd->u.cli.cl_dom_min_inline_repsize = val;
 	return count;
 }
 LPROC_SEQ_FOPS(mdc_dom_min_repsize);

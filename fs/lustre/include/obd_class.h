@@ -255,7 +255,7 @@ extern void (*class_export_dump_hook)(struct obd_export *exp);
 /* genops.c */
 struct obd_export *class_export_get(struct obd_export *exp);
 void class_export_put(struct obd_export *exp);
-struct obd_export *class_new_export(struct obd_device *obddev,
+struct obd_export *class_new_export(struct obd_device *obd,
 				    struct obd_uuid *cluuid);
 struct obd_export *class_new_export_self(struct obd_device *obd,
 					 struct obd_uuid *uuid);

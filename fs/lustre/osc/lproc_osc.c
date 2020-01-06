@@ -45,12 +45,12 @@
 static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
 			   char *buf)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct obd_import *imp;
 	ssize_t rc;
 
-	with_imp_locked(dev, imp, rc)
+	with_imp_locked(obd, imp, rc)
 		rc = sprintf(buf, "%d\n", !imp->imp_deactive);
 
 	return rc;
@@ -59,7 +59,7 @@ static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
 static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
 			    const char *buffer, size_t count)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct obd_import *imp;
 	bool val;
@@ -69,7 +69,7 @@ static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
 	if (rc)
 		return rc;
 
-	with_imp_locked(dev, imp, count) {
+	with_imp_locked(obd, imp, count) {
 		/* opposite senses */
 		if (imp->imp_deactive == val) {
 			rc = ptlrpc_set_import_active(imp, val);
@@ -89,9 +89,9 @@ static ssize_t max_rpcs_in_flight_show(struct kobject *kobj,
 				       struct attribute *attr,
 				       char *buf)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct client_obd *cli = &obd->u.cli;
 
 	return sprintf(buf, "%u\n", cli->cl_max_rpcs_in_flight);
 }
@@ -101,9 +101,9 @@ static ssize_t max_rpcs_in_flight_store(struct kobject *kobj,
 					const char *buffer,
 					size_t count)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct client_obd *cli = &obd->u.cli;
 	int adding, added, req_count;
 	unsigned int val;
 	int rc;
@@ -142,9 +142,9 @@ static ssize_t max_dirty_mb_show(struct kobject *kobj,
 				 struct attribute *attr,
 				 char *buf)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct client_obd *cli = &obd->u.cli;
 	long val;
 	int mult;
 
@@ -158,9 +158,9 @@ static ssize_t max_dirty_mb_store(struct kobject *kobj,
 				  const char *buffer,
 				  size_t count)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct client_obd *cli = &obd->u.cli;
 	unsigned long pages_number;
 	int rc;
 
@@ -189,8 +189,8 @@ LUSTRE_RO_ATTR(ost_conn_uuid);
 
 static int osc_cached_mb_seq_show(struct seq_file *m, void *v)
 {
-	struct obd_device *dev = m->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = m->private;
+	struct client_obd *cli = &obd->u.cli;
 	int shift = 20 - PAGE_SHIFT;
 
 	seq_printf(m,
@@ -211,8 +211,8 @@ static ssize_t osc_cached_mb_seq_write(struct file *file,
 				       size_t count, loff_t *off)
 {
 	struct seq_file *m = file->private_data;
-	struct obd_device *dev = m->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = m->private;
+	struct client_obd *cli = &obd->u.cli;
 	long pages_number, rc;
 	char kernbuf[128];
 	int mult;
@@ -260,9 +260,9 @@ static ssize_t cur_dirty_bytes_show(struct kobject *kobj,
 				    struct attribute *attr,
 				    char *buf)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct client_obd *cli = &obd->u.cli;
 
 	return sprintf(buf, "%lu\n", cli->cl_dirty_pages << PAGE_SHIFT);
 }
@@ -272,9 +272,9 @@ static ssize_t cur_grant_bytes_show(struct kobject *kobj,
 				    struct attribute *attr,
 				    char *buf)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct client_obd *cli = &obd->u.cli;
 
 	return sprintf(buf, "%lu\n", cli->cl_avail_grant);
 }
@@ -310,9 +310,9 @@ static ssize_t cur_lost_grant_bytes_show(struct kobject *kobj,
 					 struct attribute *attr,
 					 char *buf)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct client_obd *cli = &obd->u.cli;
 
 	return sprintf(buf, "%lu\n", cli->cl_lost_grant);
 }
@@ -322,9 +322,9 @@ static ssize_t cur_dirty_grant_bytes_show(struct kobject *kobj,
 					  struct attribute *attr,
 					  char *buf)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
-	struct client_obd *cli = &dev->u.cli;
+	struct client_obd *cli = &obd->u.cli;
 
 	return sprintf(buf, "%lu\n", cli->cl_dirty_grant);
 }
@@ -597,8 +597,8 @@ LUSTRE_RW_ATTR(short_io_bytes);
 
 static int osc_unstable_stats_seq_show(struct seq_file *m, void *v)
 {
-	struct obd_device *dev = m->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = m->private;
+	struct client_obd *cli = &obd->u.cli;
 	long pages;
 	int mb;
 
@@ -631,7 +631,7 @@ static ssize_t idle_timeout_show(struct kobject *kobj, struct attribute *attr,
 static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 				  const char *buffer, size_t count)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct obd_import *imp;
 	struct ptlrpc_request *req;
@@ -660,7 +660,7 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 			return -ERANGE;
 	}
 
-	with_imp_locked(dev, imp, count) {
+	with_imp_locked(obd, imp, count) {
 		if (idle_debug) {
 			imp->imp_idle_debug = idle_debug;
 		} else {
@@ -684,12 +684,12 @@ LUSTRE_RW_ATTR(idle_timeout);
 static ssize_t idle_connect_store(struct kobject *kobj, struct attribute *attr,
 				  const char *buffer, size_t count)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct obd_import *imp;
 	struct ptlrpc_request *req;
 
-	with_imp_locked(dev, imp, count) {
+	with_imp_locked(obd, imp, count) {
 		/* to initiate the connection if it's in IDLE state */
 		req = ptlrpc_request_alloc(imp, &RQF_OST_STATFS);
 		if (req)
@@ -721,20 +721,20 @@ static ssize_t grant_shrink_show(struct kobject *kobj, struct attribute *attr,
 static ssize_t grant_shrink_store(struct kobject *kobj, struct attribute *attr,
 				  const char *buffer, size_t count)
 {
-	struct obd_device *dev = container_of(kobj, struct obd_device,
+	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct obd_import *imp;
 	bool val;
 	int rc;
 
-	if (!dev)
+	if (!obd)
 		return 0;
 
 	rc = kstrtobool(buffer, &val);
 	if (rc)
 		return rc;
 
-	with_imp_locked(dev, imp, count) {
+	with_imp_locked(obd, imp, count) {
 		spin_lock(&imp->imp_lock);
 		imp->imp_grant_shrink_disabled = !val;
 		spin_unlock(&imp->imp_lock);
@@ -781,8 +781,8 @@ static struct lprocfs_vars lprocfs_osc_obd_vars[] = {
 static int osc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 {
 	struct timespec64 now;
-	struct obd_device *dev = seq->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = seq->private;
+	struct client_obd *cli = &obd->u.cli;
 	unsigned long read_tot = 0, write_tot = 0, read_cum, write_cum;
 	int i;
 
@@ -882,8 +882,8 @@ static ssize_t osc_rpc_stats_seq_write(struct file *file,
 				       size_t len, loff_t *off)
 {
 	struct seq_file *seq = file->private_data;
-	struct obd_device *dev = seq->private;
-	struct client_obd *cli = &dev->u.cli;
+	struct obd_device *obd = seq->private;
+	struct client_obd *cli = &obd->u.cli;
 
 	lprocfs_oh_clear(&cli->cl_read_rpc_hist);
 	lprocfs_oh_clear(&cli->cl_write_rpc_hist);
@@ -900,8 +900,8 @@ LPROC_SEQ_FOPS(osc_rpc_stats);
 static int osc_stats_seq_show(struct seq_file *seq, void *v)
 {
 	struct timespec64 now;
-	struct obd_device *dev = seq->private;
-	struct osc_stats *stats = &obd2osc_dev(dev)->od_stats;
+	struct obd_device *obd = seq->private;
+	struct osc_stats *stats = &obd2osc_dev(obd)->od_stats;
 
 	ktime_get_real_ts64(&now);
 
@@ -921,8 +921,8 @@ static ssize_t osc_stats_seq_write(struct file *file,
 				   size_t len, loff_t *off)
 {
 	struct seq_file *seq = file->private_data;
-	struct obd_device *dev = seq->private;
-	struct osc_stats *stats = &obd2osc_dev(dev)->od_stats;
+	struct obd_device *obd = seq->private;
+	struct osc_stats *stats = &obd2osc_dev(obd)->od_stats;
 
 	memset(stats, 0, sizeof(*stats));
 	return len;
@@ -930,11 +930,11 @@ static ssize_t osc_stats_seq_write(struct file *file,
 
 LPROC_SEQ_FOPS(osc_stats);
 
-void lproc_osc_attach_seqstat(struct obd_device *dev)
+void lproc_osc_attach_seqstat(struct obd_device *obd)
 {
-	debugfs_create_file("osc_stats", 0644, dev->obd_debugfs_entry, dev,
+	debugfs_create_file("osc_stats", 0644, obd->obd_debugfs_entry, obd,
 			    &osc_stats_fops);
-	debugfs_create_file("rpc_stats", 0644, dev->obd_debugfs_entry, dev,
+	debugfs_create_file("rpc_stats", 0644, obd->obd_debugfs_entry, obd,
 			    &osc_rpc_stats_fops);
 }
 
