@@ -435,9 +435,9 @@ extern struct lprocfs_stats *
 lprocfs_alloc_stats(unsigned int num, enum lprocfs_stats_flags flags);
 void lprocfs_clear_stats(struct lprocfs_stats *stats);
 void lprocfs_free_stats(struct lprocfs_stats **stats);
-int ldebugfs_alloc_md_stats(struct obd_device *obddev,
+int ldebugfs_alloc_md_stats(struct obd_device *obd,
 			    unsigned int num_private_stats);
-void ldebugfs_free_md_stats(struct obd_device *obddev);
+void ldebugfs_free_md_stats(struct obd_device *obd);
 void lprocfs_counter_init(struct lprocfs_stats *stats, int index,
 			  unsigned int conf, const char *name,
 			  const char *units);

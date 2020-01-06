@@ -828,11 +828,11 @@ struct obd_ops {
 			      u32 keylen, void *key,
 			      u32 vallen, void *val,
 			      struct ptlrpc_request_set *set);
-	int (*setup)(struct obd_device *dev, struct lustre_cfg *cfg);
-	int (*precleanup)(struct obd_device *dev);
-	int (*cleanup)(struct obd_device *dev);
-	int (*process_config)(struct obd_device *dev, u32 len, void *data);
-	int (*postrecov)(struct obd_device *dev);
+	int (*setup)(struct obd_device *obd, struct lustre_cfg *cfg);
+	int (*precleanup)(struct obd_device *obd);
+	int (*cleanup)(struct obd_device *obd);
+	int (*process_config)(struct obd_device *obd, u32 len, void *data);
+	int (*postrecov)(struct obd_device *obd);
 	int (*add_conn)(struct obd_import *imp, struct obd_uuid *uuid,
 			int priority);
 	int (*del_conn)(struct obd_import *imp, struct obd_uuid *uuid);
