@@ -316,10 +316,10 @@ static inline enum obd_option exp_flags_from_obd(struct obd_device *obd)
 		0);
 }
 
-#define with_obd_cl_sem(__rc, __obd, __imp)				\
+#define with_imp_locked(__obd, __imp, __rc)				\
 	for (down_read(&(__obd)->u.cli.cl_sem),				\
 		__imp = (__obd)->u.cli.cl_import,			\
-		__rc = imp ? 0 : -ENODEV;				\
+		__rc = __imp ? 0 : -ENODEV;				\
 	     __imp ? 1 : (up_read(&(__obd)->u.cli.cl_sem), 0);		\
 	     __imp = NULL)
 

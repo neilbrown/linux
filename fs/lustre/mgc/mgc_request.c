@@ -462,7 +462,7 @@ int lprocfs_mgc_rd_ir_state(struct seq_file *m, void *data)
 	struct config_llog_data *cld;
 	int rc;
 
-	with_obd_cl_sem(rc, obd, imp) {
+	with_imp_locked(obd, imp, rc) {
 		ocd = &imp->imp_connect_data;
 
 		seq_printf(m, "imperative_recovery: %s\n",

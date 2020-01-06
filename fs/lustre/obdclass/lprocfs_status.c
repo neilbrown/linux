@@ -747,7 +747,7 @@ ssize_t conn_uuid_show(struct kobject *kobj, struct attribute *attr, char *buf)
 	struct obd_import *imp;
 	ssize_t count;
 
-	with_obd_cl_sem(count, obd, imp) {
+	with_imp_locked(obd, imp, count) {
 		conn = imp->imp_connection;
 		if (conn)
 			count = sprintf(buf, "%s\n", conn->c_remote_uuid.uuid);
@@ -767,7 +767,7 @@ int lprocfs_rd_server_uuid(struct seq_file *m, void *data)
 	int rc;
 
 	LASSERT(obd);
-	with_obd_cl_sem(rc, obd, imp) {
+	with_imp_locked(obd, imp, rc) {
 		imp_state_name = ptlrpc_import_state_name(imp->imp_state);
 		seq_printf(m, "%s\t%s%s\n",
 			   obd2cli_tgt(obd), imp_state_name,
@@ -788,7 +788,7 @@ int lprocfs_rd_conn_uuid(struct seq_file *m, void *data)
 
 	LASSERT(obd);
 
-	with_obd_cl_sem(rc, obd, imp) {
+	with_imp_locked(obd, imp, rc) {
 		conn = imp->imp_connection;
 		if (conn)
 			seq_printf(m, "%s\n", conn->c_remote_uuid.uuid);
@@ -1008,7 +1008,7 @@ int lprocfs_rd_import(struct seq_file *m, void *data)
 
 	LASSERT(obd);
 
-	with_obd_cl_sem(rc, obd, imp) {
+	with_imp_locked(obd, imp, rc) {
 		ocd = &imp->imp_connect_data;
 
 		seq_printf(m, "import:\n"
@@ -1161,7 +1161,7 @@ int lprocfs_rd_state(struct seq_file *m, void *data)
 	int j, k, rc;
 
 	LASSERT(obd);
-	with_obd_cl_sem(rc, obd, imp) {
+	with_imp_locked(obd, imp, rc) {
 		seq_printf(m, "current_state: %s\n",
 			   ptlrpc_import_state_name(imp->imp_state));
 		seq_puts(m, "state_history:\n");
@@ -1203,7 +1203,7 @@ int lprocfs_rd_timeouts(struct seq_file *m, void *data)
 	int i, rc;
 
 	LASSERT(obd);
-	with_obd_cl_sem(rc, obd, imp) {
+	with_imp_locked(obd, imp, rc) {
 		now = ktime_get_real_seconds();
 
 		/* Some network health info for kicks */
@@ -1246,7 +1246,7 @@ int lprocfs_rd_connect_flags(struct seq_file *m, void *data)
 	u64 flags, flags2;
 	int rc;
 
-	with_obd_cl_sem(rc, obd, imp) {
+	with_imp_locked(obd, imp, rc) {
 		flags = imp->imp_connect_data.ocd_connect_flags;
 		flags2 = imp->imp_connect_data.ocd_connect_flags2;
 		seq_printf(m, "flags=%#llx\n", flags);
@@ -2110,7 +2110,7 @@ ssize_t max_pages_per_rpc_store(struct kobject *kobj, struct attribute *attr,
 	if (val >= ONE_MB_BRW_SIZE)
 		val >>= PAGE_SHIFT;
 
-	with_obd_cl_sem(rc, dev, imp) {
+	with_imp_locked(dev, imp, rc) {
 		ocd = &imp->imp_connect_data;
 		chunk_mask = ~((1 << (cli->cl_chunkbits - PAGE_SHIFT)) - 1);
 		/* max_pages_per_rpc must be chunk aligned */
@@ -2179,7 +2179,7 @@ ssize_t short_io_bytes_store(struct kobject *kobj, struct attribute *attr,
 
 	rc = count;
 
-	with_obd_cl_sem(rc, dev, imp) {
+	with_imp_locked(dev, imp, rc) {
 		spin_lock(&cli->cl_loi_list_lock);
 		cli->cl_max_short_io_bytes = min_t(u64, val,
 						   OST_MAX_SHORT_IO_BYTES);

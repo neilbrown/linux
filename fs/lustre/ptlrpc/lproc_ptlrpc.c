@@ -1246,7 +1246,7 @@ int lprocfs_wr_ping(struct file *file, const char __user *buffer,
 	struct obd_import *imp;
 	int rc;
 
-	with_obd_cl_sem(rc, obd, imp) {
+	with_imp_locked(obd, imp, rc) {
 		req = ptlrpc_prep_ping(imp);
 		if (!req)
 			rc = -ENOMEM;
@@ -1312,7 +1312,7 @@ int lprocfs_wr_import(struct file *file, const char __user *buffer,
 		do_reconn = 0;
 		ptr += strlen("::");
 		inst = simple_strtoul(ptr, &endptr, 10);
-		with_obd_cl_sem(count, obd, imp) {
+		with_imp_locked(obd, imp, count) {
 			if (*endptr) {
 				CERROR("config: wrong instance # %s\n", ptr);
 			} else if (inst != imp->imp_connect_data.ocd_instance) {
@@ -1331,7 +1331,7 @@ int lprocfs_wr_import(struct file *file, const char __user *buffer,
 	}
 
 	if (do_reconn)
-		with_obd_cl_sem(count, obd, imp)
+		with_imp_locked(obd, imp, count)
 			ptlrpc_recover_import(imp, uuid, 1);
 
 out:
@@ -1346,7 +1346,7 @@ int lprocfs_rd_pinger_recov(struct seq_file *m, void *n)
 	struct obd_import *imp;
 	int rc;
 
-	with_obd_cl_sem(rc, obd, imp)
+	with_imp_locked(obd, imp, rc)
 		seq_printf(m, "%d\n", !imp->imp_no_pinger_recover);
 
 	return rc;
@@ -1368,7 +1368,7 @@ int lprocfs_wr_pinger_recov(struct file *file, const char __user *buffer,
 	if (val != 0 && val != 1)
 		return -ERANGE;
 
-	with_obd_cl_sem(rc, obd, imp) {
+	with_imp_locked(obd, imp, rc) {
 		spin_lock(&imp->imp_lock);
 		imp->imp_no_pinger_recover = !val;
 		spin_unlock(&imp->imp_lock);

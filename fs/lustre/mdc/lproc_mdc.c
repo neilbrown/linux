@@ -212,7 +212,7 @@ static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
 	struct obd_import *imp;
 	ssize_t rc;
 
-	with_obd_cl_sem(rc, dev, imp)
+	with_imp_locked(dev, imp, rc)
 		rc =  sprintf(buf, "%u\n", !imp->imp_deactive);
 
 	return rc;
@@ -231,7 +231,7 @@ static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
 	if (rc)
 		return rc;
 
-	with_obd_cl_sem(count, dev, imp) {
+	with_imp_locked(dev, imp, count) {
 		/* opposite senses */
 		if (imp->imp_deactive == val) {
 			rc = ptlrpc_set_import_active(imp, val);
