@@ -258,6 +258,13 @@ static int ll_setstripe_ea(struct dentry *dentry, struct lov_user_md *lump,
 	if (!size && lump)
 		lump = NULL;
 
+	if (size && size < sizeof(*lump)) {
+		/* ll_adjust_lum() or ll_lov_user_md_size() migh access
+		 * before size - just give up now.
+		 */
+		return -ERANGE;
+	}
+
 	rc = ll_adjust_lum(inode, lump);
 	if (rc)
 		return rc;
