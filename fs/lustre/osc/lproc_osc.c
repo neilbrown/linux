@@ -50,7 +50,7 @@ static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
 	struct obd_import *imp;
 	ssize_t rc;
 
-	with_obd_cl_sem(rc, dev, imp)
+	with_imp_locked(dev, imp, rc)
 		rc = sprintf(buf, "%d\n", !imp->imp_deactive);
 
 	return rc;
@@ -69,7 +69,7 @@ static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
 	if (rc)
 		return rc;
 
-	with_obd_cl_sem(count, dev, imp) {
+	with_imp_locked(dev, imp, count) {
 		/* opposite senses */
 		if (imp->imp_deactive == val) {
 			rc = ptlrpc_set_import_active(imp, val);
@@ -616,7 +616,7 @@ static ssize_t idle_timeout_show(struct kobject *kobj, struct attribute *attr,
 	struct obd_import *imp;
 	int ret;
 
-	with_obd_cl_sem(ret, obd, imp)
+	with_imp_locked(obd, imp, ret)
 		ret = sprintf(buf, "%u\n", imp->imp_idle_timeout);
 
 	return ret;
@@ -646,7 +646,7 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 			return -ERANGE;
 	}
 
-	with_obd_cl_sem(rc, obd, imp) {
+	with_imp_locked(obd, imp, rc) {
 		if (idle_debug) {
 			imp->imp_idle_timeout = val;
 		} else {
@@ -673,7 +673,7 @@ static ssize_t idle_connect_store(struct kobject *kobj, struct attribute *attr,
 	struct ptlrpc_request *req;
 	int rc;
 
-	with_obd_cl_sem(rc, dev, imp) {
+	with_imp_locked(dev, imp, rc) {
 		/* to initiate the connection if it's in IDLE state */
 		req = ptlrpc_request_alloc(imp, &RQF_OST_STATFS);
 		if (req)
@@ -693,7 +693,7 @@ static ssize_t grant_shrink_show(struct kobject *kobj, struct attribute *attr,
 	struct obd_import *imp;
 	ssize_t len;
 
-	with_obd_cl_sem(len, obd, imp) {
+	with_imp_locked(obd, imp, len) {
 		len = scnprintf(
 			buf, PAGE_SIZE, "%d\n",
 			!imp->imp_grant_shrink_disabled &&
@@ -719,7 +719,7 @@ static ssize_t grant_shrink_store(struct kobject *kobj, struct attribute *attr,
 	if (rc)
 		return rc;
 
-	with_obd_cl_sem(rc, dev, imp) {
+	with_imp_locked(dev, imp, rc) {
 		spin_lock(&imp->imp_lock);
 		imp->imp_grant_shrink_disabled = !val;
 		spin_unlock(&imp->imp_lock);
