@@ -63,7 +63,6 @@ static void ll_release(struct dentry *de)
 		kfree(lld->lld_it);
 	}
 
-	de->d_fsdata = NULL;
 	call_rcu(&lld->lld_rcu_head, free_dentry_data);
 }
 
