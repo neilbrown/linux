@@ -419,12 +419,12 @@ static int __osc_dlm_blocking_ast(const struct lu_env *env,
 
 	if (dlmlock->l_ast_data) {
 		obj = osc2cl(dlmlock->l_ast_data);
-		dlmlock->l_ast_data = NULL;
-
 		cl_object_get(obj);
 	}
 
 	unlock_res_and_lock(dlmlock);
+
+	OBD_FAIL_TIMEOUT(OBD_FAIL_OSC_DELAY_CANCEL, 5);
 
 	/* if l_ast_data is NULL, the dlmlock was enqueued by AGL or
 	 * the object has been destroyed.
@@ -442,6 +442,10 @@ static int __osc_dlm_blocking_ast(const struct lu_env *env,
 
 		/* losing a lock, update kms */
 		lock_res_and_lock(dlmlock);
+		/* clearing l_ast_data after flushing data,
+		 * to let glimpse ast find the lock and the object
+		 */
+		dlmlock->l_ast_data = NULL;
 		cl_object_attr_lock(obj);
 		/* Must get the value under the lock to avoid race. */
 		old_kms = cl2osc(obj)->oo_oinfo->loi_kms;
