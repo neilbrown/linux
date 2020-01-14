@@ -1082,6 +1082,47 @@ int cl_sync_io_wait(const struct lu_env *env, struct cl_sync_io *anchor,
 }
 EXPORT_SYMBOL(cl_sync_io_wait);
 
+static void cl_aio_end(const struct lu_env *env, struct cl_sync_io *anchor)
+{
+	struct cl_dio_aio *aio = container_of(anchor, typeof(*aio), cda_sync);
+	ssize_t ret = anchor->csi_sync_rc;
+
+	/* release pages */
+	while (aio->cda_pages.pl_nr > 0) {
+		struct cl_page *page = cl_page_list_first(&aio->cda_pages);
+
+		cl_page_get(page);
+		cl_page_list_del(env, &aio->cda_pages, page);
+		cl_page_delete(env, page);
+		cl_page_put(env, page);
+	}
+
+	if (!is_sync_kiocb(aio->cda_iocb) &&
+	    aio->cda_iocb->ki_complete)
+		aio->cda_iocb->ki_complete(aio->cda_iocb,
+					   ret ?: aio->cda_bytes, 0);
+}
+
+struct cl_dio_aio *cl_aio_alloc(struct kiocb *iocb)
+{
+	struct cl_dio_aio *aio;
+
+	aio = kmem_cache_zalloc(cl_dio_aio_kmem, GFP_NOFS);
+	if (aio) {
+		/*
+		 * Hold one ref so that it won't be released until
+		 * every pages is added.
+		 */
+		cl_sync_io_init_notify(&aio->cda_sync, 1,
+				       is_sync_kiocb(iocb) ? NULL : aio,
+				       cl_aio_end);
+		cl_page_list_init(&aio->cda_pages);
+		aio->cda_iocb = iocb;
+	}
+	return aio;
+}
+EXPORT_SYMBOL(cl_aio_alloc);
+
 /**
  * Indicate that transfer of a single page completed.
  */
@@ -1119,7 +1160,10 @@ void cl_sync_io_note(const struct lu_env *env, struct cl_sync_io *anchor,
 		 * If anchor->csi_aio is set, we are responsible for freeing
 		 * memory here rather than when cl_sync_io_wait() completes.
 		 */
-		kfree(aio);
+		if (aio) {
+			cl_aio_end(env, anchor);
+			kmem_cache_free(cl_dio_aio_kmem, aio);
+		}
 	}
 }
 EXPORT_SYMBOL(cl_sync_io_note);

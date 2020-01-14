@@ -47,6 +47,8 @@ struct cl_thread_info {
 	struct cl_sync_io	clt_anchor;
 };
 
+extern struct kmem_cache *cl_dio_aio_kmem;
+
 struct cl_thread_info *cl_env_info(const struct lu_env *env);
 
 #endif /* _CL_INTERNAL_H */
