@@ -2474,6 +2474,7 @@ struct cl_dio_aio;
 
 typedef void (cl_sync_io_end_t)(const struct lu_env *, struct cl_sync_io *);
 
+struct cl_dio_aio *cl_aio_alloc(struct kiocb *iocb);
 void cl_sync_io_init_notify(struct cl_sync_io *anchor, int nr,
 			    struct cl_dio_aio *aio, cl_sync_io_end_t *end);
 
