@@ -743,8 +743,8 @@ static int vvp_io_read_start(const struct lu_env *env,
 	struct file *file = vio->vui_fd->fd_file;
 	int result;
 	loff_t pos = io->u.ci_rd.rd.crw_pos;
-	long cnt = io->u.ci_rd.rd.crw_count;
-	long tot = vio->vui_tot_count;
+	size_t cnt = io->u.ci_rd.rd.crw_count;
+	size_t tot = vio->vui_tot_count;
 	int exceed = 0;
 
 	CLOBINVRNT(env, obj, vvp_object_invariant(obj));
@@ -782,16 +782,16 @@ static int vvp_io_read_start(const struct lu_env *env,
 	/* initialize read-ahead window once per syscall */
 	if (!vio->vui_ra_valid) {
 		vio->vui_ra_valid = true;
-		vio->vui_ra_start = cl_index(obj, pos);
-		vio->vui_ra_count = cl_index(obj, tot + PAGE_SIZE - 1);
+		vio->vui_ra_start_idx = cl_index(obj, pos);
+		vio->vui_ra_pages = cl_index(obj, tot + PAGE_SIZE - 1);
 		/* If both start and end are unaligned, we read one more page
 		 * than the index math suggests.
 		 */
-		if (pos % PAGE_SIZE != 0 && (pos + tot) % PAGE_SIZE != 0)
-			vio->vui_ra_count++;
+		if ((pos & ~PAGE_MASK) != 0 && ((pos + tot) & ~PAGE_MASK) != 0)
+			vio->vui_ra_pages++;
 
-		CDEBUG(D_READA, "tot %ld, ra_start %lu, ra_count %lu\n", tot,
-		       vio->vui_ra_start, vio->vui_ra_count);
+		CDEBUG(D_READA, "tot %zu, ra_start %lu, ra_count %lu\n",
+		       tot, vio->vui_ra_start_idx, vio->vui_ra_pages);
 	}
 
 	/* BUG: 5972 */
@@ -1436,7 +1436,7 @@ static int vvp_io_read_ahead(const struct lu_env *env,
 		struct vvp_io *vio = cl2vvp_io(env, ios);
 
 		if (unlikely(vio->vui_fd->fd_flags & LL_FILE_GROUP_LOCKED)) {
-			ra->cra_end = CL_PAGE_EOF;
+			ra->cra_end_idx = CL_PAGE_EOF;
 			result = 1; /* no need to call down */
 		}
 	}
