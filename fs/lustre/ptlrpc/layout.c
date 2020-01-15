@@ -2294,9 +2294,9 @@ EXPORT_SYMBOL(req_capsule_has_field);
  * Returns a non-zero value if the given @field is present in the given
  * @pill's PTLRPC request or reply (@loc), else it returns 0.
  */
-static int req_capsule_field_present(const struct req_capsule *pill,
-				     const struct req_msg_field *field,
-				     enum req_location loc)
+int req_capsule_field_present(const struct req_capsule *pill,
+			      const struct req_msg_field *field,
+			      enum req_location loc)
 {
 	u32 offset;
 
@@ -2306,6 +2306,7 @@ static int req_capsule_field_present(const struct req_capsule *pill,
 	offset = __req_capsule_offset(pill, field, loc);
 	return lustre_msg_bufcount(__req_msg(pill, loc)) > offset;
 }
+EXPORT_SYMBOL(req_capsule_field_present);
 
 /**
  * This function shrinks the size of the _buffer_ of the @pill's PTLRPC
