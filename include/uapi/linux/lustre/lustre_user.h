@@ -158,7 +158,7 @@ struct lu_fid {
 	 * used.
 	 **/
 	__u32 f_ver;
-};
+} __packed;
 
 static inline bool fid_is_zero(const struct lu_fid *fid)
 {
@@ -246,7 +246,7 @@ struct ost_id {
 		} oi;
 		struct lu_fid oi_fid;
 	};
-};
+} __packed;
 
 #define DOSTID "%#llx:%llu"
 #define POSTID(oi) ostid_seq(oi), ostid_id(oi)
@@ -481,7 +481,7 @@ struct lov_user_md_v1 {		/* LOV EA user data (host-endian) */
 						 */
 	};
 	struct lov_user_ost_data_v1 lmm_objects[0]; /* per-stripe data */
-} __attribute__((packed,  __may_alias__));
+} __attribute__((packed, __may_alias__));
 
 struct lov_user_md_v3 {		/* LOV EA user data (host-endian) */
 	__u32 lmm_magic;	/* magic number = LOV_USER_MAGIC_V3 */
@@ -499,7 +499,7 @@ struct lov_user_md_v3 {		/* LOV EA user data (host-endian) */
 	};
 	char  lmm_pool_name[LOV_MAXPOOLNAME + 1];   /* pool name */
 	struct lov_user_ost_data_v1 lmm_objects[0]; /* per-stripe data */
-} __packed;
+} __attribute__((packed, __may_alias__));
 
 struct lov_foreign_md {
 	__u32 lfm_magic;	/* magic number = LOV_MAGIC_FOREIGN */
@@ -507,7 +507,7 @@ struct lov_foreign_md {
 	__u32 lfm_type;		/* type, see LU_FOREIGN_TYPE_ */
 	__u32 lfm_flags;	/* flags, type specific */
 	char lfm_value[];
-};
+} __packed;
 
 #define foreign_size(lfm) (((struct lov_foreign_md *)lfm)->lfm_length + \
 			   offsetof(struct lov_foreign_md, lfm_value))
@@ -519,7 +519,7 @@ struct lov_foreign_md {
 struct lu_extent {
 	__u64	e_start;
 	__u64	e_end;
-};
+} __packed;
 
 #define DEXT "[%#llx, %#llx)"
 #define PEXT(ext) (ext)->e_start, (ext)->e_end
@@ -671,7 +671,7 @@ struct lmv_user_mds_data {
 	struct lu_fid	lum_fid;
 	__u32		lum_padding;
 	__u32		lum_mds;
-};
+} __attribute__((packed, __may_alias__));
 
 enum lmv_hash_type {
 	LMV_HASH_TYPE_UNKNOWN	= 0,	/* 0 is reserved for testing purpose */
@@ -1307,7 +1307,7 @@ struct changelog_rec {
 		struct lu_fid    cr_tfid;	/**< target fid */
 		__u32	 cr_markerflags; /**< CL_MARK flags */
 	};
-	struct lu_fid	    cr_pfid;	/**< parent fid */
+	struct lu_fid	 cr_pfid;		/**< parent fid */
 } __packed;
 
 /* Changelog extension for RENAME. */

@@ -2469,12 +2469,12 @@ struct llog_rec_hdr {
 	__u32	lrh_index;
 	__u32	lrh_type;
 	__u32	lrh_id;
-};
+} __packed;
 
 struct llog_rec_tail {
 	__u32	lrt_len;
 	__u32	lrt_index;
-};
+} __packed;
 
 /* Where data follow just after header */
 #define REC_DATA(ptr)						\
@@ -2944,7 +2944,7 @@ struct mdc_swap_layouts {
 struct close_data_resync_done {
 	__u32	resync_count;
 	__u32	resync_ids_inline[INLINE_RESYNC_ARRAY_SIZE];
-};
+} __packed;
 
 struct close_data {
 	struct lustre_handle	cd_handle;
