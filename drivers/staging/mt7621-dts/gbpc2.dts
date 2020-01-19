@@ -5,10 +5,25 @@
 / {
 	compatible = "gnubee,gb-pc2", "mediatek,mt7621-soc";
 	model = "GB-PC2";
+
+	gpio-leds {
+		compatible = "gpio-leds";
+
+		lan1 {
+			label = "gb-pc2:green:lan1";
+			gpios = <&gpio 3 GPIO_ACTIVE_LOW>;
+		};
+
+		lan2 {
+			label = "gb-pc2:green:lan2";
+			gpios = <&gpio 4 GPIO_ACTIVE_LOW>;
+		};
+
+	};
 };
 
 &default_gpio {
-	groups = "wdt", "uart3";
+	groups = "wdt", "uart3", "i2c";
 	function = "gpio";
 };
 
