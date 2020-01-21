@@ -519,7 +519,7 @@ int ll_teardown_mmaps(struct address_space *mapping, u64 first, u64 last)
 	if (mapping_mapped(mapping)) {
 		rc = 0;
 		unmap_mapping_range(mapping, first + PAGE_SIZE - 1,
-				    last - first + 1, 1);
+				    last - first + 1, 0);
 	}
 
 	return rc;
