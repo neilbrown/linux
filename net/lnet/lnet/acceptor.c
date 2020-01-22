@@ -43,9 +43,11 @@ static int accept_timeout = 5;
 static struct {
 	int			pta_shutdown;
 	struct socket		*pta_sock;
-	struct task_struct	*pta_task;
 	struct completion	pta_signal;
 	struct net		*pta_ns;
+	wait_queue_head_t	pta_waitq;
+	atomic_t		pta_ready;
+	void			(*pta_odata)(struct sock *s);
 } lnet_acceptor_state = {
 	.pta_shutdown = 1
 };
@@ -320,6 +322,16 @@ lnet_accept(struct socket *sock, u32 magic)
 	return rc;
 }
 
+static void lnet_acceptor_ready(struct sock *sk)
+{
+	/* Ensure pta_odata has actually been set before calling it */
+	rmb();
+	lnet_acceptor_state.pta_odata(sk);
+
+	atomic_set(&lnet_acceptor_state.pta_ready, 1);
+	wake_up(&lnet_acceptor_state.pta_waitq);
+}
+
 static int
 lnet_acceptor(void *arg)
 {
@@ -331,7 +343,6 @@ lnet_acceptor(void *arg)
 	int secure = (int)((long)arg);
 
 	LASSERT(!lnet_acceptor_state.pta_sock);
-	allow_signal(SIGKILL);
 
 	rc = lnet_sock_listen(&lnet_acceptor_state.pta_sock,
 			      0, accept_port, accept_backlog,
@@ -347,6 +358,16 @@ lnet_acceptor(void *arg)
 		lnet_acceptor_state.pta_sock = NULL;
 	} else {
 		LCONSOLE(0, "Accept %s, port %d\n", accept_type, accept_port);
+		init_waitqueue_head(&lnet_acceptor_state.pta_waitq);
+		lnet_acceptor_state.pta_odata =
+			lnet_acceptor_state.pta_sock->sk->sk_data_ready;
+		/* ensure pta_odata gets set before there is any chance of
+		 * lnet_accept_ready() trying to read it.
+		 */
+		wmb();
+		lnet_acceptor_state.pta_sock->sk->sk_data_ready =
+			lnet_acceptor_ready;
+		atomic_set(&lnet_acceptor_state.pta_ready, 1);
 	}
 
 	/* set init status and unblock parent */
@@ -357,20 +378,24 @@ lnet_acceptor(void *arg)
 		return rc;
 
 	while (!lnet_acceptor_state.pta_shutdown) {
-		rc = kernel_accept(lnet_acceptor_state.pta_sock, &newsock, 0);
-		if (rc) {
-			if (rc != -EINTR && rc != -ERESTARTSYS) {
+		wait_event_idle(lnet_acceptor_state.pta_waitq,
+				lnet_acceptor_state.pta_shutdown ||
+				atomic_read(&lnet_acceptor_state.pta_ready));
+		if (!atomic_read(&lnet_acceptor_state.pta_ready))
+			continue;
+		atomic_set(&lnet_acceptor_state.pta_ready, 0);
+		rc = kernel_accept(lnet_acceptor_state.pta_sock, &newsock,
+				   SOCK_NONBLOCK);
+		if (rc != 0) {
+			if (rc != -EAGAIN) {
 				CWARN("Accept error %d: pausing...\n", rc);
 				schedule_timeout_uninterruptible(HZ);
 			}
 			continue;
 		}
 
-		/* maybe the LNet acceptor thread has been waken */
-		if (lnet_acceptor_state.pta_shutdown) {
-			sock_release(newsock);
-			break;
-		}
+		/* make sure we call lnet_sock_accept() again, until it fails */
+		atomic_set(&lnet_acceptor_state.pta_ready, 1);
 
 		rc = lnet_sock_getaddr(newsock, 1, &peer_ip, &peer_port);
 		if (rc) {
@@ -402,6 +427,8 @@ failed:
 		sock_release(newsock);
 	}
 
+	lnet_acceptor_state.pta_sock->sk->sk_data_ready =
+		lnet_acceptor_state.pta_odata;
 	sock_release(lnet_acceptor_state.pta_sock);
 	lnet_acceptor_state.pta_sock = NULL;
 
@@ -473,7 +500,6 @@ lnet_acceptor_start(void)
 	if (!lnet_acceptor_state.pta_shutdown) {
 		/* started OK */
 		LASSERT(lnet_acceptor_state.pta_sock);
-		lnet_acceptor_state.pta_task = task;
 		return 0;
 	}
 
@@ -489,10 +515,7 @@ lnet_acceptor_stop(void)
 		return;
 
 	lnet_acceptor_state.pta_shutdown = 1;
-
-	/* Cause kernel_accept to abort */
-	send_sig(SIGKILL, lnet_acceptor_state.pta_task, 1);
-	lnet_acceptor_state.pta_task = NULL;
+	wake_up(&lnet_acceptor_state.pta_waitq);
 
 	/* block until acceptor signals exit */
 	wait_for_completion(&lnet_acceptor_state.pta_signal);
