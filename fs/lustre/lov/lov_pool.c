@@ -432,12 +432,10 @@ int lov_pool_del(struct obd_device *obd, char *poolname)
 	rcu_read_lock();
 	pool = rhashtable_lookup(&lov->lov_pools_hash_body, poolname,
 				 pools_hash_params);
-	if (pool) {
-		if (rhashtable_remove_fast(&lov->lov_pools_hash_body,
+	if (pool && rhashtable_remove_fast(&lov->lov_pools_hash_body,
 					   &pool->pool_hash,
 					   pools_hash_params) != 0)
-			pool = NULL;
-	}
+		pool = NULL;
 	rcu_read_unlock();
 	if (!pool)
 		return -ENOENT;
