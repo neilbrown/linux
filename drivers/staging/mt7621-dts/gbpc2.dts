@@ -19,11 +19,20 @@
 			gpios = <&gpio 4 GPIO_ACTIVE_LOW>;
 		};
 
+		lan3_orange {
+			label = "gb-pc2:orange:lan3";
+			gpios = <&gpio 13 GPIO_ACTIVE_LOW>;
+		};
+
+		lan3 {
+			label = "gb-pc2:green:lan3";
+			gpios = <&gpio 15 GPIO_ACTIVE_LOW>;
+		};
 	};
 };
 
 &default_gpio {
-	groups = "wdt", "uart3", "i2c";
+	groups = "wdt", "uart3", "jtag", "i2c";
 	function = "gpio";
 };
 
