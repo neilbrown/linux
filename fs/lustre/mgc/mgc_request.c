@@ -149,8 +149,10 @@ static void config_log_put(struct config_llog_data *cld)
 		config_log_put(cld->cld_recover);
 		config_log_put(cld->cld_params);
 		config_log_put(cld->cld_sptlrpc);
-		if (cld_is_sptlrpc(cld))
+		if (cld_is_sptlrpc(cld)) {
+			cld->cld_stopping = 1;
 			sptlrpc_conf_log_stop(cld->cld_logname);
+		}
 
 		class_export_put(cld->cld_mgcexp);
 		kfree(cld);
@@ -445,11 +447,12 @@ static int config_log_end(char *logname, struct config_llog_instance *cfg)
 	mutex_unlock(&cld->cld_lock);
 
 	config_mark_cld_stop(cld_recover);
-	config_mark_cld_stop(cld_params);
-	config_mark_cld_stop(cld_sptlrpc);
-
-	config_log_put(cld_params);
 	config_log_put(cld_recover);
+	config_mark_cld_stop(cld_params);
+	config_log_put(cld_params);
+	/* don't explicitly set cld_stopping on sptlrpc lock here, as other
+	 * targets may be active, it will be done in config_log_put if necessary
+	 */
 	config_log_put(cld_sptlrpc);
 
 	/* drop the ref from the find */
