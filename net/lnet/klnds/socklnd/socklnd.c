@@ -1784,67 +1784,6 @@ ksocknal_notify_gw_down(lnet_nid_t gw_nid)
 	 */
 }
 
-void
-ksocknal_query(struct lnet_ni *ni, lnet_nid_t nid, time64_t *when)
-{
-	int connect = 1;
-	time64_t last_alive = 0;
-	time64_t now = ktime_get_seconds();
-	struct ksock_peer_ni *peer_ni = NULL;
-	rwlock_t *glock = &ksocknal_data.ksnd_global_lock;
-	struct lnet_process_id id = {
-		.nid = nid,
-		.pid = LNET_PID_LUSTRE,
-	};
-
-	read_lock(glock);
-
-	peer_ni = ksocknal_find_peer_locked(ni, id);
-	if (peer_ni) {
-		struct ksock_conn *conn;
-		int bufnob;
-
-		list_for_each_entry(conn, &peer_ni->ksnp_conns, ksnc_list) {
-			bufnob = conn->ksnc_sock->sk->sk_wmem_queued;
-
-			if (bufnob < conn->ksnc_tx_bufnob) {
-				/* something got ACKed */
-				conn->ksnc_tx_deadline = ktime_get_seconds() +
-							 lnet_get_lnd_timeout();
-				peer_ni->ksnp_last_alive = now;
-				conn->ksnc_tx_bufnob = bufnob;
-			}
-		}
-
-		last_alive = peer_ni->ksnp_last_alive;
-		if (!ksocknal_find_connectable_route_locked(peer_ni))
-			connect = 0;
-	}
-
-	read_unlock(glock);
-
-	if (last_alive)
-		*when = last_alive * HZ;
-
-	CDEBUG(D_NET, "peer_ni %s %p, alive %lld secs ago, connect %d\n",
-	       libcfs_nid2str(nid), peer_ni,
-	       last_alive ? now - last_alive : -1,
-	       connect);
-
-	if (!connect)
-		return;
-
-	ksocknal_add_peer(ni, id, LNET_NIDADDR(nid), lnet_acceptor_port());
-
-	write_lock_bh(glock);
-
-	peer_ni = ksocknal_find_peer_locked(ni, id);
-	if (peer_ni)
-		ksocknal_launch_all_connections_locked(peer_ni);
-
-	write_unlock_bh(glock);
-}
-
 static void
 ksocknal_push_peer(struct ksock_peer_ni *peer_ni)
 {
@@ -2761,7 +2700,6 @@ static const struct lnet_lnd the_ksocklnd = {
 	.lnd_startup	= ksocknal_startup,
 	.lnd_shutdown	= ksocknal_shutdown,
 	.lnd_ctl	= ksocknal_ctl,
-	.lnd_query	= ksocknal_query,
 	.lnd_send	= ksocknal_send,
 	.lnd_recv	= ksocknal_recv,
 	.lnd_notify_peer_down	= ksocknal_notify_gw_down,

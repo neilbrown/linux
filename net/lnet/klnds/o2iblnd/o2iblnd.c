@@ -1083,37 +1083,6 @@ static int kiblnd_ctl(struct lnet_ni *ni, unsigned int cmd, void *arg)
 	return rc;
 }
 
-static void kiblnd_query(struct lnet_ni *ni, lnet_nid_t nid, time64_t *when)
-{
-	time64_t last_alive = 0;
-	time64_t now = ktime_get_seconds();
-	rwlock_t *glock = &kiblnd_data.kib_global_lock;
-	struct kib_peer_ni *peer_ni;
-	unsigned long flags;
-
-	read_lock_irqsave(glock, flags);
-
-	peer_ni = kiblnd_find_peer_locked(ni, nid);
-	if (peer_ni)
-		last_alive = peer_ni->ibp_last_alive;
-
-	read_unlock_irqrestore(glock, flags);
-
-	if (last_alive)
-		*when = last_alive;
-
-	/*
-	 * peer_ni is not persistent in hash, trigger peer_ni creation
-	 * and connection establishment with a NULL tx
-	 */
-	if (!peer_ni)
-		kiblnd_launch_tx(ni, NULL, nid);
-
-	CDEBUG(D_NET, "peer_ni %s %p, alive %lld secs ago\n",
-	       libcfs_nid2str(nid), peer_ni,
-	       last_alive ? now - last_alive : -1);
-}
-
 static void kiblnd_free_pages(struct kib_pages *p)
 {
 	int npages = p->ibp_npages;
@@ -3063,7 +3032,6 @@ static const struct lnet_lnd the_o2iblnd = {
 	.lnd_startup	= kiblnd_startup,
 	.lnd_shutdown	= kiblnd_shutdown,
 	.lnd_ctl	= kiblnd_ctl,
-	.lnd_query	= kiblnd_query,
 	.lnd_send	= kiblnd_send,
 	.lnd_recv	= kiblnd_recv,
 };

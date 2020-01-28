@@ -2596,7 +2596,7 @@ kiblnd_check_reconnect(struct kib_conn *conn, int version,
 	 * attempts (active or passive) are in progress
 	 * NB: reconnect is still needed even when ibp_tx_queue is
 	 * empty if ibp_version != version because reconnect may be
-	 * initiated by kiblnd_query()
+	 * initiated.
 	 */
 	reconnect = (!list_empty(&peer_ni->ibp_tx_queue) ||
 		     peer_ni->ibp_version != version) &&
