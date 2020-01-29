@@ -226,7 +226,8 @@ struct llog_handle {
 	char			*lgh_name;
 	void			*private_data;
 	struct llog_operations	*lgh_logops;
-	struct kref		 lgh_refcount;
+	refcount_t		 lgh_refcount;
+	bool			 lgh_destroyed;
 };
 
 #define LLOG_CTXT_FLAG_UNINITIALIZED     0x00000001
