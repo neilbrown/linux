@@ -52,12 +52,12 @@ enum srpc_state {
 };
 
 static struct smoketest_rpc {
-	spinlock_t	 rpc_glock;	/* global lock */
+	spinlock_t		 rpc_glock;	/* global lock */
 	struct srpc_service	*rpc_services[SRPC_SERVICE_MAX_ID + 1];
-	lnet_eq_handler_t	rpc_lnet_eq;	/* _the_ LNet event handle */
-	enum srpc_state	 rpc_state;
+	lnet_handler_t		 rpc_lnet_handler;/* _the_ LNet event handler */
+	enum srpc_state		 rpc_state;
 	struct srpc_counters	 rpc_counters;
-	u64		 rpc_matchbits;	/* matchbits counter */
+	u64			 rpc_matchbits;	/* matchbits counter */
 } srpc_data;
 
 static inline int
@@ -376,7 +376,7 @@ srpc_post_passive_rdma(int portal, int local, u64 matchbits, void *buf,
 	md.start = buf;
 	md.length = len;
 	md.options = options;
-	md.eq_handle = srpc_data.rpc_lnet_eq;
+	md.handler   = srpc_data.rpc_lnet_handler;
 
 	rc = LNetMDAttach(me, &md, LNET_UNLINK, mdh);
 	if (rc) {
@@ -405,7 +405,7 @@ srpc_post_active_rdma(int portal, u64 matchbits, void *buf, int len,
 	md.user_ptr = ev;
 	md.start = buf;
 	md.length = len;
-	md.eq_handle = srpc_data.rpc_lnet_eq;
+	md.handler = srpc_data.rpc_lnet_handler;
 	md.threshold = options & LNET_MD_OP_GET ? 2 : 1;
 	md.options = options & ~(LNET_MD_OP_PUT | LNET_MD_OP_GET);
 
@@ -1625,7 +1625,7 @@ srpc_startup(void)
 
 	srpc_data.rpc_state = SRPC_STATE_NI_INIT;
 
-	srpc_data.rpc_lnet_eq = srpc_lnet_ev_handler;
+	srpc_data.rpc_lnet_handler = srpc_lnet_ev_handler;
 
 	rc = LNetSetLazyPortal(SRPC_FRAMEWORK_REQUEST_PORTAL);
 	LASSERT(!rc);

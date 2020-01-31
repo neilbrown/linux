@@ -156,7 +156,7 @@ lnet_md_build(const struct lnet_md *umd, int unlink)
 	lmd->md_max_size = umd->max_size;
 	lmd->md_options = umd->options;
 	lmd->md_user_ptr = umd->user_ptr;
-	lmd->md_eq = NULL;
+	lmd->md_handler = NULL;
 	lmd->md_threshold = umd->threshold;
 	lmd->md_refcount = 0;
 	lmd->md_flags = (unlink == LNET_UNLINK) ? LNET_MD_FLAG_AUTO_UNLINK : 0;
@@ -223,7 +223,7 @@ lnet_md_build(const struct lnet_md *umd, int unlink)
 
 /* must be called with resource lock held */
 static int
-lnet_md_link(struct lnet_libmd *md, lnet_eq_handler_t eq, int cpt)
+lnet_md_link(struct lnet_libmd *md, lnet_handler_t handler, int cpt)
 {
 	struct lnet_res_container *container = the_lnet.ln_md_containers[cpt];
 
@@ -237,7 +237,7 @@ lnet_md_link(struct lnet_libmd *md, lnet_eq_handler_t eq, int cpt)
 	 * disable END events.  Best to LASSERT our caller is compliant so
 	 * we find out quickly...
 	 */
-	md->md_eq = eq;
+	md->md_handler = handler;
 
 	lnet_res_lh_initialize(container, &md->md_lh);
 
@@ -332,7 +332,7 @@ LNetMDAttach(struct lnet_me *me, const struct lnet_md *umd,
 	if (me->me_md)
 		rc = -EBUSY;
 	else
-		rc = lnet_md_link(md, umd->eq_handle, cpt);
+		rc = lnet_md_link(md, umd->handler, cpt);
 
 	if (rc)
 		goto out_unlock;
@@ -406,7 +406,7 @@ LNetMDBind(const struct lnet_md *umd, enum lnet_unlink unlink,
 
 	cpt = lnet_res_lock_current();
 
-	rc = lnet_md_link(md, umd->eq_handle, cpt);
+	rc = lnet_md_link(md, umd->handler, cpt);
 	if (rc)
 		goto out_unlock;
 
@@ -478,9 +478,9 @@ LNetMDUnlink(struct lnet_handle_md mdh)
 	 * when the LND is done, the completion event flags that the MD was
 	 * unlinked.  Otherwise, we enqueue an event now...
 	 */
-	if (md->md_eq && !md->md_refcount) {
+	if (md->md_handler && !md->md_refcount) {
 		lnet_build_unlink_event(md, &ev);
-		md->md_eq(&ev);
+		md->md_handler(&ev);
 	}
 
 	if (md->md_rspt_ptr)
