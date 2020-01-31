@@ -410,7 +410,7 @@ static void cfs_print_to_console(struct ptldebug_header *hdr, int mask,
 }
 
 int libcfs_debug_msg(struct libcfs_debug_msg_data *msgdata,
-		       const char *format, ...)
+		     const char *format, ...)
 {
 	struct cfs_trace_cpu_data *tcd = NULL;
 	struct ptldebug_header header = { 0 };
@@ -423,8 +423,7 @@ int libcfs_debug_msg(struct libcfs_debug_msg_data *msgdata,
 	int max_nob;
 	va_list ap;
 	int depth;
-	int i;
-	int remain;
+	int retry;
 	int mask = msgdata->msg_mask;
 	const char *file = kbasename(msgdata->msg_file);
 	struct cfs_debug_limit_state *cdls = msgdata->msg_cdls;
@@ -458,11 +457,14 @@ int libcfs_debug_msg(struct libcfs_debug_msg_data *msgdata,
 		known_size += sizeof(header);
 
 	/*
-	 * '2' used because vsnprintf return real size required for output
-	 * _without_ terminating NULL.
-	 * if needed is to small for this format.
+	 * May perform an additional pass to update 'needed' and increase
+	 * tage buffer size to match vsnprintf reported size required
+	 * On the second pass (retry=1) use vscnprintf [which returns
+	 * number of bytes written not including the terminating nul]
+	 * to clarify `needed` is used as number of bytes written
+	 * for the remainder of this function
 	 */
-	for (i = 0; i < 2; i++) {
+	for (retry = 0; retry < 2; retry++) {
 		tage = cfs_trace_get_tage(tcd, needed + known_size + 1);
 		if (!tage) {
 			if (needed + known_size > PAGE_SIZE)
@@ -486,21 +488,18 @@ int libcfs_debug_msg(struct libcfs_debug_msg_data *msgdata,
 			goto console;
 		}
 
-		needed = 0;
-
-		remain = max_nob - needed;
-		if (remain < 0)
-			remain = 0;
-
 		va_start(ap, format);
-		needed += vsnprintf(string_buf + needed, remain,
-				    format, ap);
+		if (retry)
+			needed = vscnprintf(string_buf, max_nob, format, ap);
+		else
+			needed = vsnprintf(string_buf, max_nob, format, ap);
 		va_end(ap);
 
 		if (needed < max_nob) /* well. printing ok.. */
 			break;
 	}
 
+	/* `needed` is actual bytes written to string_buf */
 	if (*(string_buf + needed - 1) != '\n') {
 		pr_info("Lustre: format at %s:%d:%s doesn't end in newline\n",
 			file, msgdata->msg_line, msgdata->msg_fn);
@@ -510,6 +509,7 @@ int libcfs_debug_msg(struct libcfs_debug_msg_data *msgdata,
 			pr_info("Lustre: format at %s:%d:%s doesn't end in '\\r\\n'\n",
 				file, msgdata->msg_line, msgdata->msg_fn);
 	}
+
 	header.ph_len = known_size + needed;
 	debug_buf = (char *)page_address(tage->page) + tage->used;
 
@@ -525,12 +525,12 @@ int libcfs_debug_msg(struct libcfs_debug_msg_data *msgdata,
 		++tage->used;
 	}
 
-	strcpy(debug_buf, file);
+	strlcpy(debug_buf, file, PAGE_SIZE - tage->used);
 	tage->used += strlen(file) + 1;
 	debug_buf += strlen(file) + 1;
 
 	if (msgdata->msg_fn) {
-		strcpy(debug_buf, msgdata->msg_fn);
+		strlcpy(debug_buf, msgdata->msg_fn, PAGE_SIZE - tage->used);
 		tage->used += strlen(msgdata->msg_fn) + 1;
 		debug_buf += strlen(msgdata->msg_fn) + 1;
 	}
@@ -584,15 +584,10 @@ console:
 	} else {
 		string_buf = cfs_trace_get_console_buffer();
 
-		needed = 0;
-
-		remain = CFS_TRACE_CONSOLE_BUFFER_SIZE - needed;
-		if (remain > 0) {
-			va_start(ap, format);
-			needed += vsnprintf(string_buf + needed, remain,
-					    format, ap);
-			va_end(ap);
-		}
+		va_start(ap, format);
+		needed = vscnprintf(string_buf, CFS_TRACE_CONSOLE_BUFFER_SIZE,
+				    format, ap);
+		va_end(ap);
 
 		cfs_print_to_console(&header, mask,
 				     string_buf, needed, file, msgdata->msg_fn);
@@ -603,10 +598,10 @@ console:
 	if (cdls && cdls->cdls_count) {
 		string_buf = cfs_trace_get_console_buffer();
 
-		needed = snprintf(string_buf, CFS_TRACE_CONSOLE_BUFFER_SIZE,
-				  "Skipped %d previous similar message%s\n",
-				  cdls->cdls_count,
-				  (cdls->cdls_count > 1) ? "s" : "");
+		needed = scnprintf(string_buf, CFS_TRACE_CONSOLE_BUFFER_SIZE,
+				   "Skipped %d previous similar message%s\n",
+				   cdls->cdls_count,
+				   (cdls->cdls_count > 1) ? "s" : "");
 
 		cfs_print_to_console(&header, mask,
 				     string_buf, needed, file, msgdata->msg_fn);
