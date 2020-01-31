@@ -142,7 +142,7 @@ MODULE_PARM_DESC(lnet_drop_asym_route,
 		 "Set to 1 to drop asymmetrical route messages.");
 
 #define LNET_TRANSACTION_TIMEOUT_NO_HEALTH_DEFAULT 50
-#define LNET_TRANSACTION_TIMEOUT_HEALTH_DEFAULT 10
+#define LNET_TRANSACTION_TIMEOUT_HEALTH_DEFAULT 50
 
 unsigned int lnet_transaction_timeout = LNET_TRANSACTION_TIMEOUT_HEALTH_DEFAULT;
 static int transaction_to_set(const char *val, const struct kernel_param *kp);
@@ -151,7 +151,7 @@ module_param_call(lnet_transaction_timeout, transaction_to_set, param_get_int,
 MODULE_PARM_DESC(lnet_transaction_timeout,
 		 "Maximum number of seconds to wait for a peer response.");
 
-#define LNET_RETRY_COUNT_HEALTH_DEFAULT 3
+#define LNET_RETRY_COUNT_HEALTH_DEFAULT 2
 unsigned int lnet_retry_count = LNET_RETRY_COUNT_HEALTH_DEFAULT;
 static int retry_count_set(const char *val, const struct kernel_param *kp);
 static struct kernel_param_ops param_ops_retry_count = {
