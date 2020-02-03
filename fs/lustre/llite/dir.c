@@ -302,7 +302,7 @@ static int ll_readdir(struct file *filp, struct dir_context *ctx)
 	int rc;
 
 	CDEBUG(D_VFSTRACE,
-	       "VFS Op:inode=" DFID "(%p) pos/size %lu/%llu 32bit_api %d\n",
+	       "VFS Op:inode=" DFID "(%p) pos/size%lu/%llu 32bit_api %d\n",
 	       PFID(ll_inode2fid(inode)), inode, (unsigned long)pos,
 	       i_size_read(inode), api32);
 

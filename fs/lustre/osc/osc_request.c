@@ -1000,7 +1000,7 @@ void osc_init_grant(struct client_obd *cli, struct obd_connect_data *ocd)
 	spin_unlock(&cli->cl_loi_list_lock);
 
 	CDEBUG(D_CACHE,
-	       "%s, setting cl_avail_grant: %ld cl_lost_grant: %ld chunk bits: %d cl_max_extent_pages: %d\n",
+	       "%s, setting cl_avail_grant: %ld cl_lost_grant: %ld. chunk bits: %d cl_max_extent_pages: %d\n",
 	       cli_name(cli), cli->cl_avail_grant, cli->cl_lost_grant,
 	       cli->cl_chunkbits, cli->cl_max_extent_pages);
 
