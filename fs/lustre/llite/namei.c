@@ -979,7 +979,7 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 	int rc = 0;
 
 	CDEBUG(D_VFSTRACE,
-	       "VFS Op:name=%pd, dir=" DFID "(%p),file %p,open_flags %x,mode %x\n",
+	       "VFS Op:name=%pd, dir=" DFID "(%p), file %p, open_flags %x, mode %x\n",
 	       dentry, PFID(ll_inode2fid(dir)), dir, file, open_flags, mode);
 
 	/* Only negative dentries enter here */
