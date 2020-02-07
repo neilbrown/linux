@@ -1154,13 +1154,6 @@ lnet_find_best_lpni_on_net(struct lnet_ni *lni, lnet_nid_t dst_nid,
 	 */
 	peer_net = lnet_peer_get_net_locked(peer, net_id);
 
-	if (!peer_net) {
-		CERROR("gateway peer %s has no NI on net %s\n",
-		       libcfs_nid2str(peer->lp_primary_nid),
-		       libcfs_net2str(net_id));
-		return NULL;
-	}
-
 	return lnet_select_peer_ni(lni, dst_nid, peer, peer_net);
 }
 
@@ -1196,8 +1189,6 @@ lnet_find_route_locked(struct lnet_remotenet *rnet, u32 src_net,
 	struct lnet_route *last_route;
 	struct lnet_route *route;
 	int rc;
-	u32 restrict_net;
-	u32 any_net = LNET_NIDNET(LNET_NID_ANY);
 
 	best_route = NULL;
 	last_route = NULL;
@@ -1205,14 +1196,15 @@ lnet_find_route_locked(struct lnet_remotenet *rnet, u32 src_net,
 		if (!lnet_is_route_alive(route))
 			continue;
 
-		/* If the src_net is specified then we need to find an lpni
-		 * on that network
+		/*
+		 * Restrict the selection of the router NI on the src_net
+		 * provided. If the src_net is LNET_NID_ANY, then select
+		 * the best interface available.
 		 */
-		restrict_net = src_net == any_net ? route->lr_lnet : src_net;
 		if (!best_route) {
 			lpni = lnet_find_best_lpni_on_net(NULL, LNET_NID_ANY,
 							  route->lr_gateway,
-							  restrict_net);
+							  src_net);
 			if (lpni) {
 				best_route = route;
 				last_route = route;
@@ -1220,7 +1212,7 @@ lnet_find_route_locked(struct lnet_remotenet *rnet, u32 src_net,
 			} else {
 				CERROR("Gateway %s does not have a peer NI on net %s\n",
 				       libcfs_nid2str(route->lr_gateway->lp_primary_nid),
-				       libcfs_net2str(restrict_net));
+				       libcfs_net2str(src_net));
 			}
 			continue;
 		}
@@ -1235,11 +1227,11 @@ lnet_find_route_locked(struct lnet_remotenet *rnet, u32 src_net,
 
 		lpni = lnet_find_best_lpni_on_net(NULL, LNET_NID_ANY,
 						  route->lr_gateway,
-						  restrict_net);
+						  src_net);
 		if (!lpni) {
 			CERROR("Gateway %s does not have a peer NI on net %s\n",
 			       libcfs_nid2str(route->lr_gateway->lp_primary_nid),
-			       libcfs_net2str(restrict_net));
+			       libcfs_net2str(src_net));
 			continue;
 		}
 
