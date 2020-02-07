@@ -137,6 +137,11 @@ static inline char *cli_name(struct client_obd *cli)
 	return cli->cl_import->imp_obd->obd_name;
 }
 
+static inline char list_empty_marker(struct list_head *list)
+{
+	return list_empty(list) ? '-' : '+';
+}
+
 extern struct lu_kmem_descr osc_caches[];
 
 int osc_quota_setup(struct obd_device *obd);
