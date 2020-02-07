@@ -130,9 +130,9 @@ lnet_connect_console_error(int rc, lnet_nid_t peer_nid,
 }
 EXPORT_SYMBOL(lnet_connect_console_error);
 
-int
-lnet_connect(struct socket **sockp, lnet_nid_t peer_nid,
-	     u32 local_ip, u32 peer_ip, int peer_port, struct net *ns)
+struct socket *
+lnet_connect(lnet_nid_t peer_nid, u32 local_ip, u32 peer_ip,
+	     int peer_port, struct net *ns)
 {
 	struct lnet_acceptor_connreq cr;
 	struct socket *sock;
@@ -146,9 +146,10 @@ lnet_connect(struct socket **sockp, lnet_nid_t peer_nid,
 	     --port) {
 		/* Iterate through reserved ports. */
 
-		rc = lnet_sock_connect(&sock, local_ip, port, peer_ip,
-				       peer_port, ns);
-		if (rc) {
+		sock = lnet_sock_connect(local_ip, port, peer_ip, peer_port,
+					 ns);
+		if (IS_ERR(sock)) {
+			rc = PTR_ERR(sock);
 			if (rc == -EADDRINUSE || rc == -EADDRNOTAVAIL)
 				continue;
 			goto failed;
@@ -173,8 +174,7 @@ lnet_connect(struct socket **sockp, lnet_nid_t peer_nid,
 		if (rc)
 			goto failed_sock;
 
-		*sockp = sock;
-		return 0;
+		return sock;
 	}
 
 	rc = -EADDRINUSE;
@@ -184,7 +184,7 @@ failed_sock:
 	sock_release(sock);
 failed:
 	lnet_connect_console_error(rc, peer_nid, peer_ip, peer_port);
-	return rc;
+	return ERR_PTR(rc);
 }
 EXPORT_SYMBOL(lnet_connect);
 
@@ -329,19 +329,23 @@ lnet_acceptor(void *arg)
 
 	LASSERT(!lnet_acceptor_state.pta_sock);
 
-	rc = lnet_sock_listen(&lnet_acceptor_state.pta_sock,
-			      0, accept_port, accept_backlog,
-			      lnet_acceptor_state.pta_ns);
-	if (rc) {
+	lnet_acceptor_state.pta_sock =
+		lnet_sock_listen(0, accept_port, accept_backlog,
+				 lnet_acceptor_state.pta_ns);
+	if (IS_ERR(lnet_acceptor_state.pta_sock)) {
+		rc = PTR_ERR(lnet_acceptor_state.pta_sock);
 		if (rc == -EADDRINUSE)
-			LCONSOLE_ERROR_MSG(0x122, "Can't start acceptor on port %d: port already in use\n",
+			LCONSOLE_ERROR_MSG(0x122,
+					   "Can't start acceptor on port %d: port already in use\n",
 					   accept_port);
 		else
-			LCONSOLE_ERROR_MSG(0x123, "Can't start acceptor on port %d: unexpected error %d\n",
+			LCONSOLE_ERROR_MSG(0x123,
+					   "Can't start acceptor on port %d: unexpected error %d\n",
 					   accept_port, rc);
 
 		lnet_acceptor_state.pta_sock = NULL;
 	} else {
+		rc = 0;
 		LCONSOLE(0, "Accept %s, port %d\n", accept_type, accept_port);
 		init_waitqueue_head(&lnet_acceptor_state.pta_waitq);
 		lnet_acceptor_state.pta_odata =

@@ -154,9 +154,8 @@ lnet_sock_read(struct socket *sock, void *buffer, int nob, int timeout)
 }
 EXPORT_SYMBOL(lnet_sock_read);
 
-static int
-lnet_sock_create(struct socket **sockp, u32 local_ip,
-		 int local_port, struct net *ns)
+static struct socket *
+lnet_sock_create(u32 local_ip, int local_port, struct net *ns)
 {
 	struct sockaddr_in locaddr;
 	struct socket *sock;
@@ -164,10 +163,9 @@ lnet_sock_create(struct socket **sockp, u32 local_ip,
 	int option;
 
 	rc = sock_create_kern(ns, PF_INET, SOCK_STREAM, 0, &sock);
-	*sockp = sock;
 	if (rc) {
 		CERROR("Can't create socket: %d\n", rc);
-		return rc;
+		return ERR_PTR(rc);
 	}
 
 	option = 1;
@@ -199,11 +197,11 @@ lnet_sock_create(struct socket **sockp, u32 local_ip,
 			goto failed;
 		}
 	}
-	return 0;
+	return sock;
 
 failed:
 	sock_release(sock);
-	return rc;
+	return ERR_PTR(rc);
 }
 
 int
@@ -276,50 +274,52 @@ lnet_sock_getbuf(struct socket *sock, int *txbufsize, int *rxbufsize)
 }
 EXPORT_SYMBOL(lnet_sock_getbuf);
 
-int
-lnet_sock_listen(struct socket **sockp, u32 local_ip, int local_port,
-		 int backlog, struct net *ns)
+struct socket *
+lnet_sock_listen(u32 local_ip, int local_port, int backlog, struct net *ns)
 {
+	struct socket *sock;
 	int rc;
 
-	rc = lnet_sock_create(sockp, local_ip, local_port, ns);
-	if (rc) {
+	sock = lnet_sock_create(local_ip, local_port, ns);
+	if (IS_ERR(sock)) {
+		rc = PTR_ERR(sock);
 		if (rc == -EADDRINUSE)
 			CERROR("Can't create socket: port %d already in use\n",
 			       local_port);
-		return rc;
+		return ERR_PTR(rc);
 	}
 
-	rc = kernel_listen(*sockp, backlog);
+	rc = kernel_listen(sock, backlog);
 	if (!rc)
-		return 0;
+		return sock;
 
 	CERROR("Can't set listen backlog %d: %d\n", backlog, rc);
-	sock_release(*sockp);
-	return rc;
+	sock_release(sock);
+	return ERR_PTR(rc);
 }
 
-int
-lnet_sock_connect(struct socket **sockp, u32 local_ip,
-		  int local_port, u32 peer_ip, int peer_port,
+struct socket *
+lnet_sock_connect(u32 local_ip, int local_port,
+		  u32 peer_ip, int peer_port,
 		  struct net *ns)
 {
+	struct socket *sock;
 	struct sockaddr_in srvaddr;
 	int rc;
 
-	rc = lnet_sock_create(sockp, local_ip, local_port, ns);
-	if (rc)
-		return rc;
+	sock = lnet_sock_create(local_ip, local_port, ns);
+	if (IS_ERR(sock))
+		return sock;
 
 	memset(&srvaddr, 0, sizeof(srvaddr));
 	srvaddr.sin_family = AF_INET;
 	srvaddr.sin_port = htons(peer_port);
 	srvaddr.sin_addr.s_addr = htonl(peer_ip);
 
-	rc = kernel_connect(*sockp, (struct sockaddr *)&srvaddr,
+	rc = kernel_connect(sock, (struct sockaddr *)&srvaddr,
 			    sizeof(srvaddr), 0);
 	if (!rc)
-		return 0;
+		return sock;
 
 	/*
 	 * EADDRNOTAVAIL probably means we're already connected to the same
@@ -332,6 +332,6 @@ lnet_sock_connect(struct socket **sockp, u32 local_ip,
 		     "Error %d connecting %pI4h/%d -> %pI4h/%d\n", rc,
 		     &local_ip, local_port, &peer_ip, peer_port);
 
-	sock_release(*sockp);
-	return rc;
+	sock_release(sock);
+	return ERR_PTR(rc);
 }
