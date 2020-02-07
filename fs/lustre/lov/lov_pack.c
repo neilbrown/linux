@@ -358,9 +358,9 @@ int lov_getstripe(const struct lu_env *env, struct lov_object *obj,
 	struct lov_mds_md *lmmk, *lmm;
 	struct lov_foreign_md *lfm;
 	struct lov_user_md_v1 lum;
-	ssize_t lmm_size, lum_size = 0;
+	ssize_t lmm_size;
 	static bool printed;
-	size_t lmmk_size;
+	size_t lmmk_size, lum_size = 0;
 	int rc = 0;
 
 	if (lsm->lsm_magic != LOV_MAGIC_V1 && lsm->lsm_magic != LOV_MAGIC_V3 &&
@@ -456,10 +456,11 @@ int lov_getstripe(const struct lu_env *env, struct lov_object *obj,
 				i--;
 			comp_md = (struct lov_mds_md *)((char *)comp_v1 +
 					comp_v1->lcm_entries[i].lcme_offset);
+			lum_size = comp_v1->lcm_entries[i].lcme_size;
 		}
 
 		lmm = comp_md;
-		lmm_size = lum_size;
+		lmm_size = min(lum_size, lmmk_size);
 	} else {
 		lmm = lmmk;
 		lmm_size = lmmk_size;
