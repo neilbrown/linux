@@ -66,9 +66,9 @@ lnet_accept_magic(u32 magic, u32 constant)
 		magic == __swab32(constant));
 }
 
-static char *accept = "secure";
+static char *accept_type = "secure";
 
-module_param(accept, charp, 0444);
+module_param_named(accept, accept_type, charp, 0444);
 MODULE_PARM_DESC(accept, "Accept connections (secure|all|none)");
 module_param(accept_port, int, 0444);
 MODULE_PARM_DESC(accept_port, "Acceptor's port (same on all nodes)");
@@ -76,20 +76,6 @@ module_param(accept_backlog, int, 0444);
 MODULE_PARM_DESC(accept_backlog, "Acceptor's listen backlog");
 module_param(accept_timeout, int, 0644);
 MODULE_PARM_DESC(accept_timeout, "Acceptor's timeout (seconds)");
-
-static char *accept_type;
-
-static int
-lnet_acceptor_get_tunables(void)
-{
-	/*
-	 * Userland acceptor uses 'accept_type' instead of 'accept', due to
-	 * conflict with 'accept(2)', but kernel acceptor still uses 'accept'
-	 * for compatibility. Hence the trick.
-	 */
-	accept_type = accept;
-	return 0;
-}
 
 int
 lnet_acceptor_timeout(void)
@@ -470,10 +456,6 @@ lnet_acceptor_start(void)
 		return 0;
 
 	LASSERT(!lnet_acceptor_state.pta_sock);
-
-	rc = lnet_acceptor_get_tunables();
-	if (rc)
-		return rc;
 
 	init_completion(&lnet_acceptor_state.pta_signal);
 	rc = accept2secure(accept_type, &secure);
