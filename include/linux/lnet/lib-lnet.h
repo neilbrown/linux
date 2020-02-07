@@ -95,6 +95,8 @@ extern struct kmem_cache *lnet_small_mds_cachep; /* <= LNET_SMALL_MD_SIZE bytes
 extern struct kmem_cache *lnet_rspt_cachep;
 extern struct kmem_cache *lnet_msg_cachep;
 
+int choose_ipv4_src(u32 *ret, int interface, u32 dst_ipaddr, struct net *ns);
+
 bool lnet_is_route_alive(struct lnet_route *route);
 bool lnet_is_gateway_alive(struct lnet_peer *gw);
 
@@ -629,7 +631,7 @@ unsigned int lnet_get_lnd_timeout(void);
 void lnet_register_lnd(const struct lnet_lnd *lnd);
 void lnet_unregister_lnd(const struct lnet_lnd *lnd);
 
-struct socket *lnet_connect(lnet_nid_t peer_nid, u32 local_ip, u32 peer_ip,
+struct socket *lnet_connect(lnet_nid_t peer_nid, int interface, u32 peer_ip,
 			    int peer_port, struct net *ns);
 void lnet_connect_console_error(int rc, lnet_nid_t peer_nid,
 				u32 peer_ip, int port);
@@ -658,9 +660,9 @@ int lnet_sock_getaddr(struct socket *socket, bool remote, u32 *ip, int *port);
 int lnet_sock_write(struct socket *sock, void *buffer, int nob, int timeout);
 int lnet_sock_read(struct socket *sock, void *buffer, int nob, int timeout);
 
-struct socket *lnet_sock_listen(u32 ip, int port, int backlog,
+struct socket *lnet_sock_listen(int port, int backlog,
 				struct net *ns);
-struct socket *lnet_sock_connect(u32 local_ip, int local_port,
+struct socket *lnet_sock_connect(int interface, int local_port,
 				 u32 peer_ip, int peer_port, struct net *ns);
 
 int lnet_peers_start_down(void);

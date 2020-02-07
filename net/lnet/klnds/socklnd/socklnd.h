@@ -85,6 +85,7 @@ struct ksock_sched {				/* per scheduler state */
 #define KSOCK_THREAD_SID(id)		((id) & ((1UL << KSOCK_CPT_SHIFT) - 1))
 
 struct ksock_interface {			/* in-use interface */
+	int		ksni_index;		/* Linux interface index */
 	u32		ksni_ipaddr;		/* interface's IP address */
 	u32		ksni_netmask;		/* interface's network mask */
 	int		ksni_nroutes;		/* # routes using (active) */
@@ -357,7 +358,7 @@ struct ksock_conn {
 };
 
 struct ksock_route {
-	struct list_head	ksnr_list;		/* chain on peer_ni route list */
+	struct list_head	ksnr_list;	/* chain on peer_ni route list*/
 	struct list_head	ksnr_connd_list;	/* chain on ksnr_connd_routes */
 	struct ksock_peer_ni   *ksnr_peer;		/* owning peer_ni */
 	refcount_t		ksnr_refcount;		/* # users */
@@ -365,7 +366,7 @@ struct ksock_route {
 							 * can happen next
 							 */
 	time64_t		ksnr_retry_interval;	/* how long between retries */
-	u32			ksnr_myipaddr;		/* my IP */
+	int			ksnr_myiface;		/* interface index */
 	u32			ksnr_ipaddr;		/* IP address to connect to */
 	int			ksnr_port;		/* port to connect to */
 	unsigned int		ksnr_scheduled:1;	/* scheduled for attention */
