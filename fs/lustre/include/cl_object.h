@@ -621,7 +621,7 @@ enum cl_page_state {
 	 *
 	 * \invariant cl_page::cp_owner == NULL && cl_page::cp_req == NULL
 	 */
-	CPS_CACHED,
+	CPS_CACHED = 1,
 	/**
 	 * Page is exclusively owned by some cl_io. Page may end up in this
 	 * state as a result of
@@ -715,7 +715,12 @@ enum cl_page_type {
 	 *  it is used in DirectIO and lockless IO.
 	 */
 	CPT_TRANSIENT,
+	CPT_NR
 };
+
+#define	CP_STATE_BITS	4
+#define	CP_TYPE_BITS	2
+#define	CP_MAX_LAYER	3
 
 /**
  * Fields are protected by the lock on struct page, except for atomics and
@@ -729,28 +734,32 @@ enum cl_page_type {
 struct cl_page {
 	/** Reference counter. */
 	refcount_t			 cp_ref;
-	/* which slab kmem index this memory allocated from */
-	int				 cp_kmem_index;
+	/** layout_entry + stripe index, composed using lov_comp_index() */
+	unsigned int			 cp_lov_index;
+	pgoff_t				 cp_osc_index;
 	/** An object this page is a part of. Immutable after creation. */
 	struct cl_object		*cp_obj;
 	/** vmpage */
 	struct page			*cp_vmpage;
 	/** Linkage of pages within group. Pages must be owned */
 	struct list_head		 cp_batch;
-	/** array of slices offset. Immutable after creation. */
-	unsigned char			 cp_layer_offset[3];
+	/** array of slices offset. Immutable after creation.      24 bits */
+	unsigned char			 cp_layer_offset[CP_MAX_LAYER];
 	/** current slice index */
-	unsigned char			 cp_layer_count:2;
+	unsigned char			 cp_layer_count:2;	/* 26 bits */
 	/**
 	 * Page state. This field is const to avoid accidental update, it is
 	 * modified only internally within cl_page.c. Protected by a VM lock.
 	 */
-	const enum cl_page_state	 cp_state;
+	enum cl_page_state		 cp_state:CP_STATE_BITS; /* 30 bits */
 	/**
 	 * Page type. Only CPT_TRANSIENT is used so far. Immutable after
 	 * creation.
 	 */
-	enum cl_page_type		 cp_type;
+	enum cl_page_type		 cp_type:CP_TYPE_BITS;	/* 32 bits */
+	/* which slab kmem index this memory allocated from */
+	short int			 cp_kmem_index;		/* 48 bits */
+	unsigned int			 cp_unused1:16;		/* 64 bits */
 
 	/**
 	 * Owning IO in cl_page_state::CPS_OWNED state. Sub-page can be owned
@@ -765,9 +774,6 @@ struct cl_page {
 	struct lu_ref_link		 cp_queue_ref;
 	/** Assigned if doing a sync_io */
 	struct cl_sync_io		*cp_sync_io;
-	/** layout_entry + stripe index, composed using lov_comp_index() */
-	unsigned int			 cp_lov_index;
-	pgoff_t				 cp_osc_index;
 };
 
 /**

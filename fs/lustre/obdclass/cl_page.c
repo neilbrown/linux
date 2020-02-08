@@ -153,17 +153,6 @@ static void cl_page_free(const struct lu_env *env, struct cl_page *cl_page,
 	__cl_page_free(cl_page, bufsize);
 }
 
-/**
- * Helper function updating page state. This is the only place in the code
- * where cl_page::cp_state field is mutated.
- */
-static inline void cl_page_state_set_trust(struct cl_page *page,
-					   enum cl_page_state state)
-{
-	/* bypass const. */
-	*(enum cl_page_state *)&page->cp_state = state;
-}
-
 static struct cl_page *__cl_page_alloc(struct cl_object *o)
 {
 	int i = 0;
@@ -217,44 +206,49 @@ check:
 	return cl_page;
 }
 
-struct cl_page *cl_page_alloc(const struct lu_env *env,
-			      struct cl_object *o, pgoff_t ind,
-			      struct page *vmpage,
+struct cl_page *cl_page_alloc(const struct lu_env *env, struct cl_object *o,
+			      pgoff_t ind, struct page *vmpage,
 			      enum cl_page_type type)
 {
-	struct cl_page *page;
+	struct cl_page *cl_page;
 	struct cl_object *o2;
 
-	page = __cl_page_alloc(o);
-	if (page) {
+	cl_page = __cl_page_alloc(o);
+	if (cl_page) {
 		int result = 0;
 
-		refcount_set(&page->cp_ref, 1);
-		page->cp_obj = o;
+		/*
+		 * Please fix cl_page:cp_state/type declaration if
+		 * these assertions fail in the future.
+		 */
+		BUILD_BUG_ON((1 << CP_STATE_BITS) < CPS_NR); /* cp_state */
+		BUILD_BUG_ON((1 << CP_TYPE_BITS) < CPT_NR); /* cp_type */
+		refcount_set(&cl_page->cp_ref, 1);
+		cl_page->cp_obj = o;
 		cl_object_get(o);
-		lu_object_ref_add_at(&o->co_lu, &page->cp_obj_ref, "cl_page",
-				     page);
-		page->cp_vmpage = vmpage;
-		cl_page_state_set_trust(page, CPS_CACHED);
-		page->cp_type = type;
-		INIT_LIST_HEAD(&page->cp_batch);
-		lu_ref_init(&page->cp_reference);
+		lu_object_ref_add_at(&o->co_lu, &cl_page->cp_obj_ref,
+				     "cl_page", cl_page);
+		cl_page->cp_vmpage = vmpage;
+		cl_page->cp_state = CPS_CACHED;
+		cl_page->cp_type = type;
+		INIT_LIST_HEAD(&cl_page->cp_batch);
+		lu_ref_init(&cl_page->cp_reference);
 		cl_object_for_each(o2, o) {
 			if (o2->co_ops->coo_page_init) {
 				result = o2->co_ops->coo_page_init(env, o2,
-								   page, ind);
+								   cl_page, ind);
 				if (result != 0) {
-					__cl_page_delete(env, page);
-					cl_page_free(env, page, NULL);
-					page = ERR_PTR(result);
+					__cl_page_delete(env, cl_page);
+					cl_page_free(env, cl_page, NULL);
+					cl_page = ERR_PTR(result);
 					break;
 				}
 			}
 		}
 	} else {
-		page = ERR_PTR(-ENOMEM);
+		cl_page = ERR_PTR(-ENOMEM);
 	}
-	return page;
+	return cl_page;
 }
 
 /**
@@ -317,7 +311,8 @@ static inline int cl_page_invariant(const struct cl_page *pg)
 }
 
 static void __cl_page_state_set(const struct lu_env *env,
-				struct cl_page *page, enum cl_page_state state)
+				struct cl_page *cl_page,
+				enum cl_page_state state)
 {
 	enum cl_page_state old;
 
@@ -363,12 +358,13 @@ static void __cl_page_state_set(const struct lu_env *env,
 		}
 	};
 
-	old = page->cp_state;
-	PASSERT(env, page, allowed_transitions[old][state]);
-	CL_PAGE_HEADER(D_TRACE, env, page, "%d -> %d\n", old, state);
-	PASSERT(env, page, page->cp_state == old);
-	PASSERT(env, page, equi(state == CPS_OWNED, page->cp_owner));
-	cl_page_state_set_trust(page, state);
+	old = cl_page->cp_state;
+	PASSERT(env, cl_page, allowed_transitions[old][state]);
+	CL_PAGE_HEADER(D_TRACE, env, cl_page, "%d -> %d\n", old, state);
+	PASSERT(env, cl_page, cl_page->cp_state == old);
+	PASSERT(env, cl_page, equi(state == CPS_OWNED,
+				   cl_page->cp_owner));
+	cl_page->cp_state = state;
 }
 
 static void cl_page_state_set(const struct lu_env *env,
@@ -1080,6 +1076,7 @@ void cl_page_slice_add(struct cl_page *cl_page, struct cl_page_slice *slice,
 	unsigned int offset = (char *)slice -
 			((char *)cl_page + sizeof(*cl_page));
 
+	LASSERT(cl_page->cp_layer_count < CP_MAX_LAYER);
 	LASSERT(offset < (1 << sizeof(cl_page->cp_layer_offset[0]) * 8));
 	cl_page->cp_layer_offset[cl_page->cp_layer_count++] = offset;
 	slice->cpl_obj = obj;
