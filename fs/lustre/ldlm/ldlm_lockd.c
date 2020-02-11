@@ -698,6 +698,8 @@ static int ldlm_callback_handler(struct ptlrpc_request *req)
 		ldlm_lock_remove_from_lru(lock);
 		ldlm_set_bl_ast(lock);
 	}
+	if (lock->l_remote_handle.cookie == 0)
+		lock->l_remote_handle = dlm_req->lock_handle[1];
 	unlock_res_and_lock(lock);
 
 	/*
