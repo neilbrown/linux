@@ -396,9 +396,14 @@ static int libcfs_debug_dumplog_thread(void *arg)
 	return 0;
 }
 
+static DEFINE_MUTEX(libcfs_debug_dumplog_lock);
+
 void libcfs_debug_dumplog(void)
 {
 	struct task_struct *dumper;
+
+	if (mutex_trylock(&libcfs_debug_dumplog_lock) == 0)
+		return;
 
 	/* If a previous call was interrupted, debug_complete->done
 	 * might be elevated, and so we won't actually wait here.
@@ -416,6 +421,8 @@ void libcfs_debug_dumplog(void)
 		       PTR_ERR(dumper));
 	else
 		wait_for_completion_interruptible(&debug_complete);
+
+	mutex_unlock(&libcfs_debug_dumplog_lock);
 }
 EXPORT_SYMBOL(libcfs_debug_dumplog);
 
