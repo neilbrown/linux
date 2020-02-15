@@ -1512,7 +1512,7 @@ static struct lu_tgt_desc *lmv_locate_tgt_rr(struct lmv_obd *lmv, u32 *mdt)
 static struct lmv_tgt_desc *
 lmv_locate_tgt_by_name(struct lmv_obd *lmv, struct lmv_stripe_md *lsm,
 		       const char *name, int namelen, struct lu_fid *fid,
-		       u32 *mds, bool post_migrate)
+		       u32 *mds, bool new_layout)
 {
 	const struct lmv_oinfo *oinfo;
 	struct lmv_tgt_desc *tgt;
@@ -1531,8 +1531,7 @@ lmv_locate_tgt_by_name(struct lmv_obd *lmv, struct lmv_stripe_md *lsm,
 			return ERR_PTR(-EBADF);
 		oinfo = &lsm->lsm_md_oinfo[cfs_fail_val];
 	} else {
-		oinfo = lsm_name_to_stripe_info(lsm, name, namelen,
-						post_migrate);
+		oinfo = lsm_name_to_stripe_info(lsm, name, namelen, new_layout);
 		if (IS_ERR(oinfo))
 			return ERR_CAST(oinfo);
 	}
@@ -1551,7 +1550,7 @@ lmv_locate_tgt_by_name(struct lmv_obd *lmv, struct lmv_stripe_md *lsm,
  *
  * For striped directory, it will locate the stripe by name hash, if hash_type
  * is unknown, it will return the stripe specified by 'op_data->op_stripe_index'
- * which is set outside, and if dir is migrating, 'op_data->op_post_migrate'
+ * which is set outside, and if dir is migrating, 'op_data->op_new_layout'
  * indicates whether old or new layout is used to locate.
  *
  * For plain direcotry, it just locate the MDT of op_data->op_fid1.
@@ -1613,7 +1612,7 @@ lmv_locate_tgt(struct lmv_obd *lmv, struct md_op_data *op_data)
 		tgt = lmv_locate_tgt_by_name(lmv, op_data->op_mea1,
 				op_data->op_name, op_data->op_namelen,
 				&op_data->op_fid1, &op_data->op_mds,
-				op_data->op_post_migrate);
+				op_data->op_new_layout);
 	}
 
 	return tgt;
@@ -1627,7 +1626,7 @@ lmv_locate_tgt2(struct lmv_obd *lmv, struct md_op_data *op_data)
 	int rc;
 
 	LASSERT(op_data->op_name);
-	if (lmv_dir_migrating(op_data->op_mea2)) {
+	if (lmv_dir_layout_changing(op_data->op_mea2)) {
 		struct lu_fid fid1 = op_data->op_fid1;
 		struct lmv_stripe_md *lsm1 = op_data->op_mea1;
 		struct ptlrpc_request *request = NULL;
@@ -1661,13 +1660,14 @@ lmv_locate_tgt2(struct lmv_obd *lmv, struct md_op_data *op_data)
 				&op_data->op_mds, true);
 }
 
-int lmv_migrate_existence_check(struct lmv_obd *lmv, struct md_op_data *op_data)
+int lmv_old_layout_lookup(struct lmv_obd *lmv, struct md_op_data *op_data)
 {
 	struct lu_tgt_desc *tgt;
 	struct ptlrpc_request *request;
 	int rc;
 
-	LASSERT(lmv_dir_migrating(op_data->op_mea1));
+	LASSERT(lmv_dir_layout_changing(op_data->op_mea1));
+	LASSERT(!op_data->op_new_layout);
 
 	tgt = lmv_locate_tgt(lmv, op_data);
 	if (IS_ERR(tgt))
@@ -1749,16 +1749,16 @@ int lmv_create(struct obd_export *exp, struct md_op_data *op_data,
 	if (lmv_dir_bad_hash(op_data->op_mea1))
 		return -EBADF;
 
-	if (lmv_dir_migrating(op_data->op_mea1)) {
+	if (lmv_dir_layout_changing(op_data->op_mea1)) {
 		/*
 		 * if parent is migrating, create() needs to lookup existing
 		 * name in both old and new layout, check old layout on client.
 		 */
-		rc = lmv_migrate_existence_check(lmv, op_data);
+		rc = lmv_old_layout_lookup(lmv, op_data);
 		if (rc != -ENOENT)
 			return rc;
 
-		op_data->op_post_migrate = true;
+		op_data->op_new_layout = true;
 	}
 
 	tgt = lmv_locate_tgt(lmv, op_data);
@@ -1976,7 +1976,7 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 	struct lmv_tgt_desc *tp_tgt = NULL;
 	struct lmv_tgt_desc *child_tgt;
 	struct lmv_tgt_desc *tgt;
-	struct lu_fid target_fid;
+	struct lu_fid target_fid = { 0 };
 	int rc;
 
 	LASSERT(op_data->op_cli_flags & CLI_MIGRATE);
@@ -1993,29 +1993,15 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 		return PTR_ERR(parent_tgt);
 
 	if (lmv_dir_striped(lsm)) {
-		u32 hash_type = lsm->lsm_md_hash_type;
-		u32 stripe_count = lsm->lsm_md_stripe_count;
+		const struct lmv_oinfo *oinfo;
 
-		/*
-		 * old stripes are appended after new stripes for migrating
-		 * directory.
-		 */
-		if (lmv_dir_migrating(lsm)) {
-			hash_type = lsm->lsm_md_migrate_hash;
-			stripe_count -= lsm->lsm_md_migrate_offset;
-		}
+		oinfo = lsm_name_to_stripe_info(lsm, name, namelen, false);
+		if (IS_ERR(oinfo))
+			return PTR_ERR(oinfo);
 
-		rc = lmv_name_to_stripe_index(hash_type, stripe_count, name,
-					      namelen);
-		if (rc < 0)
-			return rc;
-
-		if (lmv_dir_migrating(lsm))
-			rc += lsm->lsm_md_migrate_offset;
-
-		/* save it in fid4 temporarily for early cancel */
-		op_data->op_fid4 = lsm->lsm_md_oinfo[rc].lmo_fid;
-		sp_tgt = lmv_tgt(lmv, lsm->lsm_md_oinfo[rc].lmo_mds);
+		/* save source stripe FID in fid4 temporarily for ELC */
+		op_data->op_fid4 = oinfo->lmo_fid;
+		sp_tgt = lmv_tgt(lmv, oinfo->lmo_mds);
 		if (!sp_tgt)
 			return -ENODEV;
 
@@ -2023,18 +2009,14 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 		 * if parent is being migrated too, fill op_fid2 with target
 		 * stripe fid, otherwise the target stripe is not created yet.
 		 */
-		if (lmv_dir_migrating(lsm)) {
-			hash_type = lsm->lsm_md_hash_type &
-				    ~LMV_HASH_FLAG_MIGRATION;
-			stripe_count = lsm->lsm_md_migrate_offset;
+		if (lmv_dir_layout_changing(lsm)) {
+			oinfo = lsm_name_to_stripe_info(lsm, name, namelen,
+							true);
+			if (IS_ERR(oinfo))
+				return PTR_ERR(oinfo);
 
-			rc = lmv_name_to_stripe_index(hash_type, stripe_count,
-						      name, namelen);
-			if (rc < 0)
-				return rc;
-
-			op_data->op_fid2 = lsm->lsm_md_oinfo[rc].lmo_fid;
-			tp_tgt = lmv_tgt(lmv, lsm->lsm_md_oinfo[rc].lmo_mds);
+			op_data->op_fid2 = oinfo->lmo_fid;
+			tp_tgt = lmv_tgt(lmv, oinfo->lmo_mds);
 			if (!tp_tgt)
 				return -ENODEV;
 		}
@@ -3052,9 +3034,11 @@ static int lmv_unpack_md_v1(struct obd_export *exp, struct lmv_stripe_md *lsm,
 		return -E2BIG;
 
 	CDEBUG(D_INFO,
-	       "unpack lsm count %d, master %d hash_type %#x  layout_version %d\n",
-	       lsm->lsm_md_stripe_count, lsm->lsm_md_master_mdt_index,
-	       lsm->lsm_md_hash_type, lsm->lsm_md_layout_version);
+	       "unpack lsm count %d/%d, master %d hash_type %#x/%#x  layout_version %d\n",
+	       lsm->lsm_md_stripe_count, lsm->lsm_md_migrate_offset,
+	       lsm->lsm_md_master_mdt_index,
+	       lsm->lsm_md_hash_type, lsm->lsm_md_migrate_hash,
+	       lsm->lsm_md_layout_version);
 
 	stripe_count = le32_to_cpu(lmm1->lmv_stripe_count);
 	for (i = 0; i < stripe_count; i++) {

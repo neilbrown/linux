@@ -708,6 +708,7 @@ static inline bool lmv_is_known_hash_type(__u32 type)
 
 #define LMV_HASH_FLAG_BAD_TYPE		0x20000000
 #define LMV_HASH_FLAG_MIGRATION		0x80000000
+#define LMV_HASH_FLAG_LAYOUT_CHANGE	LMV_HASH_FLAG_MIGRATION
 
 struct lustre_foreign_type {
 	uint32_t lft_type;
