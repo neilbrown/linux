@@ -528,7 +528,7 @@ struct ldlm_lock *__ldlm_handle2lock(const struct lustre_handle *handle,
 	 * destroyed after we did handle2object on it
 	 */
 	if (flags == 0 && !ldlm_is_destroyed(lock)) {
-		lu_ref_add_atomic(&lock->l_reference, "handle", current);
+		lu_ref_add_atomic(&lock->l_reference, "handle", lock);
 		return lock;
 	}
 
@@ -536,7 +536,7 @@ struct ldlm_lock *__ldlm_handle2lock(const struct lustre_handle *handle,
 
 	LASSERT(lock->l_resource);
 
-	lu_ref_add_atomic(&lock->l_reference, "handle", current);
+	lu_ref_add_atomic(&lock->l_reference, "handle", lock);
 	if (unlikely(ldlm_is_destroyed(lock))) {
 		unlock_res_and_lock(lock);
 		CDEBUG(D_INFO, "lock already destroyed: lock %p\n", lock);

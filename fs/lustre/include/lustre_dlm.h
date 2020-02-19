@@ -1081,7 +1081,7 @@ static inline struct ldlm_lock *ldlm_handle2lock(const struct lustre_handle *h)
 }
 
 #define LDLM_LOCK_REF_DEL(lock) \
-	lu_ref_del(&lock->l_reference, "handle", current)
+	lu_ref_del(&lock->l_reference, "handle", lock)
 
 static inline struct ldlm_lock *
 ldlm_handle2lock_long(const struct lustre_handle *h, u64 flags)
