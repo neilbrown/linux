@@ -19,6 +19,11 @@
 
 #include "socklnd.h"
 
+#include <linux/kvm_host.h>
+#if defined(__x86_64__) || defined(__i386__)
+#include <asm/hypervisor.h>
+#endif
+
 static int sock_timeout = 50;
 module_param(sock_timeout, int, 0644);
 MODULE_PARM_DESC(sock_timeout, "dead socket timeout (seconds)");
@@ -140,6 +145,11 @@ module_param(protocol, int, 0644);
 MODULE_PARM_DESC(protocol, "protocol version");
 #endif
 
+static inline bool is_native_host(void)
+{
+	return hypervisor_is_type(X86_HYPER_NATIVE);
+}
+
 struct ksock_tunables ksocknal_tunables;
 
 int ksocknal_tunables_init(void)
@@ -179,6 +189,12 @@ int ksocknal_tunables_init(void)
 
 	if (*ksocknal_tunables.ksnd_zc_min_payload < (2 << 10))
 		*ksocknal_tunables.ksnd_zc_min_payload = 2 << 10;
+
+	/* When on a hypervisor set the minimum zero copy size
+	 * above the maximum payload size
+	 */
+	if (!is_native_host())
+		*ksocknal_tunables.ksnd_zc_min_payload = (16 << 20) + 1;
 
 	return 0;
 };
