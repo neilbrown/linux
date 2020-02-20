@@ -45,6 +45,7 @@
 #include <linux/mount.h>
 #include <uapi/linux/lustre/lustre_fiemap.h>
 #include <uapi/linux/lustre/lustre_ioctl.h>
+#include <uapi/linux/fscrypt.h>
 #include <lustre_swab.h>
 #include <linux/falloc.h>
 
@@ -3886,6 +3887,32 @@ out_state:
 		kfree(state);
 		return rc;
 	}
+
+	case FS_IOC_SET_ENCRYPTION_POLICY:
+		if (!ll_sbi_has_encrypt(ll_i2sbi(inode)))
+			return -EOPNOTSUPP;
+		return fscrypt_ioctl_set_policy(file, (const void __user *)arg);
+	case FS_IOC_GET_ENCRYPTION_POLICY_EX:
+		if (!ll_sbi_has_encrypt(ll_i2sbi(inode)))
+			return -EOPNOTSUPP;
+		return fscrypt_ioctl_get_policy_ex(file, (void __user *)arg);
+	case FS_IOC_ADD_ENCRYPTION_KEY:
+		if (!ll_sbi_has_encrypt(ll_i2sbi(inode)))
+			return -EOPNOTSUPP;
+		return fscrypt_ioctl_add_key(file, (void __user *)arg);
+	case FS_IOC_REMOVE_ENCRYPTION_KEY:
+		if (!ll_sbi_has_encrypt(ll_i2sbi(inode)))
+			return -EOPNOTSUPP;
+		return fscrypt_ioctl_remove_key(file, (void __user *)arg);
+	case FS_IOC_REMOVE_ENCRYPTION_KEY_ALL_USERS:
+		if (!ll_sbi_has_encrypt(ll_i2sbi(inode)))
+			return -EOPNOTSUPP;
+		return fscrypt_ioctl_remove_key_all_users(file,
+							  (void __user *)arg);
+	case FS_IOC_GET_ENCRYPTION_KEY_STATUS:
+		if (!ll_sbi_has_encrypt(ll_i2sbi(inode)))
+			return -EOPNOTSUPP;
+		return fscrypt_ioctl_get_key_status(file, (void __user *)arg);
 	default:
 		return obd_iocontrol(cmd, ll_i2dtexp(inode), 0, NULL,
 				     (void __user *)arg);
