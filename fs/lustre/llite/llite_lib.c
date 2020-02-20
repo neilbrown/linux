@@ -1639,6 +1639,166 @@ static int ll_md_setattr(struct dentry *dentry, struct md_op_data *op_data)
 	return rc;
 }
 
+/**
+ * Zero portion of page that is part of @inode.
+ * This implies, if necessary:
+ * - taking cl_lock on range corresponding to concerned page
+ * - grabbing vm page
+ * - associating cl_page
+ * - proceeding to clio read
+ * - zeroing range in page
+ * - proceeding to cl_page flush
+ * - releasing cl_lock
+ *
+ * \param[in] inode	inode
+ * \param[in] index	page index
+ * \param[in] offset	offset in page to start zero from
+ * \param[in] len	len to zero
+ *
+ * \retval 0		on success
+ * \retval negative	errno on failure
+ */
+int ll_io_zero_page(struct inode *inode, pgoff_t index, pgoff_t offset,
+		    unsigned int len)
+{
+	struct ll_inode_info *lli = ll_i2info(inode);
+	struct cl_object *clob = lli->lli_clob;
+	u16 refcheck;
+	struct lu_env *env = NULL;
+	struct cl_io *io = NULL;
+	struct cl_page *clpage = NULL;
+	struct page *vmpage = NULL;
+	unsigned int from = index << PAGE_SHIFT;
+	struct cl_lock *lock = NULL;
+	struct cl_lock_descr *descr = NULL;
+	struct cl_2queue *queue = NULL;
+	struct cl_sync_io *anchor = NULL;
+	bool holdinglock = false;
+	bool lockedbymyself = true;
+	int rc;
+
+	env = cl_env_get(&refcheck);
+	if (IS_ERR(env))
+		return PTR_ERR(env);
+
+	io = vvp_env_thread_io(env);
+	io->ci_obj = clob;
+	rc = cl_io_rw_init(env, io, CIT_WRITE, from, PAGE_SIZE);
+	if (rc)
+		goto putenv;
+
+	lock = vvp_env_lock(env);
+	descr = &lock->cll_descr;
+	descr->cld_obj   = io->ci_obj;
+	descr->cld_start = cl_index(io->ci_obj, from);
+	descr->cld_end   = cl_index(io->ci_obj, from + PAGE_SIZE - 1);
+	descr->cld_mode  = CLM_WRITE;
+	descr->cld_enq_flags = CEF_MUST | CEF_NONBLOCK;
+
+	/* request lock for page */
+	rc = cl_lock_request(env, io, lock);
+	/* -ECANCELED indicates a matching lock with a different extent
+	 * was already present, and -EEXIST indicates a matching lock
+	 * on exactly the same extent was already present.
+	 * In both cases it means we are covered.
+	 */
+	if (rc == -ECANCELED || rc == -EEXIST)
+		rc = 0;
+	else if (rc < 0)
+		goto iofini;
+	else
+		holdinglock = true;
+
+	/* grab page */
+	vmpage = grab_cache_page_nowait(inode->i_mapping, index);
+	if (!vmpage) {
+		rc = -EOPNOTSUPP;
+		goto rellock;
+	}
+
+	if (!PageDirty(vmpage)) {
+		/* associate cl_page */
+		clpage = cl_page_find(env, clob, vmpage->index,
+				      vmpage, CPT_CACHEABLE);
+		if (IS_ERR(clpage)) {
+			rc = PTR_ERR(clpage);
+			goto pagefini;
+		}
+
+		cl_page_assume(env, io, clpage);
+	}
+
+	if (!PageUptodate(vmpage) && !PageDirty(vmpage) &&
+	    !PageWriteback(vmpage)) {
+		/* read page */
+		/* set PagePrivate2 to detect special case of empty page
+		 * in osc_brw_fini_request()
+		 */
+		SetPagePrivate2(vmpage);
+		rc = ll_io_read_page(env, io, clpage, NULL);
+		if (!PagePrivate2(vmpage)) {
+			/* PagePrivate2 was cleared in osc_brw_fini_request()
+			 * meaning we read an empty page. In this case, in order
+			 * to avoid allocating unnecessary block in truncated
+			 * file, we must not zero and write as below. Subsequent
+			 * server-side truncate will handle things correctly.
+			 */
+			rc = 0;
+			goto clpfini;
+		}
+		ClearPagePrivate2(vmpage);
+		if (rc)
+			goto clpfini;
+		lockedbymyself = trylock_page(vmpage);
+		cl_page_assume(env, io, clpage);
+	}
+
+	/* zero range in page */
+	zero_user(vmpage, offset, len);
+
+	if (holdinglock && clpage) {
+		/* explicitly write newly modified page */
+		queue = &io->ci_queue;
+		cl_2queue_init(queue);
+		anchor = &vvp_env_info(env)->vti_anchor;
+		cl_sync_io_init(anchor, 1);
+		clpage->cp_sync_io = anchor;
+		cl_page_list_add(&queue->c2_qin, clpage);
+		rc = cl_io_submit_rw(env, io, CRT_WRITE, queue);
+		if (rc)
+			goto queuefini1;
+		rc = cl_sync_io_wait(env, anchor, 0);
+		if (rc)
+			goto queuefini2;
+		cl_page_assume(env, io, clpage);
+
+queuefini2:
+		cl_2queue_discard(env, io, queue);
+queuefini1:
+		cl_2queue_disown(env, io, queue);
+		cl_2queue_fini(env, queue);
+	}
+
+clpfini:
+	if (clpage)
+		cl_page_put(env, clpage);
+pagefini:
+	if (lockedbymyself) {
+		unlock_page(vmpage);
+		put_page(vmpage);
+	}
+rellock:
+	if (holdinglock)
+		cl_lock_release(env, lock);
+iofini:
+	cl_io_fini(env, io);
+putenv:
+	if (env)
+		cl_env_put(env, &refcheck);
+
+	return rc;
+}
+
 /* If this inode has objects allocated to it (lsm != NULL), then the OST
  * object(s) determine the file size and mtime.  Otherwise, the MDS will
  * keep these values until such a time that objects are allocated for it.
@@ -1772,6 +1932,8 @@ int ll_setattr_raw(struct dentry *dentry, struct iattr *attr,
 				goto out;
 			}
 		} else {
+			unsigned int flags = 0;
+
 			/* For truncate and utimes sending attributes to OSTs,
 			 * setting mtime/atime to the past will be performed
 			 * under PW [0:EOF] extent lock (new_size:EOF for
@@ -1780,8 +1942,23 @@ int ll_setattr_raw(struct dentry *dentry, struct iattr *attr,
 			 * it is necessary due to possible time
 			 * de-synchronization between MDT inode and OST objects
 			 */
+			if (S_ISREG(inode->i_mode) && IS_ENCRYPTED(inode) &&
+			    attr->ia_valid & ATTR_SIZE) {
+				xvalid |= OP_XVALID_FLAGS;
+				flags = LUSTRE_ENCRYPT_FL;
+				if (attr->ia_size & ~PAGE_MASK) {
+					pgoff_t offset =
+						attr->ia_size & (PAGE_SIZE - 1);
+
+					rc = ll_io_zero_page(inode,
+						    attr->ia_size >> PAGE_SHIFT,
+						    offset, PAGE_SIZE - offset);
+					if (rc)
+						goto out;
+				}
+			}
 			rc = cl_setattr_ost(ll_i2info(inode)->lli_clob,
-					    attr, xvalid, 0);
+					    attr, xvalid, flags);
 		}
 	}
 
@@ -1849,6 +2026,11 @@ int ll_setattr(struct dentry *de, struct iattr *attr)
 {
 	int mode = d_inode(de)->i_mode;
 	enum op_xvalid xvalid = 0;
+	int rc;
+
+	rc = fscrypt_prepare_setattr(de, attr);
+	if (rc)
+		return rc;
 
 	if ((attr->ia_valid & (ATTR_CTIME | ATTR_SIZE | ATTR_MODE)) ==
 			      (ATTR_CTIME | ATTR_SIZE | ATTR_MODE))
