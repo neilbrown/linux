@@ -3293,8 +3293,10 @@ static int lnet_peer_discovery(void *arg)
 			lnet_push_target_resize();
 
 		lnet_net_lock(LNET_LOCK_EX);
-		if (the_lnet.ln_dc_state == LNET_DC_STATE_STOPPING)
+		if (the_lnet.ln_dc_state == LNET_DC_STATE_STOPPING) {
+			lnet_net_unlock(LNET_LOCK_EX);
 			break;
+		}
 
 		/*
 		 * Process all incoming discovery work requests.  When
