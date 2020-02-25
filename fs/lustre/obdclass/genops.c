@@ -927,6 +927,8 @@ static void obd_zombie_import_free(struct obd_import *imp)
 	}
 
 	LASSERT(!imp->imp_sec);
+	LASSERTF(atomic_read(&imp->imp_reqs) == 0, "%s: imp_reqs = %d\n",
+		 imp->imp_obd->obd_name, atomic_read(&imp->imp_reqs));
 	class_decref(imp->imp_obd, "import", imp);
 	kfree(imp);
 }
@@ -1005,6 +1007,7 @@ struct obd_import *class_new_import(struct obd_device *obd)
 
 	refcount_set(&imp->imp_refcount, 2);
 	atomic_set(&imp->imp_unregistering, 0);
+	atomic_set(&imp->imp_reqs, 0);
 	atomic_set(&imp->imp_inflight, 0);
 	atomic_set(&imp->imp_replay_inflight, 0);
 	atomic_set(&imp->imp_inval_count, 0);
