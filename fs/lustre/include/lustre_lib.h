@@ -54,7 +54,6 @@
 struct ptlrpc_request;
 struct obd_export;
 struct lu_target;
-struct l_wait_info;
 #include <lustre_ha.h>
 #include <lustre_net.h>
 
