@@ -1668,6 +1668,9 @@ static ssize_t ll_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	ssize_t rc2;
 	bool cached;
 
+	if (!iov_iter_count(to))
+		return 0;
+
 	/**
 	 * Currently when PCC read failed, we do not fall back to the
 	 * normal read path, just return the error.
@@ -1777,6 +1780,11 @@ static ssize_t ll_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	u16 refcheck;
 	bool cached;
 	int result;
+
+	if (!iov_iter_count(from)) {
+		rc_normal = 0;
+		goto out;
+	}
 
 	/**
 	 * When PCC write failed, we usually do not fall back to the normal
