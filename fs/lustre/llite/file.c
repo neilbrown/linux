@@ -1162,10 +1162,11 @@ static int ll_lease_close(struct obd_client_handle *och, struct inode *inode,
  * After lease is taken, send the RPC MDS_REINT_RESYNC to the MDT
  */
 static int ll_lease_file_resync(struct obd_client_handle *och,
-				struct inode *inode)
+				struct inode *inode, unsigned long arg)
 {
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
 	struct md_op_data *op_data;
+	struct ll_ioc_lease_id ioc;
 	u64 data_version_unused;
 	int rc;
 
@@ -1173,6 +1174,10 @@ static int ll_lease_file_resync(struct obd_client_handle *och,
 				     LUSTRE_OPC_ANY, NULL);
 	if (IS_ERR(op_data))
 		return PTR_ERR(op_data);
+
+	if (copy_from_user(&ioc, (struct ll_ioc_lease_id __user *)arg,
+			   sizeof(ioc)))
+		return -EFAULT;
 
 	/* before starting file resync, it's necessary to clean up page cache
 	 * in client memory, otherwise once the layout version is increased,
@@ -1183,6 +1188,7 @@ static int ll_lease_file_resync(struct obd_client_handle *och,
 		goto out;
 
 	op_data->op_lease_handle = och->och_lease_handle;
+	op_data->op_mirror_id = ioc.lil_mirror_id;
 	rc = md_file_resync(sbi->ll_md_exp, op_data);
 	if (rc)
 		goto out;
@@ -3048,7 +3054,7 @@ static long ll_file_set_lease(struct file *file, struct ll_ioc_lease *ioc,
 		return PTR_ERR(och);
 
 	if (ioc->lil_flags & LL_LEASE_RESYNC) {
-		rc = ll_lease_file_resync(och, inode);
+		rc = ll_lease_file_resync(och, inode, arg);
 		if (rc) {
 			ll_lease_close(och, inode, NULL);
 			return rc;

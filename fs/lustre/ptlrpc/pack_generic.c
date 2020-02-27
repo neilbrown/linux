@@ -1917,6 +1917,7 @@ void lustre_swab_mdt_rec_reint (struct mdt_rec_reint *rr)
 	__swab32s(&rr->rr_flags);
 	__swab32s(&rr->rr_flags_h);
 	__swab32s(&rr->rr_umask);
+	__swab16s(&rr->rr_mirror_id);
 
 	BUILD_BUG_ON(offsetof(typeof(*rr), rr_padding_4) == 0);
 };
