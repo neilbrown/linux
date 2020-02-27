@@ -64,12 +64,11 @@ struct inode *search_inode_for_lustre(struct super_block *sb,
 	struct ptlrpc_request *req = NULL;
 	struct inode *inode = NULL;
 	int eadatalen = 0;
-	unsigned long hash = cl_fid_build_ino(fid,
-					      ll_need_32bit_api(sbi));
+	unsigned long hash = cl_fid_build_ino(fid, ll_need_32bit_api(sbi));
 	struct md_op_data *op_data;
 	int rc;
 
-	CDEBUG(D_INFO, "searching inode for:(%lu," DFID ")\n", hash, PFID(fid));
+	CDEBUG(D_INFO, "searching inode for:(%lu,"DFID")\n", hash, PFID(fid));
 
 	inode = ilookup5(sb, hash, ll_test_inode_by_fid, (void *)fid);
 	if (inode)
@@ -79,7 +78,8 @@ struct inode *search_inode_for_lustre(struct super_block *sb,
 	if (rc)
 		return ERR_PTR(rc);
 
-	/* Because inode is NULL, ll_prep_md_op_data can not
+	/*
+	 * Because inode is NULL, ll_prep_md_op_data can not
 	 * be used here. So we allocate op_data ourselves
 	 */
 	op_data = kzalloc(sizeof(*op_data), GFP_NOFS);
@@ -94,6 +94,10 @@ struct inode *search_inode_for_lustre(struct super_block *sb,
 	rc = md_getattr(sbi->ll_md_exp, op_data, &req);
 	kfree(op_data);
 	if (rc) {
+		/*
+		 * Suppress erroneous/confusing messages when NFS
+		 * is out of sync and requests old data.
+		 */
 		CDEBUG(D_INFO, "can't get object attrs, fid " DFID ", rc %d\n",
 		       PFID(fid), rc);
 		return ERR_PTR(rc);
@@ -107,8 +111,8 @@ struct inode *search_inode_for_lustre(struct super_block *sb,
 }
 
 struct lustre_nfs_fid {
-	struct lu_fid	lnf_child;
-	struct lu_fid	lnf_parent;
+	struct lu_fid lnf_child;
+	struct lu_fid lnf_parent;
 };
 
 static struct dentry *
