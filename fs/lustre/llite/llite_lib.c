@@ -211,7 +211,8 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
 
 	data->ocd_connect_flags2 = OBD_CONNECT2_FLR |
 				   OBD_CONNECT2_LOCK_CONVERT |
-				   OBD_CONNECT2_DIR_MIGRATE;
+				   OBD_CONNECT2_DIR_MIGRATE |
+				   OBD_CONNECT2_SUM_STATFS;
 
 	if (sbi->ll_flags & LL_SBI_LRU_RESIZE)
 		data->ocd_connect_flags |= OBD_CONNECT_LRU_RESIZE;
@@ -1751,6 +1752,9 @@ int ll_statfs_internal(struct ll_sb_info *sbi, struct obd_statfs *osfs,
 	       osfs->os_bavail, osfs->os_blocks, osfs->os_ffree,
 	       osfs->os_files);
 
+	if (osfs->os_state & OS_STATE_SUM)
+		goto out;
+
 	if (sbi->ll_flags & LL_SBI_LAZYSTATFS)
 		flags |= OBD_STATFS_NODELAY;
 
@@ -1779,6 +1783,7 @@ int ll_statfs_internal(struct ll_sb_info *sbi, struct obd_statfs *osfs,
 		osfs->os_ffree = obd_osfs.os_ffree;
 	}
 
+out:
 	return rc;
 }
 
@@ -1793,7 +1798,7 @@ int ll_statfs(struct dentry *de, struct kstatfs *sfs)
 	ll_stats_ops_tally(ll_s2sbi(sb), LPROC_LL_STAFS, 1);
 
 	/* Some amount of caching on the client is allowed */
-	rc = ll_statfs_internal(ll_s2sbi(sb), &osfs, 0);
+	rc = ll_statfs_internal(ll_s2sbi(sb), &osfs, OBD_STATFS_SUM);
 	if (rc)
 		return rc;
 
