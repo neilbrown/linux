@@ -61,8 +61,8 @@ extern struct lu_context_key llog_thread_key;
 int llog_info_init(void);
 void llog_info_fini(void);
 
-void llog_handle_get(struct llog_handle *loghandle);
-void llog_handle_put(struct llog_handle *loghandle);
+struct llog_handle *llog_handle_get(struct llog_handle *loghandle);
+int llog_handle_put(const struct lu_env *env, struct llog_handle *loghandle);
 int class_config_dump_handler(const struct lu_env *env,
 			      struct llog_handle *handle,
 			      struct llog_rec_hdr *rec, void *data);

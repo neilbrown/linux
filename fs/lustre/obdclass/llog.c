@@ -65,7 +65,7 @@ static struct llog_handle *llog_alloc_handle(void)
 
 	init_rwsem(&loghandle->lgh_lock);
 	INIT_LIST_HEAD(&loghandle->u.phd.phd_entry);
-	kref_init(&loghandle->lgh_refcount);
+	refcount_set(&loghandle->lgh_refcount, 1);
 
 	return loghandle;
 }
@@ -73,11 +73,8 @@ static struct llog_handle *llog_alloc_handle(void)
 /*
  * Free llog handle and header data if exists. Used in llog_close() only
  */
-static void llog_free_handle(struct kref *kref)
+static void llog_free_handle(struct llog_handle *loghandle)
 {
-	struct llog_handle *loghandle = container_of(kref, struct llog_handle,
-						     lgh_refcount);
-
 	/* failed llog_init_handle */
 	if (!loghandle->lgh_hdr)
 		goto out;
@@ -91,15 +88,30 @@ out:
 	kfree(loghandle);
 }
 
-void llog_handle_get(struct llog_handle *loghandle)
+struct llog_handle *llog_handle_get(struct llog_handle *loghandle)
 {
-	kref_get(&loghandle->lgh_refcount);
+	if (refcount_inc_not_zero(&loghandle->lgh_refcount))
+		return loghandle;
+	return NULL;
 }
 
-void llog_handle_put(struct llog_handle *loghandle)
+int llog_handle_put(const struct lu_env *env, struct llog_handle *loghandle)
 {
-	LASSERT(kref_read(&loghandle->lgh_refcount) > 0);
-	kref_put(&loghandle->lgh_refcount, llog_free_handle);
+	int rc = 0;
+
+	if (refcount_dec_and_test(&loghandle->lgh_refcount)) {
+		struct llog_operations *lop;
+
+		rc = llog_handle2ops(loghandle, &lop);
+		if (!rc) {
+			if (lop->lop_close)
+				rc = lop->lop_close(env, loghandle);
+			else
+				rc = -EOPNOTSUPP;
+		}
+		llog_free_handle(loghandle);
+	}
+	return rc;
 }
 
 static int llog_read_header(const struct lu_env *env,
@@ -541,7 +553,7 @@ int llog_open(const struct lu_env *env, struct llog_ctxt *ctxt,
 		revert_creds(old_cred);
 
 	if (rc) {
-		llog_free_handle(&(*lgh)->lgh_refcount);
+		llog_free_handle(*lgh);
 		*lgh = NULL;
 	}
 	return rc;
@@ -550,19 +562,6 @@ EXPORT_SYMBOL(llog_open);
 
 int llog_close(const struct lu_env *env, struct llog_handle *loghandle)
 {
-	struct llog_operations *lop;
-	int rc;
-
-	rc = llog_handle2ops(loghandle, &lop);
-	if (rc)
-		goto out;
-	if (!lop->lop_close) {
-		rc = -EOPNOTSUPP;
-		goto out;
-	}
-	rc = lop->lop_close(env, loghandle);
-out:
-	llog_handle_put(loghandle);
-	return rc;
+	return llog_handle_put(env, loghandle);
 }
 EXPORT_SYMBOL(llog_close);
