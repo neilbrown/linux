@@ -2310,11 +2310,16 @@ void req_capsule_shrink(struct req_capsule *pill,
 	LASSERTF(newlen <= len, "%s:%s, oldlen=%u, newlen=%u\n",
 		 fmt->rf_name, field->rmf_name, len, newlen);
 
-	if (loc == RCL_CLIENT)
+	if (loc == RCL_CLIENT) {
 		pill->rc_req->rq_reqlen = lustre_shrink_msg(msg, offset, newlen,
 							    1);
-	else
+	} else {
 		pill->rc_req->rq_replen = lustre_shrink_msg(msg, offset, newlen,
 							    1);
+		/* update also field size in reply lenghts arrays for possible
+		 * reply re-pack due to req_capsule_server_grow() call.
+		 */
+		req_capsule_set_size(pill, field, loc, newlen);
+	}
 }
 EXPORT_SYMBOL(req_capsule_shrink);
