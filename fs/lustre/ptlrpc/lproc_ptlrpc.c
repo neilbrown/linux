@@ -1240,13 +1240,11 @@ void ptlrpc_lprocfs_unregister_obd(struct obd_device *obd)
 }
 EXPORT_SYMBOL(ptlrpc_lprocfs_unregister_obd);
 
-#undef BUFLEN
-
-int lprocfs_wr_ping(struct file *file, const char __user *buffer,
-		    size_t count, loff_t *off)
+ssize_t ping_show(struct kobject *kobj, struct attribute *attr,
+		  char *buffer)
 {
-	struct seq_file *m = file->private_data;
-	struct obd_device *obd = m->private;
+	struct obd_device *obd = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
 	struct ptlrpc_request *req;
 	struct obd_import *imp;
 	int rc;
@@ -1262,13 +1260,13 @@ int lprocfs_wr_ping(struct file *file, const char __user *buffer,
 	req->rq_send_state = LUSTRE_IMP_FULL;
 
 	rc = ptlrpc_queue_wait(req);
-
 	ptlrpc_req_finished(req);
-	if (rc >= 0)
-		return count;
+
 	return rc;
 }
-EXPORT_SYMBOL(lprocfs_wr_ping);
+EXPORT_SYMBOL(ping_show);
+
+#undef BUFLEN
 
 /* Write the connection UUID to this file to attempt to connect to that node.
  * The connection UUID is a node's primary NID. For example,

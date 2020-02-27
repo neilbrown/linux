@@ -187,6 +187,8 @@ LUSTRE_RW_ATTR(max_dirty_mb);
 #define ost_conn_uuid_show conn_uuid_show
 LUSTRE_RO_ATTR(ost_conn_uuid);
 
+LUSTRE_RO_ATTR(ping);
+
 static int osc_cached_mb_seq_show(struct seq_file *m, void *v)
 {
 	struct obd_device *obd = m->private;
@@ -747,14 +749,10 @@ LPROC_SEQ_FOPS_RO_TYPE(osc, server_uuid);
 LPROC_SEQ_FOPS_RO_TYPE(osc, timeouts);
 LPROC_SEQ_FOPS_RO_TYPE(osc, state);
 
-LPROC_SEQ_FOPS_WR_ONLY(osc, ping);
-
 LPROC_SEQ_FOPS_RW_TYPE(osc, import);
 LPROC_SEQ_FOPS_RW_TYPE(osc, pinger_recov);
 
 static struct lprocfs_vars lprocfs_osc_obd_vars[] = {
-	{ .name	=	"ping",
-	  .fops =	&osc_ping_fops			},
 	{ .name	=	"connect_flags",
 	  .fops	=	&osc_connect_flags_fops		},
 	{ .name	=	"ost_server_uuid",
@@ -957,6 +955,7 @@ static struct attribute *osc_attrs[] = {
 	&lustre_attr_idle_timeout.attr,
 	&lustre_attr_idle_connect.attr,
 	&lustre_attr_grant_shrink.attr,
+	&lustre_attr_ping.attr,
 	NULL,
 };
 

@@ -45,8 +45,6 @@ LPROC_SEQ_FOPS_RO_TYPE(mgc, import);
 
 LPROC_SEQ_FOPS_RO_TYPE(mgc, state);
 
-LPROC_SEQ_FOPS_WR_ONLY(mgc, ping);
-
 static int mgc_ir_state_seq_show(struct seq_file *m, void *v)
 {
 	return lprocfs_mgc_rd_ir_state(m, m->private);
@@ -55,8 +53,6 @@ static int mgc_ir_state_seq_show(struct seq_file *m, void *v)
 LPROC_SEQ_FOPS_RO(mgc_ir_state);
 
 struct lprocfs_vars lprocfs_mgc_obd_vars[] = {
-	{ .name	=	"ping",
-	  .fops =	&mgc_ping_fops		},
 	{ .name =	"connect_flags",
 	  .fops =	&mgc_connect_flags_fops	},
 	{ .name =	"mgs_server_uuid",
@@ -73,8 +69,11 @@ struct lprocfs_vars lprocfs_mgc_obd_vars[] = {
 #define mgs_conn_uuid_show conn_uuid_show
 LUSTRE_RO_ATTR(mgs_conn_uuid);
 
+LUSTRE_RO_ATTR(ping);
+
 static struct attribute *mgc_attrs[] = {
 	&lustre_attr_mgs_conn_uuid.attr,
+	&lustre_attr_ping.attr,
 	NULL,
 };
 

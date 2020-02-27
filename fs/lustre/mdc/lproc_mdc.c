@@ -319,6 +319,8 @@ LUSTRE_RW_ATTR(max_pages_per_rpc);
 #define mdc_conn_uuid_show conn_uuid_show
 LUSTRE_RO_ATTR(mdc_conn_uuid);
 
+LUSTRE_RO_ATTR(ping);
+
 static ssize_t mdc_rpc_stats_seq_write(struct file *file,
 				       const char __user *buf,
 				       size_t len, loff_t *off)
@@ -465,8 +467,6 @@ static ssize_t mdc_stats_seq_write(struct file *file,
 }
 LPROC_SEQ_FOPS(mdc_stats);
 
-
-
 static int mdc_dom_min_repsize_seq_show(struct seq_file *m, void *v)
 {
 	struct obd_device *obd = m->private;
@@ -497,8 +497,6 @@ static ssize_t mdc_dom_min_repsize_seq_write(struct file *file,
 }
 LPROC_SEQ_FOPS(mdc_dom_min_repsize);
 
-
-LPROC_SEQ_FOPS_WR_ONLY(mdc, ping);
 LPROC_SEQ_FOPS_RO_TYPE(mdc, connect_flags);
 LPROC_SEQ_FOPS_RO_TYPE(mdc, server_uuid);
 LPROC_SEQ_FOPS_RO_TYPE(mdc, timeouts);
@@ -508,8 +506,6 @@ LPROC_SEQ_FOPS_RW_TYPE(mdc, import);
 LPROC_SEQ_FOPS_RW_TYPE(mdc, pinger_recov);
 
 static struct lprocfs_vars lprocfs_mdc_obd_vars[] = {
-	{ .name	=	"ping",
-	  .fops	=	&mdc_ping_fops			},
 	{ .name	=	"connect_flags",
 	  .fops	=	&mdc_connect_flags_fops		},
 	{ .name	=	"mds_server_uuid",
@@ -545,6 +541,7 @@ static struct attribute *mdc_attrs[] = {
 	&lustre_attr_max_mod_rpcs_in_flight.attr,
 	&lustre_attr_max_pages_per_rpc.attr,
 	&lustre_attr_mdc_conn_uuid.attr,
+	&lustre_attr_ping.attr,
 	NULL,
 };
 
