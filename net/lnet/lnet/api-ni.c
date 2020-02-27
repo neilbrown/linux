@@ -734,12 +734,12 @@ lnet_find_lnd_by_type(u32 type)
 	struct lnet_lnd *lnd;
 
 	/* holding lnd mutex */
-	list_for_each_entry(lnd, &the_lnet.ln_lnds, lnd_list) {
-		if (lnd->lnd_type == type)
-			return lnd;
-	}
+	if (type >= NUM_LNDS)
+		return NULL;
+	lnd = the_lnet.ln_lnds[type];
+	LASSERT(!lnd || lnd->lnd_type == type);
 
-	return NULL;
+	return lnd;
 }
 
 unsigned int
@@ -757,7 +757,7 @@ lnet_register_lnd(struct lnet_lnd *lnd)
 	LASSERT(libcfs_isknown_lnd(lnd->lnd_type));
 	LASSERT(!lnet_find_lnd_by_type(lnd->lnd_type));
 
-	list_add_tail(&lnd->lnd_list, &the_lnet.ln_lnds);
+	the_lnet.ln_lnds[lnd->lnd_type] = lnd;
 
 	CDEBUG(D_NET, "%s LND registered\n", libcfs_lnd2str(lnd->lnd_type));
 
@@ -772,7 +772,7 @@ lnet_unregister_lnd(struct lnet_lnd *lnd)
 
 	LASSERT(lnet_find_lnd_by_type(lnd->lnd_type) == lnd);
 
-	list_del(&lnd->lnd_list);
+	the_lnet.ln_lnds[lnd->lnd_type] = NULL;
 	CDEBUG(D_NET, "%s LND unregistered\n", libcfs_lnd2str(lnd->lnd_type));
 
 	mutex_unlock(&the_lnet.ln_lnd_mutex);
@@ -2429,7 +2429,6 @@ int lnet_lib_init(void)
 	}
 
 	the_lnet.ln_refcount = 0;
-	INIT_LIST_HEAD(&the_lnet.ln_lnds);
 	INIT_LIST_HEAD(&the_lnet.ln_net_zombie);
 	INIT_LIST_HEAD(&the_lnet.ln_msg_resend);
 
@@ -2459,16 +2458,18 @@ int lnet_lib_init(void)
  *
  * \pre lnet_lib_init() called with success.
  * \pre All LNet users called LNetNIFini() for matching LNetNIInit() calls.
+ *
+ * As this happens at module-unload, all lnds must already be unloaded,
+ * so they must already be unregistered.
  */
 void lnet_lib_exit(void)
 {
-	struct lnet_lnd *lnd;
-	LASSERT(!the_lnet.ln_refcount);
+	int i;
 
-	while ((lnd = list_first_entry_or_null(&the_lnet.ln_lnds,
-					       struct lnet_lnd,
-					       lnd_list)) != NULL)
-		lnet_unregister_lnd(lnd);
+	LASSERT(!the_lnet.ln_refcount);
+	lnet_unregister_lnd(&the_lolnd);
+	for (i = 0; i < NUM_LNDS; i++)
+		LASSERT(!the_lnet.ln_lnds[i]);
 	lnet_destroy_locks();
 }
 
