@@ -1309,14 +1309,14 @@ int lprocfs_wr_import(struct file *file, const char __user *buffer,
 	ptr = strstr(uuid, "::");
 	if (ptr) {
 		u32 inst;
-		char *endptr;
+		int rc;
 
 		*ptr = 0;
 		do_reconn = 0;
 		ptr += strlen("::");
-		inst = simple_strtoul(ptr, &endptr, 10);
+		rc = kstrtouint(ptr, 10, &inst);
 		with_imp_locked(obd, imp, count) {
-			if (*endptr) {
+			if (rc) {
 				CERROR("config: wrong instance # %s\n", ptr);
 			} else if (inst != imp->imp_connect_data.ocd_instance) {
 				CDEBUG(D_INFO,
