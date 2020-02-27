@@ -2426,7 +2426,7 @@ enum llog_ctxt_id {
 struct llog_logid {
 	struct ost_id		lgl_oi;
 	__u32			lgl_ogen;
-} __packed;
+} __attribute__((packed));
 
 /** Records written to the CATALOGS list */
 #define CATLIST "CATALOGS"
@@ -2435,7 +2435,7 @@ struct llog_catid {
 	__u32			lci_padding1;
 	__u32			lci_padding2;
 	__u32			lci_padding3;
-} __packed;
+} __attribute__((packed));
 
 /* Log data record types - there is no specific reason that these need to
  * be related to the RPC opcodes, but no reason not to (may be handy later?)
@@ -2477,12 +2477,12 @@ struct llog_rec_hdr {
 	__u32	lrh_index;
 	__u32	lrh_type;
 	__u32	lrh_id;
-};
+} __attribute__((packed));
 
 struct llog_rec_tail {
 	__u32	lrt_len;
 	__u32	lrt_index;
-};
+} __attribute__((packed));
 
 /* Where data follow just after header */
 #define REC_DATA(ptr)						\
@@ -2499,7 +2499,7 @@ struct llog_logid_rec {
 	__u64			lid_padding2;
 	__u64			lid_padding3;
 	struct llog_rec_tail	lid_tail;
-} __packed;
+} __attribute__((packed));
 
 struct llog_unlink_rec {
 	struct llog_rec_hdr	lur_hdr;
@@ -2507,7 +2507,7 @@ struct llog_unlink_rec {
 	__u32			lur_oseq;
 	__u32			lur_count;
 	struct llog_rec_tail	lur_tail;
-} __packed;
+} __attribute__((packed));
 
 struct llog_unlink64_rec {
 	struct llog_rec_hdr	lur_hdr;
@@ -2517,7 +2517,7 @@ struct llog_unlink64_rec {
 	__u64			lur_padding2;
 	__u64			lur_padding3;
 	struct llog_rec_tail	lur_tail;
-} __packed;
+} __attribute__((packed));
 
 struct llog_setattr64_rec {
 	struct llog_rec_hdr	lsr_hdr;
@@ -2528,7 +2528,7 @@ struct llog_setattr64_rec {
 	__u32			lsr_gid_h;
 	__u64			lsr_valid;
 	struct llog_rec_tail	lsr_tail;
-} __packed;
+} __attribute__((packed));
 
 struct llog_size_change_rec {
 	struct llog_rec_hdr	lsc_hdr;
@@ -2538,7 +2538,7 @@ struct llog_size_change_rec {
 	__u64			lsc_padding2;
 	__u64			lsc_padding3;
 	struct llog_rec_tail	lsc_tail;
-} __packed;
+} __attribute__((packed));
 
 /* changelog llog name, needed by client replicators */
 #define CHANGELOG_CATALOG "changelog_catalog"
@@ -2546,14 +2546,14 @@ struct llog_size_change_rec {
 struct changelog_setinfo {
 	__u64 cs_recno;
 	__u32 cs_id;
-} __packed;
+} __attribute__((packed));
 
 /** changelog record */
 struct llog_changelog_rec {
 	struct llog_rec_hdr	cr_hdr;
 	struct changelog_rec	cr;		/**< Variable length field */
 	struct llog_rec_tail	cr_do_not_use;	/**< for_sizezof_only */
-} __packed;
+} __attribute__((packed));
 
 struct llog_changelog_user_rec {
 	struct llog_rec_hdr	cur_hdr;
@@ -2561,7 +2561,7 @@ struct llog_changelog_user_rec {
 	__u32			cur_padding;
 	__u64			cur_endrec;
 	struct llog_rec_tail	cur_tail;
-} __packed;
+} __attribute__((packed));
 
 enum agent_req_status {
 	ARS_WAITING,
@@ -2602,13 +2602,13 @@ struct llog_agent_req_rec {
 	__u64			arr_req_change;	/**< req. status change time */
 	struct hsm_action_item	arr_hai;	/**< req. to the agent */
 	struct llog_rec_tail	arr_tail;   /**< record tail for_sizezof_only */
-} __packed;
+} __attribute__((packed));
 
 /* Old llog gen for compatibility */
 struct llog_gen {
 	__u64 mnt_cnt;
 	__u64 conn_cnt;
-} __packed;
+} __attribute__((packed));
 
 struct llog_gen_rec {
 	struct llog_rec_hdr	lgr_hdr;
@@ -2679,7 +2679,7 @@ struct llog_log_hdr {
 	 */
 	__u32			llh_bitmap[LLOG_BITMAP_BYTES / sizeof(__u32)];
 	struct llog_rec_tail	llh_tail;
-} __packed;
+} __attribute__((packed));
 
 #undef LLOG_HEADER_SIZE
 #undef LLOG_BITMAP_BYTES
@@ -2701,7 +2701,7 @@ struct llog_cookie {
 	__u32			lgc_subsys;
 	__u32			lgc_index;
 	__u32			lgc_padding;
-} __packed;
+} __attribute__((packed));
 
 /** llog protocol */
 enum llogd_rpc_ops {
@@ -2726,13 +2726,13 @@ struct llogd_body {
 	__u32 lgd_saved_index;
 	__u32 lgd_len;
 	__u64 lgd_cur_offset;
-} __packed;
+} __attribute__((packed));
 
 struct llogd_conn_body {
 	struct llog_gen		lgdc_gen;
 	struct llog_logid	lgdc_logid;
 	__u32			lgdc_ctxt_idx;
-} __packed;
+} __attribute__((packed));
 
 /* Note: 64-bit types are 64-bit aligned in structure */
 struct obdo {
@@ -2832,7 +2832,7 @@ struct lustre_capa {
 /* FIXME: y2038 time_t overflow: */
 	__u32		lc_expiry;	/** expiry time (sec) */
 	__u8		lc_hmac[CAPA_HMAC_MAX_LEN];   /** HMAC */
-} __packed;
+} __attribute__((packed));
 
 /** lustre_capa::lc_opc */
 enum {
@@ -2864,7 +2864,7 @@ struct lustre_capa_key {
 	__u32	lk_keyid;			/**< key# */
 	__u32	lk_padding;
 	__u8	lk_key[CAPA_HMAC_KEY_MAX_LEN];	/**< key */
-} __packed;
+} __attribute__((packed));
 
 /** The link ea holds 1 @link_ea_entry for each hardlink */
 #define LINK_EA_MAGIC 0x11EAF1DFUL
@@ -2884,7 +2884,7 @@ struct link_ea_entry {
 	unsigned char	lee_reclen[2];
 	unsigned char	lee_parent_fid[sizeof(struct lu_fid)];
 	char		lee_name[0];
-} __packed;
+} __attribute__((packed));
 
 /** fid2path request/reply structure */
 struct getinfo_fid2path {
@@ -2896,7 +2896,7 @@ struct getinfo_fid2path {
 		char		gf_path[0];
 		struct lu_fid	gf_root_fid[0];
 	};
-} __packed;
+} __attribute__((packed));
 
 /** path2parent request/reply structures */
 struct getparent {
@@ -2904,7 +2904,7 @@ struct getparent {
 	__u32		gp_linkno;	/**< hardlink number */
 	__u32		gp_name_size;	/**< size of the name field */
 	char		gp_name[0];	/**< zero-terminated link name */
-} __packed;
+} __attribute__((packed));
 
 enum layout_intent_opc {
 	LAYOUT_INTENT_ACCESS	= 0,	/** generic access */
@@ -2921,7 +2921,7 @@ struct layout_intent {
 	__u32 li_opc;	/* intent operation for enqueue, read, write etc */
 	__u32 li_flags;
 	struct lu_extent li_extent;
-} __packed;
+} __attribute__((packed));
 
 /**
  * On the wire version of hsm_progress structure.
@@ -2939,20 +2939,20 @@ struct hsm_progress_kernel {
 	/* Additional fields */
 	__u64			hpk_data_version;
 	__u64			hpk_padding2;
-} __packed;
+} __attribute__((packed));
 
 /** layout swap request structure
  * fid1 and fid2 are in mdt_body
  */
 struct mdc_swap_layouts {
 	__u64			msl_flags;
-} __packed;
+} __attribute__((packed));
 
 #define INLINE_RESYNC_ARRAY_SIZE	15
 struct close_data_resync_done {
 	__u32	resync_count;
 	__u32	resync_ids_inline[INLINE_RESYNC_ARRAY_SIZE];
-};
+} __attribute__((packed));
 
 struct close_data {
 	struct lustre_handle	cd_handle;

@@ -157,7 +157,7 @@ struct lu_fid {
 	 * used.
 	 **/
 	__u32 f_ver;
-};
+} __attribute__((packed));
 
 static inline bool fid_is_zero(const struct lu_fid *fid)
 {
@@ -176,7 +176,7 @@ struct ost_layout {
 	__u64	ol_comp_start;
 	__u64	ol_comp_end;
 	__u32	ol_comp_id;
-} __packed;
+} __attribute__((packed));
 
 /* Userspace should treat lu_fid as opaque, and only use the following methods
  * to print or parse them.  Other functions (e.g. compare, swab) could be moved
@@ -245,7 +245,7 @@ struct ost_id {
 		} oi;
 		struct lu_fid oi_fid;
 	};
-};
+} __attribute__((packed));
 
 #define DOSTID "%#llx:%llu"
 #define POSTID(oi) ostid_seq(oi), ostid_id(oi)
@@ -462,7 +462,7 @@ struct lov_user_ost_data_v1 {	/* per-stripe data structure */
 	struct ost_id l_ost_oi;	/* OST object ID */
 	__u32 l_ost_gen;	/* generation of this OST index */
 	__u32 l_ost_idx;	/* OST index in LOV */
-} __packed;
+} __attribute__((packed));
 
 #define lov_user_md lov_user_md_v1
 struct lov_user_md_v1 {		/* LOV EA user data (host-endian) */
@@ -480,7 +480,7 @@ struct lov_user_md_v1 {		/* LOV EA user data (host-endian) */
 						 */
 	};
 	struct lov_user_ost_data_v1 lmm_objects[0]; /* per-stripe data */
-} __attribute__((packed,  __may_alias__));
+} __attribute__((packed, __may_alias__));
 
 struct lov_user_md_v3 {		/* LOV EA user data (host-endian) */
 	__u32 lmm_magic;	/* magic number = LOV_USER_MAGIC_V3 */
@@ -498,7 +498,7 @@ struct lov_user_md_v3 {		/* LOV EA user data (host-endian) */
 	};
 	char  lmm_pool_name[LOV_MAXPOOLNAME + 1];   /* pool name */
 	struct lov_user_ost_data_v1 lmm_objects[0]; /* per-stripe data */
-} __packed;
+} __attribute__((packed, __may_alias__));
 
 struct lov_foreign_md {
 	__u32 lfm_magic;	/* magic number = LOV_MAGIC_FOREIGN */
@@ -506,7 +506,7 @@ struct lov_foreign_md {
 	__u32 lfm_type;		/* type, see LU_FOREIGN_TYPE_ */
 	__u32 lfm_flags;	/* flags, type specific */
 	char lfm_value[];
-};
+} __attribute__((packed));
 
 #define foreign_size(lfm) (((struct lov_foreign_md *)lfm)->lfm_length + \
 			   offsetof(struct lov_foreign_md, lfm_value))
@@ -518,7 +518,7 @@ struct lov_foreign_md {
 struct lu_extent {
 	__u64	e_start;
 	__u64	e_end;
-};
+} __attribute__((packed));
 
 #define DEXT "[%#llx, %#llx)"
 #define PEXT(ext) (unsigned long long)(ext)->e_start, (unsigned long long)(ext)->e_end
@@ -583,7 +583,7 @@ struct lov_comp_md_entry_v1 {
 	__u32			lcme_layout_gen;
 	__u64			lcme_timestamp;	/* snapshot time if applicable*/
 	__u32			lcme_padding_1;
-} __packed;
+} __attribute__((packed));
 
 #define SEQ_ID_MAX		0x0000FFFF
 #define SEQ_ID_MASK		SEQ_ID_MAX
@@ -626,7 +626,7 @@ struct lov_comp_md_v1 {
 	__u16	lcm_padding1[3];
 	__u64	lcm_padding2;
 	struct lov_comp_md_entry_v1 lcm_entries[0];
-} __packed;
+} __attribute__((packed));
 
 static inline __u32 lov_user_md_size(__u16 stripes, __u32 lmm_magic)
 {
@@ -649,7 +649,7 @@ static inline __u32 lov_user_md_size(__u16 stripes, __u32 lmm_magic)
 struct lov_user_mds_data_v1 {
 	lstat_t lmd_st;			/* MDS stat struct */
 	struct lov_user_md_v1 lmd_lmm;	/* LOV EA V1 user data */
-} __packed;
+} __attribute__((packed));
 
 struct lov_user_mds_data_v2 {
 	struct lu_fid lmd_fid;		/* Lustre FID */
@@ -663,14 +663,14 @@ struct lov_user_mds_data_v2 {
 struct lov_user_mds_data_v3 {
 	lstat_t lmd_st;			/* MDS stat struct */
 	struct lov_user_md_v3 lmd_lmm;	/* LOV EA V3 user data */
-} __packed;
+} __attribute__((packed));
 #endif
 
 struct lmv_user_mds_data {
 	struct lu_fid	lum_fid;
 	__u32		lum_padding;
 	__u32		lum_mds;
-};
+} __attribute__((packed, __may_alias__));
 
 enum lmv_hash_type {
 	LMV_HASH_TYPE_UNKNOWN	= 0,	/* 0 is reserved for testing purpose */
@@ -743,7 +743,7 @@ struct lmv_user_md_v1 {
 	__u32	lum_padding3;
 	char	lum_pool_name[LOV_MAXPOOLNAME + 1];
 	struct lmv_user_mds_data  lum_objects[0];
-} __packed;
+} __attribute__((packed));
 
 static inline __u32 lmv_foreign_to_md_stripes(__u32 size)
 {
@@ -1315,8 +1315,8 @@ struct changelog_rec {
 		struct lu_fid    cr_tfid;	/**< target fid */
 		__u32	 cr_markerflags; /**< CL_MARK flags */
 	};
-	struct lu_fid	    cr_pfid;	/**< parent fid */
-} __packed;
+	struct lu_fid	 cr_pfid;		/**< parent fid */
+} __attribute__((packed));
 
 /* Changelog extension for RENAME. */
 struct changelog_ext_rename {
@@ -1758,7 +1758,7 @@ enum hsm_states {
 struct hsm_extent {
 	__u64 offset;
 	__u64 length;
-} __packed;
+} __attribute__((packed));
 
 /**
  * Current HSM states of a Lustre file.
@@ -1842,7 +1842,7 @@ struct hsm_request {
 struct hsm_user_item {
 	struct lu_fid	hui_fid;
 	struct hsm_extent hui_extent;
-} __packed;
+} __attribute__((packed));
 
 struct hsm_user_request {
 	struct hsm_request	hur_request;
@@ -1850,7 +1850,7 @@ struct hsm_user_request {
 	/* extra data blob at end of struct (after all
 	 * hur_user_items), only use helpers to access it
 	 */
-} __packed;
+} __attribute__((packed));
 
 /** Return pointer to data field in a hsm user request */
 static inline void *hur_data(struct hsm_user_request *hur)
@@ -1916,7 +1916,7 @@ struct hsm_action_item {
 	__u64		hai_cookie;  /* action cookie from coordinator */
 	__u64		hai_gid;     /* grouplock id */
 	char		hai_data[0]; /* variable length */
-} __packed;
+} __attribute__((packed));
 
 /*
  * helper function which print in hexa the first bytes of
@@ -1960,7 +1960,7 @@ struct hsm_action_list {
 	/* struct hsm_action_item[hal_count] follows, aligned on 8-byte
 	 * boundaries. See hai_first
 	 */
-} __packed;
+} __attribute__((packed));
 
 /* Return pointer to first hai in action list */
 static inline struct hsm_action_item *hai_first(struct hsm_action_list *hal)
