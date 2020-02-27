@@ -4038,3 +4038,16 @@ out:
 	kfree(buf);
 	return rc;
 }
+
+/**
+ * Retrieve peer discovery status.
+ *
+ * Return	1 if lnet_peer_discovery_disabled is 0
+ *		0 if lnet_peer_discovery_disabled is 1
+ */
+int
+LNetGetPeerDiscoveryStatus(void)
+{
+	return !lnet_peer_discovery_disabled;
+}
+EXPORT_SYMBOL(LNetGetPeerDiscoveryStatus);
