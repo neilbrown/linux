@@ -78,15 +78,14 @@ void ptlrpc_buf_set_swabbed(struct ptlrpc_request *req, const int inout,
 		lustre_set_rep_swabbed(req, index);
 }
 
-int ptlrpc_buf_need_swab(struct ptlrpc_request *req, const int inout,
-			 u32 index)
+bool ptlrpc_buf_need_swab(struct ptlrpc_request *req, const int inout,
+			  u32 index)
 {
 	if (inout)
 		return (ptlrpc_req_need_swab(req) &&
 			!lustre_req_swabbed(req, index));
-	else
-		return (ptlrpc_rep_need_swab(req) &&
-			!lustre_rep_swabbed(req, index));
+
+	return (ptlrpc_rep_need_swab(req) && !lustre_rep_swabbed(req, index));
 }
 
 /* early reply size */
