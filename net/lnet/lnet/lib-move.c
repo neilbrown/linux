@@ -3529,6 +3529,7 @@ lnet_recv_put(struct lnet_ni *ni, struct lnet_msg *msg)
 
 	lnet_build_msg_event(msg, LNET_EVENT_PUT);
 
+	wait_for_completion(&the_lnet.ln_started);
 	/*
 	 * Must I ACK?  If so I'll grab the ack_wmd out of the header and put
 	 * it back into the ACK during lnet_finalize()
