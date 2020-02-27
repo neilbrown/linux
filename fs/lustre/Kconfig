@@ -10,6 +10,9 @@ config LUSTRE_FS
 	select CRYPTO_SHA256
 	select CRYPTO_SHA512
 	select CRC_T10DIF
+	select DEBUG_FS
+	select FHANDLE
+	select QUOTA
 	depends on MULTIUSER
 	help
 	  This option enables Lustre file system client support. Choose Y
@@ -44,6 +47,7 @@ config LUSTRE_FS_POSIX_ACL
 
 config LUSTRE_DEBUG_EXPENSIVE_CHECK
 	bool "Enable Lustre DEBUG checks"
+	select REFCOUNT_FULL
 	depends on LUSTRE_FS
 	help
 	  This option is mainly for debug purpose. It enables Lustre code to do
