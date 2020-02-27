@@ -361,6 +361,9 @@ static void ll_lock_cancel_bits(struct ldlm_lock *lock, u64 to_cancel)
 	    !is_root_inode(inode))
 		ll_invalidate_aliases(inode);
 
+	if (bits & (MDS_INODELOCK_LOOKUP | MDS_INODELOCK_PERM))
+		forget_all_cached_acls(inode);
+
 	iput(inode);
 }
 
