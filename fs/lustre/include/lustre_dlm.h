@@ -306,6 +306,8 @@ struct ldlm_ns_bucket {
 	 * fact the network or overall system load is at fault
 	 */
 	struct adaptive_timeout     nsb_at_estimate;
+	/* counter of entries in this bucket */
+	atomic_t		nsb_count;
 };
 
 enum {
