@@ -234,8 +234,8 @@ void ptlrpcd_add_req(struct ptlrpc_request *req)
 		if (wait_event_idle_timeout(req->rq_set_waitq,
 					    !req->rq_set,
 					    5 * HZ) == 0)
-			wait_event_idle(req->rq_set_waitq,
-					!req->rq_set);
+			l_wait_event_abortable(req->rq_set_waitq,
+					       !req->rq_set);
 	} else if (req->rq_set) {
 		/*
 		 * If we have a valid "rq_set", just reuse it to avoid double
