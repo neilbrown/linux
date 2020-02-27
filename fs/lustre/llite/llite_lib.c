@@ -268,7 +268,7 @@ static int client_common_fill_super(struct super_block *sb, char *md, char *dt)
 	/* Setting this indicates we correctly support S_NOSEC (See kernel
 	 * commit 9e1f1de02c2275d7172e18dc4e7c2065777611bf)
 	 */
-	sb->s_flags |= MS_NOSEC;
+	sb->s_flags |= SB_NOSEC;
 
 	if (sbi->ll_flags & LL_SBI_FLOCK)
 		sbi->ll_fop = &ll_file_operations_flock;
