@@ -711,7 +711,7 @@ static int mdc_finish_enqueue(struct obd_export *exp,
 	    (!it_disposition(it, DISP_OPEN_OPEN) || it->it_status != 0))
 		mdc_clear_replay_flag(req, it->it_status);
 
-	DEBUG_REQ(D_RPCTRACE, req, "op=%d disposition=%x, status=%d",
+	DEBUG_REQ(D_RPCTRACE, req, "op=%x disposition=%x, status=%d",
 		  it->it_op, it->it_disposition, it->it_status);
 
 	/* We know what to expect, so we do any byte flipping required here */
@@ -783,6 +783,8 @@ static int mdc_finish_enqueue(struct obd_export *exp,
 		 * is packed into RMF_DLM_LVB of req
 		 */
 		lvb_len = req_capsule_get_size(pill, &RMF_DLM_LVB, RCL_SERVER);
+		CDEBUG(D_INFO, "%s: layout return lvb %d transno %lld\n",
+		       class_exp2obd(exp)->obd_name, lvb_len, req->rq_transno);
 		if (lvb_len > 0) {
 			lvb_data = req_capsule_server_sized_get(pill,
 								&RMF_DLM_LVB,
