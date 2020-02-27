@@ -281,21 +281,22 @@
  * - OST_IO_MAXREQSIZE must be at least 1 page of cookies plus some spillover
  * - Must be a multiple of 1024
  */
-#define _OST_MAXREQSIZE_BASE	(sizeof(struct lustre_msg) + \
+#define _OST_MAXREQSIZE_BASE ((unsigned long)(sizeof(struct lustre_msg) + \
 				 sizeof(struct ptlrpc_body) + \
 				 sizeof(struct obdo) + \
 				 sizeof(struct obd_ioobj) + \
-				 sizeof(struct niobuf_remote))
-#define _OST_MAXREQSIZE_SUM	(_OST_MAXREQSIZE_BASE + \
+				 sizeof(struct niobuf_remote)))
+#define _OST_MAXREQSIZE_SUM ((unsigned long)(_OST_MAXREQSIZE_BASE + \
 				 sizeof(struct niobuf_remote) * \
-				 (DT_MAX_BRW_PAGES - 1))
+				 (DT_MAX_BRW_PAGES - 1)))
 
 /**
  * FIEMAP request can be 4K+ for now
  */
-#define OST_MAXREQSIZE		(16 * 1024)
-#define OST_IO_MAXREQSIZE	max_t(int, OST_MAXREQSIZE, \
-				      (((_OST_MAXREQSIZE_SUM - 1) | (1024 - 1)) + 1))
+#define OST_MAXREQSIZE		(16UL * 1024UL)
+#define OST_IO_MAXREQSIZE	max(OST_MAXREQSIZE,		\
+				   ((_OST_MAXREQSIZE_SUM - 1) |	\
+				   (1024 - 1)) + 1)
 
 /* Safe estimate of free space in standard RPC, provides upper limit for # of
  * bytes of i/o to pack in RPC (skipping bulk transfer).
