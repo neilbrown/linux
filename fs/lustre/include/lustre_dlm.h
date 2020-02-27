@@ -280,16 +280,12 @@ typedef int (*ldlm_cancel_cbt)(struct ldlm_lock *lock);
  * Currently LVBs are used by:
  *  - OSC-OST code to maintain current object size/times
  *  - layout lock code to return the layout when the layout lock is granted
+ *
+ * To ensure delayed LVB initialization, it is highly recommended to use the set
+ * of ldlm_[res_]lvbo_[init,update,fill]() functions.
  */
 struct ldlm_valblock_ops {
-	int (*lvbo_init)(struct ldlm_resource *res);
-	int (*lvbo_update)(struct ldlm_resource *res, struct ldlm_lock *lock,
-			   struct ptlrpc_request *r, int increase);
 	int (*lvbo_free)(struct ldlm_resource *res);
-	/* Return size of lvb data appropriate RPC size can be reserved */
-	int (*lvbo_size)(struct ldlm_lock *lock);
-	/* Called to fill in lvb data to RPC buffer @buf */
-	int (*lvbo_fill)(struct ldlm_lock *lock, void *buf, int buflen);
 };
 
 /**
@@ -931,36 +927,6 @@ ldlm_lock_to_ns_at(struct ldlm_lock *lock)
 	return &lock->l_resource->lr_ns_bucket->nsb_at_estimate;
 }
 
-static inline int ldlm_lvbo_init(struct ldlm_resource *res)
-{
-	struct ldlm_namespace *ns = ldlm_res_to_ns(res);
-
-	if (ns->ns_lvbo && ns->ns_lvbo->lvbo_init)
-		return ns->ns_lvbo->lvbo_init(res);
-
-	return 0;
-}
-
-static inline int ldlm_lvbo_size(struct ldlm_lock *lock)
-{
-	struct ldlm_namespace *ns = ldlm_lock_to_ns(lock);
-
-	if (ns->ns_lvbo && ns->ns_lvbo->lvbo_size)
-		return ns->ns_lvbo->lvbo_size(lock);
-
-	return 0;
-}
-
-static inline int ldlm_lvbo_fill(struct ldlm_lock *lock, void *buf, int len)
-{
-	struct ldlm_namespace *ns = ldlm_lock_to_ns(lock);
-
-	if (ns->ns_lvbo)
-		return ns->ns_lvbo->lvbo_fill(lock, buf, len);
-
-	return 0;
-}
-
 struct ldlm_ast_work {
 	struct ldlm_lock       *w_lock;
 	int			w_blocking;
@@ -1119,28 +1085,6 @@ ldlm_handle2lock_long(const struct lustre_handle *h, u64 flags)
 	if (lock)
 		LDLM_LOCK_REF_DEL(lock);
 	return lock;
-}
-
-/**
- * Update Lock Value Block Operations (LVBO) on a resource taking into account
- * data from request @r
- */
-static inline int ldlm_lvbo_update(struct ldlm_resource *res,
-				   struct ldlm_lock *lock,
-				   struct ptlrpc_request *req, int increase)
-{
-	struct ldlm_namespace *ns = ldlm_res_to_ns(res);
-
-	if (ns->ns_lvbo && ns->ns_lvbo->lvbo_update)
-		return ns->ns_lvbo->lvbo_update(res, lock, req, increase);
-
-	return 0;
-}
-
-static inline int ldlm_res_lvbo_update(struct ldlm_resource *res,
-				       struct ptlrpc_request *req, int increase)
-{
-	return ldlm_lvbo_update(res, NULL, req, increase);
 }
 
 int is_granted_or_cancelled_nolock(struct ldlm_lock *lock);

@@ -1055,10 +1055,9 @@ static struct ldlm_resource *ldlm_resource_new(enum ldlm_type ldlm_type)
 	atomic_set(&res->lr_refcount, 1);
 	lu_ref_init(&res->lr_reference);
 
-	/* The creator of the resource must unlock the mutex after LVB
-	 * initialization.
+	/* Since LVB init can be delayed now, there is no longer need to
+	 * immediately acquire mutex here.
 	 */
-	mutex_lock(&res->lr_lvb_mutex);
 
 	return res;
 }
@@ -1080,7 +1079,6 @@ ldlm_resource_get(struct ldlm_namespace *ns, struct ldlm_resource *parent,
 	u64 version;
 	int ns_refcount = 0;
 	int hash;
-	int rc;
 
 	LASSERT(!parent);
 	LASSERT(ns->ns_rs_hash);
@@ -1090,7 +1088,7 @@ ldlm_resource_get(struct ldlm_namespace *ns, struct ldlm_resource *parent,
 	hnode = cfs_hash_bd_lookup_locked(ns->ns_rs_hash, &bd, (void *)name);
 	if (hnode) {
 		cfs_hash_bd_unlock(ns->ns_rs_hash, &bd, 0);
-		goto lvbo_init;
+		goto found;
 	}
 
 	version = cfs_hash_bd_version_get(&bd);
@@ -1119,25 +1117,12 @@ ldlm_resource_get(struct ldlm_namespace *ns, struct ldlm_resource *parent,
 		cfs_hash_bd_unlock(ns->ns_rs_hash, &bd, 1);
 		/* Clean lu_ref for failed resource. */
 		lu_ref_fini(&res->lr_reference);
-		/* We have taken lr_lvb_mutex. Drop it. */
-		mutex_unlock(&res->lr_lvb_mutex);
 		if (res->lr_itree)
 			kmem_cache_free(ldlm_interval_tree_slab,
 					res->lr_itree);
 		kmem_cache_free(ldlm_resource_slab, res);
-lvbo_init:
+found:
 		res = hlist_entry(hnode, struct ldlm_resource, lr_hash);
-		/* Synchronize with regard to resource creation. */
-		if (ns->ns_lvbo && ns->ns_lvbo->lvbo_init) {
-			mutex_lock(&res->lr_lvb_mutex);
-			mutex_unlock(&res->lr_lvb_mutex);
-		}
-
-		if (unlikely(res->lr_lvb_len < 0)) {
-			rc = res->lr_lvb_len;
-			ldlm_resource_putref(res);
-			res = ERR_PTR(rc);
-		}
 		return res;
 	}
 	/* We won! Let's add the resource. */
@@ -1146,22 +1131,8 @@ lvbo_init:
 		ns_refcount = ldlm_namespace_get_return(ns);
 
 	cfs_hash_bd_unlock(ns->ns_rs_hash, &bd, 1);
-	if (ns->ns_lvbo && ns->ns_lvbo->lvbo_init) {
-		OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_CREATE_RESOURCE, 2);
-		rc = ns->ns_lvbo->lvbo_init(res);
-		if (rc < 0) {
-			CERROR("%s: lvbo_init failed for resource %#llx:%#llx: rc = %d\n",
-			       ns->ns_obd->obd_name, name->name[0],
-			       name->name[1], rc);
-			res->lr_lvb_len = rc;
-			mutex_unlock(&res->lr_lvb_mutex);
-			ldlm_resource_putref(res);
-			return ERR_PTR(rc);
-		}
-	}
 
-	/* We create resource with locked lr_lvb_mutex. */
-	mutex_unlock(&res->lr_lvb_mutex);
+	OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_CREATE_RESOURCE, 2);
 
 	/* Let's see if we happened to be the very first resource in this
 	 * namespace. If so, and this is a client namespace, we need to move
