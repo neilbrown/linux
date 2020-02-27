@@ -4186,7 +4186,7 @@ lnet_parse(struct lnet_ni *ni, struct lnet_hdr *hdr, lnet_nid_t from_nid,
 		}
 	}
 
-	msg = kzalloc(sizeof(*msg), GFP_NOFS);
+	msg = kmem_cache_zalloc(lnet_msg_cachep, GFP_NOFS);
 	if (!msg) {
 		CERROR("%s, src %s: Dropping %s (out of memory)\n",
 		       libcfs_nid2str(from_nid), libcfs_nid2str(src_nid),
@@ -4194,7 +4194,7 @@ lnet_parse(struct lnet_ni *ni, struct lnet_hdr *hdr, lnet_nid_t from_nid,
 		goto drop;
 	}
 
-	/* msg zeroed by kzalloc()
+	/* msg zeroed by kmem_cache_zalloc().
 	 * i.e. flags all clear, pointers NULL etc
 	 */
 	msg->msg_type = type;
@@ -4475,7 +4475,7 @@ LNetPut(lnet_nid_t self, struct lnet_handle_md mdh, enum lnet_ack_req ack,
 		return -EIO;
 	}
 
-	msg = kzalloc(sizeof(*msg), GFP_NOFS);
+	msg = kmem_cache_zalloc(lnet_msg_cachep, GFP_NOFS);
 	if (!msg) {
 		CERROR("Dropping PUT to %s: ENOMEM on struct lnet_msg\n",
 		       libcfs_id2str(target));
@@ -4571,7 +4571,7 @@ lnet_create_reply_msg(struct lnet_ni *ni, struct lnet_msg *getmsg)
 	 * CAVEAT EMPTOR: 'getmsg' is the original GET, which is freed when
 	 * lnet_finalize() is called on it, so the LND must call this first
 	 */
-	struct lnet_msg *msg = kzalloc(sizeof(*msg), GFP_NOFS);
+	struct lnet_msg *msg;
 	struct lnet_libmd *getmd = getmsg->msg_md;
 	struct lnet_process_id peer_id = getmsg->msg_target;
 	int cpt;
@@ -4579,6 +4579,7 @@ lnet_create_reply_msg(struct lnet_ni *ni, struct lnet_msg *getmsg)
 	LASSERT(!getmsg->msg_target_is_router);
 	LASSERT(!getmsg->msg_routing);
 
+	msg = kmem_cache_zalloc(lnet_msg_cachep, GFP_NOFS);
 	if (!msg) {
 		CERROR("%s: Dropping REPLY from %s: can't allocate msg\n",
 		       libcfs_nid2str(ni->ni_nid), libcfs_id2str(peer_id));
@@ -4708,7 +4709,7 @@ LNetGet(lnet_nid_t self, struct lnet_handle_md mdh,
 		return -EIO;
 	}
 
-	msg = kzalloc(sizeof(*msg), GFP_NOFS);
+	msg = kmem_cache_zalloc(lnet_msg_cachep, GFP_NOFS);
 	if (!msg) {
 		CERROR("Dropping GET to %s: ENOMEM on struct lnet_msg\n",
 		       libcfs_id2str(target));
