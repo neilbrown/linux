@@ -294,6 +294,16 @@ enum ldlm_policy_res {
 	}								    \
 	struct __##var##__dummy_write {; } /* semicolon catcher */
 
+static inline void
+ldlm_add_var(struct lprocfs_vars *vars, struct dentry *debugfs_entry,
+	     const char *name, void *data, const struct file_operations *ops)
+{
+	vars->name = name;
+	vars->data = data;
+	vars->fops = ops;
+	ldebugfs_add_vars(debugfs_entry, vars, NULL);
+}
+
 static inline int is_granted_or_cancelled(struct ldlm_lock *lock)
 {
 	int ret = 0;
