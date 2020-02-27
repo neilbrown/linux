@@ -397,6 +397,12 @@ struct lnet_net {
 
 	/* dying LND instances */
 	struct list_head	net_ni_zombie;
+
+	/* when I was last alive */
+	time64_t		net_last_alive;
+
+	/* protects access to net_last_alive */
+	spinlock_t		net_lock;
 };
 
 struct lnet_ni {
@@ -430,9 +436,6 @@ struct lnet_ni {
 
 	/* percpt reference count */
 	int			**ni_refs;
-
-	/* when I was last alive */
-	time64_t		ni_last_alive;
 
 	/* pointer to parent network */
 	struct lnet_net		*ni_net;
