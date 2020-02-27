@@ -1054,27 +1054,24 @@ EXPORT_SYMBOL(cl_sync_io_init_notify);
 int cl_sync_io_wait(const struct lu_env *env, struct cl_sync_io *anchor,
 		    long timeout)
 {
-	int rc = 1;
+	int rc = 0;
 
 	LASSERT(timeout >= 0);
 
-	if (timeout == 0)
-		wait_event_idle(anchor->csi_waitq,
-				atomic_read(&anchor->csi_sync_nr) == 0);
-	else
-		rc = wait_event_idle_timeout(anchor->csi_waitq,
-					     atomic_read(&anchor->csi_sync_nr) == 0,
-					     timeout * HZ);
-	if (rc == 0) {
+	if (timeout > 0 &&
+	    wait_event_idle_timeout(anchor->csi_waitq,
+				    atomic_read(&anchor->csi_sync_nr) == 0,
+				    timeout * HZ) == 0) {
 		rc = -ETIMEDOUT;
 		CERROR("IO failed: %d, still wait for %d remaining entries\n",
 		       rc, atomic_read(&anchor->csi_sync_nr));
-
-		wait_event_idle(anchor->csi_waitq,
-				atomic_read(&anchor->csi_sync_nr) == 0);
-	} else {
-		rc = anchor->csi_sync_rc;
 	}
+
+	wait_event_idle(anchor->csi_waitq,
+			atomic_read(&anchor->csi_sync_nr) == 0);
+	if (!rc)
+		rc = anchor->csi_sync_rc;
+
 	/* We take the lock to ensure that cl_sync_io_note() has finished */
 	spin_lock(&anchor->csi_waitq.lock);
 	LASSERT(atomic_read(&anchor->csi_sync_nr) == 0);
