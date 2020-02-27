@@ -1374,7 +1374,7 @@ int class_config_llog_handler(const struct lu_env *env,
 		    lcfg->lcfg_command != LCFG_SPTLRPC_CONF &&
 		    LUSTRE_CFG_BUFLEN(lcfg, 0) > 0) {
 			inst_len = LUSTRE_CFG_BUFLEN(lcfg, 0) +
-				   sizeof(clli->cfg_instance) * 2 + 4;
+				   LUSTRE_MAXINSTANCE + 4;
 			inst_name = kasprintf(GFP_NOFS, "%s-%px",
 					      lustre_cfg_string(lcfg, 0),
 					      clli->cfg_instance);
