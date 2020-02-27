@@ -58,11 +58,6 @@ static void ll_release(struct dentry *de)
 
 	LASSERT(de);
 	lld = ll_d2d(de);
-	if (lld->lld_it) {
-		ll_intent_release(lld->lld_it);
-		kfree(lld->lld_it);
-	}
-
 	call_rcu(&lld->lld_rcu_head, free_dentry_data);
 }
 
