@@ -524,30 +524,6 @@ int lprocfs_rd_server_uuid(struct seq_file *m, void *data)
 }
 EXPORT_SYMBOL(lprocfs_rd_server_uuid);
 
-int lprocfs_rd_conn_uuid(struct seq_file *m, void *data)
-{
-	struct obd_device *obd = data;
-	struct ptlrpc_connection *conn;
-	int rc;
-
-	LASSERT(obd);
-
-	rc = lprocfs_climp_check(obd);
-	if (rc)
-		return rc;
-
-	conn = obd->u.cli.cl_import->imp_connection;
-	if (conn && obd->u.cli.cl_import)
-		seq_printf(m, "%s\n", conn->c_remote_uuid.uuid);
-	else
-		seq_puts(m, "<none>\n");
-
-	up_read(&obd->u.cli.cl_sem);
-
-	return 0;
-}
-EXPORT_SYMBOL(lprocfs_rd_conn_uuid);
-
 /**
  * Lock statistics structure for access, possibly only on this CPU.
  *

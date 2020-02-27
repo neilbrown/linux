@@ -173,8 +173,8 @@ static ssize_t max_dirty_mb_store(struct kobject *kobj,
 }
 LUSTRE_RW_ATTR(max_dirty_mb);
 
-#define ost_conn_uuid_show conn_uuid_show
-LUSTRE_RO_ATTR(ost_conn_uuid);
+LUSTRE_ATTR(ost_conn_uuid, 0444, conn_uuid_show, NULL);
+LUSTRE_RO_ATTR(conn_uuid);
 
 LUSTRE_RO_ATTR(ping);
 
@@ -962,6 +962,7 @@ static struct attribute *osc_attrs[] = {
 	&lustre_attr_short_io_bytes.attr,
 	&lustre_attr_resend_count.attr,
 	&lustre_attr_ost_conn_uuid.attr,
+	&lustre_attr_conn_uuid.attr,
 	&lustre_attr_ping.attr,
 	&lustre_attr_idle_timeout.attr,
 	&lustre_attr_idle_connect.attr,
