@@ -98,10 +98,8 @@ void fld_cache_fini(struct fld_cache *cache)
 	fld_cache_flush(cache);
 
 	CDEBUG(D_INFO, "FLD cache statistics (%s):\n", cache->fci_name);
-	CDEBUG(D_INFO, "  Total reqs: %llu\n", cache->fci_stat.fst_count);
 	CDEBUG(D_INFO, "  Cache reqs: %llu\n", cache->fci_stat.fst_cache);
-	CDEBUG(D_INFO, "  Cache hits: %u%%\n",
-	       pct(cache->fci_stat.fst_cache, cache->fci_stat.fst_count));
+	CDEBUG(D_INFO, "  Total reqs: %llu\n", cache->fci_stat.fst_count);
 
 	kfree(cache);
 }
