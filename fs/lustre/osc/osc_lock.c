@@ -549,6 +549,10 @@ int osc_ldlm_glimpse_ast(struct ldlm_lock *dlmlock, void *data)
 	struct ost_lvb *lvb;
 	struct req_capsule *cap;
 	struct cl_object *obj = NULL;
+	struct ldlm_resource *res = dlmlock->l_resource;
+	struct ldlm_match_data matchdata = { 0 };
+	union ldlm_policy_data policy;
+	enum ldlm_mode mode = LCK_PW | LCK_GROUP | LCK_PR;
 	int result;
 	u16 refcheck;
 
@@ -559,13 +563,40 @@ int osc_ldlm_glimpse_ast(struct ldlm_lock *dlmlock, void *data)
 		result = PTR_ERR(env);
 		goto out;
 	}
+	policy.l_extent.start = 0;
+	policy.l_extent.end = LUSTRE_EOF;
 
-	lock_res_and_lock(dlmlock);
-	if (dlmlock->l_ast_data) {
-		obj = osc2cl(dlmlock->l_ast_data);
-		cl_object_get(obj);
+	matchdata.lmd_mode = &mode;
+	matchdata.lmd_policy = &policy;
+	matchdata.lmd_flags = LDLM_FL_TEST_LOCK | LDLM_FL_CBPENDING;
+	matchdata.lmd_unref = 1;
+	matchdata.lmd_has_ast_data = true;
+
+	LDLM_LOCK_GET(dlmlock);
+
+	/* If any dlmlock has l_ast_data set, we must find it or we risk
+	 * missing a size update done under a different lock.
+	 */
+	while (dlmlock) {
+		lock_res_and_lock(dlmlock);
+		if (dlmlock->l_ast_data) {
+			obj = osc2cl(dlmlock->l_ast_data);
+			cl_object_get(obj);
+		}
+		unlock_res_and_lock(dlmlock);
+		LDLM_LOCK_PUT(dlmlock);
+
+		dlmlock = NULL;
+
+		if (!obj && res->lr_type == LDLM_EXTENT) {
+			if (OBD_FAIL_CHECK(OBD_FAIL_OSC_NO_SIZE_DATA))
+				break;
+
+			lock_res(res);
+			dlmlock = search_itree(res, &matchdata);
+			unlock_res(res);
+		}
 	}
-	unlock_res_and_lock(dlmlock);
 
 	if (obj) {
 		/* Do not grab the mutex of cl_lock for glimpse.
