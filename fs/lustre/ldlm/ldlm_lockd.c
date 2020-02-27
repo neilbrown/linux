@@ -73,7 +73,6 @@ struct ldlm_cb_async_args {
 /* LDLM state */
 
 static struct ldlm_state *ldlm_state;
-
 struct ldlm_bl_pool {
 	spinlock_t		blp_lock;
 
@@ -111,6 +110,46 @@ struct ldlm_bl_work_item {
 };
 
 /**
+ * Server may pass additional information about blocking lock.
+ * For IBITS locks it is conflicting bits which can be used for
+ * lock convert instead of cancel.
+ */
+void ldlm_bl_desc2lock(const struct ldlm_lock_desc *ld, struct ldlm_lock *lock)
+{
+	check_res_locked(lock->l_resource);
+	if (ld &&
+	    (lock->l_resource->lr_type == LDLM_IBITS)) {
+		/*
+		 * Lock description contains policy of blocking lock, and its
+		 * cancel_bits is used to pass conflicting bits.  NOTE: ld can
+		 * be NULL or can be not NULL but zeroed if passed from
+		 * ldlm_bl_thread_blwi(), check below used bits in ld to make
+		 * sure it is valid description.
+		 *
+		 * If server may replace lock resource keeping the same
+		 * cookie, never use cancel bits from different resource, full
+		 * cancel is to be used.
+		 */
+		if (ld->l_policy_data.l_inodebits.cancel_bits &&
+		    ldlm_res_eq(&ld->l_resource.lr_name,
+				&lock->l_resource->lr_name) &&
+		    !(ldlm_is_cbpending(lock) &&
+		      lock->l_policy_data.l_inodebits.cancel_bits == 0)) {
+			/* always combine conflicting ibits */
+			lock->l_policy_data.l_inodebits.cancel_bits |=
+				ld->l_policy_data.l_inodebits.cancel_bits;
+		} else {
+			/* If cancel_bits are not obtained or
+			 * if the lock is already CBPENDING and
+			 * has no cancel_bits set
+			 * - the full lock is to be cancelled
+			 */
+			lock->l_policy_data.l_inodebits.cancel_bits = 0;
+		}
+	}
+}
+
+/**
  * Callback handler for receiving incoming blocking ASTs.
  *
  * This can only happen on client side.
@@ -124,31 +163,8 @@ void ldlm_handle_bl_callback(struct ldlm_namespace *ns,
 
 	lock_res_and_lock(lock);
 
-	/* set bits to cancel for this lock for possible lock convert */
-	if (lock->l_resource->lr_type == LDLM_IBITS) {
-		/*
-		 * Lock description contains policy of blocking lock, and its
-		 * cancel_bits is used to pass conflicting bits.  NOTE: ld can
-		 * be NULL or can be not NULL but zeroed if passed from
-		 * ldlm_bl_thread_blwi(), check below used bits in ld to make
-		 * sure it is valid description.
-		 *
-		 * If server may replace lock resource keeping the same
-		 * cookie, never use cancel bits from different resource, full
-		 * cancel is to be used.
-		 */
-		if (ld && ld->l_policy_data.l_inodebits.bits &&
-		    ldlm_res_eq(&ld->l_resource.lr_name,
-				&lock->l_resource->lr_name))
-			lock->l_policy_data.l_inodebits.cancel_bits =
-				ld->l_policy_data.l_inodebits.cancel_bits;
-		/*
-		 * If there is no valid ld and lock is cbpending already
-		 * then cancel_bits should be kept, otherwise it is zeroed.
-		 */
-		else if (!ldlm_is_cbpending(lock))
-			lock->l_policy_data.l_inodebits.cancel_bits = 0;
-	}
+	/* get extra information from desc if any */
+	ldlm_bl_desc2lock(ld, lock);
 	ldlm_set_cbpending(lock);
 
 	do_ast = !lock->l_readers && !lock->l_writers;
@@ -269,6 +285,7 @@ static void ldlm_handle_cp_callback(struct ptlrpc_request *req,
 		 * Let ldlm_cancel_lru() be fast.
 		 */
 		ldlm_lock_remove_from_lru(lock);
+		ldlm_bl_desc2lock(&dlm_req->lock_desc, lock);
 		lock->l_flags |= LDLM_FL_CBPENDING | LDLM_FL_BL_AST;
 		LDLM_DEBUG(lock, "completion AST includes blocking AST");
 	}
@@ -318,6 +335,7 @@ static void ldlm_handle_gl_callback(struct ptlrpc_request *req,
 				    struct ldlm_request *dlm_req,
 				    struct ldlm_lock *lock)
 {
+	struct ldlm_lock_desc *ld = &dlm_req->lock_desc;
 	int rc = -ENXIO;
 
 	LDLM_DEBUG(lock, "client glimpse AST callback handler");
@@ -339,8 +357,15 @@ static void ldlm_handle_gl_callback(struct ptlrpc_request *req,
 			ktime_add(lock->l_last_used,
 				  ktime_set(ns->ns_dirty_age_limit, 0)))) {
 		unlock_res_and_lock(lock);
-		if (ldlm_bl_to_thread_lock(ns, NULL, lock))
-			ldlm_handle_bl_callback(ns, NULL, lock);
+
+		/* For MDS glimpse it is always DOM lock, set corresponding
+		 * cancel_bits to perform lock convert if needed
+		 */
+		if (lock->l_resource->lr_type == LDLM_IBITS)
+			ld->l_policy_data.l_inodebits.cancel_bits =
+							MDS_INODELOCK_DOM;
+		if (ldlm_bl_to_thread_lock(ns, ld, lock))
+			ldlm_handle_bl_callback(ns, ld, lock);
 
 		return;
 	}
