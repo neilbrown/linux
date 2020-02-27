@@ -63,6 +63,9 @@ static inline unsigned int pct(unsigned long a, unsigned long b)
 	return b ? a * 100 / b : 0;
 }
 
+#define PAGES_TO_MiB(pages)	((pages) >> (20 - PAGE_SHIFT))
+#define MiB_TO_PAGES(mb)	((mb) << (20 - PAGE_SHIFT))
+
 struct lprocfs_static_vars {
 	struct lprocfs_vars		*obd_vars;
 	const struct attribute_group	*sysfs_vars;
@@ -363,8 +366,6 @@ void lustre_register_client_process_config(int (*cpc)(struct lustre_cfg *lcfg));
 
 int lprocfs_write_frac_helper(const char __user *buffer,
 			      unsigned long count, int *val, int mult);
-int lprocfs_read_frac_helper(char *buffer, unsigned long count,
-			     long val, int mult);
 
 int lprocfs_stats_alloc_one(struct lprocfs_stats *stats,
 			    unsigned int cpuid);
