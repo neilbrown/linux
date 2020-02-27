@@ -361,6 +361,7 @@ struct obd_histogram;
 #define JOBSTATS_DISABLE		"disable"
 #define JOBSTATS_PROCNAME_UID		"procname_uid"
 #define JOBSTATS_NODELOCAL		"nodelocal"
+#define JOBSTATS_SESSION		"session"
 
 /* obd_config.c */
 void lustre_register_client_process_config(int (*cpc)(struct lustre_cfg *lcfg));

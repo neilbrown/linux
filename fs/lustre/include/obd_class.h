@@ -57,6 +57,10 @@ extern rwlock_t obd_dev_lock;
 struct obd_device *class_exp2obd(struct obd_export *exp);
 int class_handle_ioctl(unsigned int cmd, unsigned long arg);
 int lustre_get_jobid(char *jobid, size_t len);
+void jobid_cache_fini(void);
+int jobid_cache_init(void);
+char *jobid_current(void);
+int jobid_set_current(char *jobid);
 
 struct lu_device_type;
 
