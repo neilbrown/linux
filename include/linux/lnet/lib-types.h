@@ -716,6 +716,9 @@ struct lnet_peer {
 #define LNET_PEER_FORCE_PING	BIT(13)	/* Forced Ping */
 #define LNET_PEER_FORCE_PUSH	BIT(14)	/* Forced Push */
 
+/* force delete even if router */
+#define LNET_PEER_RTR_NI_FORCE_DEL BIT(15)
+
 /* gw undergoing alive discovery */
 #define LNET_PEER_RTR_DISCOVERY	BIT(16)
 
