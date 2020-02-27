@@ -660,9 +660,11 @@ void obd_cleanup_caches(void)
 int obd_init_caches(void)
 {
 	LASSERT(!obd_device_cachep);
-	obd_device_cachep = kmem_cache_create("ll_obd_dev_cache",
-					      sizeof(struct obd_device),
-					      0, 0, NULL);
+	obd_device_cachep = kmem_cache_create_usercopy("ll_obd_dev_cache",
+						       sizeof(struct obd_device),
+						       0, 0, 0,
+						       sizeof(struct obd_device),
+						       NULL);
 	if (!obd_device_cachep)
 		goto out;
 
