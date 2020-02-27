@@ -2303,7 +2303,6 @@ failed:
 static int kiblnd_hdev_get_attr(struct kib_hca_dev *hdev)
 {
 	struct ib_device_attr *dev_attr = &hdev->ibh_ibdev->attrs;
-	int rc = 0;
 
 	/*
 	 * It's safe to assume a HCA can handle a page size
@@ -2326,15 +2325,11 @@ static int kiblnd_hdev_get_attr(struct kib_hca_dev *hdev)
 			hdev->ibh_dev->ibd_dev_caps |= IBLND_DEV_CAPS_FASTREG_GAPS_SUPPORT;
 	} else {
 		CERROR("IB device does not support FMRs nor FastRegs, can't register memory: %d\n",
-		       rc);
+		       -ENXIO);
 		return -ENXIO;
 	}
 
 	hdev->ibh_mr_size = dev_attr->max_mr_size;
-	if (hdev->ibh_mr_size == ~0ULL) {
-		hdev->ibh_mr_shift = 64;
-		return 0;
-	}
 
 	CERROR("Invalid mr size: %#llx\n", hdev->ibh_mr_size);
 	return -EINVAL;
