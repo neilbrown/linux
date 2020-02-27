@@ -204,7 +204,7 @@ struct client_obd {
 	long			cl_reserved_grant;
 	wait_queue_head_t	cl_cache_waiters;	/* waiting for cache/grant */
 	time64_t		cl_next_shrink_grant;	/* seconds */
-	struct list_head	cl_grant_shrink_list;	/* Timeout event list */
+	struct list_head	cl_grant_chain;
 	time64_t		cl_grant_shrink_interval; /* seconds */
 
 	/* A chunk is an optimal size used by osc_extent to determine
@@ -670,6 +670,8 @@ enum op_xvalid {
 	OP_XVALID_OWNEROVERRIDE	= BIT(2),	/* 0x0004 */
 	OP_XVALID_FLAGS		= BIT(3),	/* 0x0008 */
 	OP_XVALID_PROJID	= BIT(4),	/* 0x0010 */
+	OP_XVALID_LAZYSIZE	= BIT(5),	/* 0x0020 */
+	OP_XVALID_LAZYBLOCKS	= BIT(6),	/* 0x0040 */
 };
 
 struct lu_context;
