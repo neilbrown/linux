@@ -132,3 +132,22 @@ ll_inode_init_security(struct dentry *dentry, struct inode *inode,
 		return 0;
 	return err;
 }
+
+/**
+ * Get security context xattr name used by policy.
+ *
+ * \retval >= 0     length of xattr name
+ * \retval < 0      failure to get security context xattr name
+ */
+int
+ll_listsecurity(struct inode *inode, char *secctx_name, size_t secctx_name_size)
+{
+	int rc;
+
+	rc = security_inode_listsecurity(inode, secctx_name, secctx_name_size);
+	if (rc >= secctx_name_size)
+		rc = -ERANGE;
+	else if (rc >= 0)
+		secctx_name[rc] = '\0';
+	return rc;
+}
