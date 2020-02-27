@@ -554,7 +554,9 @@ int cl_io_read_ahead(const struct lu_env *env, struct cl_io *io,
 	const struct cl_io_slice *scan;
 	int result = 0;
 
-	LINVRNT(io->ci_type == CIT_READ || io->ci_type == CIT_FAULT);
+	LINVRNT(io->ci_type == CIT_READ ||
+		io->ci_type == CIT_FAULT ||
+		io->ci_type == CIT_WRITE);
 	LINVRNT(cl_io_invariant(io));
 
 	list_for_each_entry(scan, &io->ci_layers, cis_linkage) {
