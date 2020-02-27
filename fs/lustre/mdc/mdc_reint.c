@@ -390,28 +390,14 @@ int mdc_rename(struct obd_export *exp, struct md_op_data *op_data,
 	req_capsule_set_size(&req->rq_pill, &RMF_NAME, RCL_CLIENT, oldlen + 1);
 	req_capsule_set_size(&req->rq_pill, &RMF_SYMTGT, RCL_CLIENT,
 			     newlen + 1);
+	if (op_data->op_cli_flags & CLI_MIGRATE)
+		req_capsule_set_size(&req->rq_pill, &RMF_EADATA, RCL_CLIENT,
+				     op_data->op_data_size);
 
 	rc = mdc_prep_elc_req(exp, req, MDS_REINT, &cancels, count);
 	if (rc) {
 		ptlrpc_request_free(req);
 		return rc;
-	}
-
-	if (op_data->op_cli_flags & CLI_MIGRATE && op_data->op_data) {
-		struct md_open_data *mod = op_data->op_data;
-
-		LASSERTF(mod->mod_open_req &&
-			 mod->mod_open_req->rq_type != LI_POISON,
-			 "POISONED open %p!\n", mod->mod_open_req);
-
-		DEBUG_REQ(D_HA, mod->mod_open_req, "matched open");
-		/*
-		 * We no longer want to preserve this open for replay even
-		 * though the open was committed. b=3632, b=3633
-		 */
-		spin_lock(&mod->mod_open_req->rq_lock);
-		mod->mod_open_req->rq_replay = 0;
-		spin_unlock(&mod->mod_open_req->rq_lock);
 	}
 
 	if (exp_connect_cancelset(exp) && req)
