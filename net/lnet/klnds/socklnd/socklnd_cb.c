@@ -394,7 +394,7 @@ static void
 ksocknal_check_zc_req(struct ksock_tx *tx)
 {
 	struct ksock_conn *conn = tx->tx_conn;
-	struct ksock_peer *peer_ni = conn->ksnc_peer;
+	struct ksock_peer_ni *peer_ni = conn->ksnc_peer;
 
 	/*
 	 * Set tx_msg.ksm_zc_cookies[0] to a unique non-zero cookie and add tx
@@ -440,7 +440,7 @@ ksocknal_check_zc_req(struct ksock_tx *tx)
 static void
 ksocknal_uncheck_zc_req(struct ksock_tx *tx)
 {
-	struct ksock_peer *peer_ni = tx->tx_conn->ksnc_peer;
+	struct ksock_peer_ni *peer_ni = tx->tx_conn->ksnc_peer;
 
 	LASSERT(tx->tx_msg.ksm_type != KSOCK_MSG_NOOP);
 	LASSERT(tx->tx_zc_capable);
@@ -581,7 +581,7 @@ ksocknal_launch_connection_locked(struct ksock_route *route)
 }
 
 void
-ksocknal_launch_all_connections_locked(struct ksock_peer *peer_ni)
+ksocknal_launch_all_connections_locked(struct ksock_peer_ni *peer_ni)
 {
 	struct ksock_route *route;
 
@@ -597,7 +597,7 @@ ksocknal_launch_all_connections_locked(struct ksock_peer *peer_ni)
 }
 
 struct ksock_conn *
-ksocknal_find_conn_locked(struct ksock_peer *peer_ni, struct ksock_tx *tx,
+ksocknal_find_conn_locked(struct ksock_peer_ni *peer_ni, struct ksock_tx *tx,
 			  int nonblk)
 {
 	struct ksock_conn *c;
@@ -763,7 +763,7 @@ ksocknal_queue_tx_locked(struct ksock_tx *tx, struct ksock_conn *conn)
 }
 
 struct ksock_route *
-ksocknal_find_connectable_route_locked(struct ksock_peer *peer_ni)
+ksocknal_find_connectable_route_locked(struct ksock_peer_ni *peer_ni)
 {
 	time64_t now = ktime_get_seconds();
 	struct ksock_route *route;
@@ -797,7 +797,7 @@ ksocknal_find_connectable_route_locked(struct ksock_peer *peer_ni)
 }
 
 struct ksock_route *
-ksocknal_find_connecting_route_locked(struct ksock_peer *peer_ni)
+ksocknal_find_connecting_route_locked(struct ksock_peer_ni *peer_ni)
 {
 	struct ksock_route *route;
 
@@ -815,7 +815,7 @@ int
 ksocknal_launch_packet(struct lnet_ni *ni, struct ksock_tx *tx,
 		       struct lnet_process_id id)
 {
-	struct ksock_peer *peer_ni;
+	struct ksock_peer_ni *peer_ni;
 	struct ksock_conn *conn;
 	rwlock_t *g_lock;
 	int retry;
@@ -1806,7 +1806,7 @@ static int
 ksocknal_connect(struct ksock_route *route)
 {
 	LIST_HEAD(zombies);
-	struct ksock_peer *peer_ni = route->ksnr_peer;
+	struct ksock_peer_ni *peer_ni = route->ksnr_peer;
 	int type;
 	int wanted;
 	struct socket *sock;
@@ -2213,7 +2213,7 @@ ksocknal_connd(void *arg)
 }
 
 static struct ksock_conn *
-ksocknal_find_timed_out_conn(struct ksock_peer *peer_ni)
+ksocknal_find_timed_out_conn(struct ksock_peer_ni *peer_ni)
 {
 	/* We're called with a shared lock on ksnd_global_lock */
 	struct ksock_conn *conn;
@@ -2296,7 +2296,7 @@ ksocknal_find_timed_out_conn(struct ksock_peer *peer_ni)
 }
 
 static inline void
-ksocknal_flush_stale_txs(struct ksock_peer *peer_ni)
+ksocknal_flush_stale_txs(struct ksock_peer_ni *peer_ni)
 {
 	struct ksock_tx *tx;
 	LIST_HEAD(stale_txs);
@@ -2322,7 +2322,7 @@ ksocknal_flush_stale_txs(struct ksock_peer *peer_ni)
 }
 
 static int
-ksocknal_send_keepalive_locked(struct ksock_peer *peer_ni)
+ksocknal_send_keepalive_locked(struct ksock_peer_ni *peer_ni)
 	__must_hold(&ksocknal_data.ksnd_global_lock)
 {
 	struct ksock_sched *sched;
@@ -2388,7 +2388,7 @@ static void
 ksocknal_check_peer_timeouts(int idx)
 {
 	struct list_head *peers = &ksocknal_data.ksnd_peers[idx];
-	struct ksock_peer *peer_ni;
+	struct ksock_peer_ni *peer_ni;
 	struct ksock_conn *conn;
 	struct ksock_tx *tx;
 
