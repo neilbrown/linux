@@ -865,7 +865,8 @@ int ldlm_cli_enqueue(struct obd_export *exp, struct ptlrpc_request **reqp,
 		rc = err;
 
 out:
-	if (!req_passed_in && req) {
+	if (!req_passed_in && req &&
+			    !ldlm_is_canceling(lock)) {
 		ptlrpc_req_finished(req);
 		if (reqp)
 			*reqp = NULL;
