@@ -62,13 +62,13 @@ static int mdc_reint(struct ptlrpc_request *request, int level)
  * found by @fid. Found locks are added into @cancel list. Returns the amount of
  * locks added to @cancels list.
  */
-int mdc_resource_get_unused(struct obd_export *exp, const struct lu_fid *fid,
-			    struct list_head *cancels, enum ldlm_mode mode,
-			    u64 bits)
+int mdc_resource_get_unused_res(struct obd_export *exp,
+				struct ldlm_res_id *res_id,
+				struct list_head *cancels,
+				enum ldlm_mode mode, u64 bits)
 {
 	struct ldlm_namespace *ns = exp->exp_obd->obd_namespace;
 	union ldlm_policy_data policy = {};
-	struct ldlm_res_id res_id;
 	struct ldlm_resource *res;
 	int count;
 
@@ -82,19 +82,27 @@ int mdc_resource_get_unused(struct obd_export *exp, const struct lu_fid *fid,
 	if (exp_connect_cancelset(exp) && !ns_connect_cancelset(ns))
 		return 0;
 
-	fid_build_reg_res_name(fid, &res_id);
-	res = ldlm_resource_get(exp->exp_obd->obd_namespace,
-				NULL, &res_id, 0, 0);
+	res = ldlm_resource_get(ns, NULL, res_id, 0, 0);
 	if (IS_ERR(res))
 		return 0;
 	LDLM_RESOURCE_ADDREF(res);
 	/* Initialize ibits lock policy. */
 	policy.l_inodebits.bits = bits;
-	count = ldlm_cancel_resource_local(res, cancels, &policy,
-					   mode, 0, 0, NULL);
+	count = ldlm_cancel_resource_local(res, cancels, &policy, mode, 0, 0,
+					   NULL);
 	LDLM_RESOURCE_DELREF(res);
 	ldlm_resource_putref(res);
 	return count;
+}
+
+int mdc_resource_get_unused(struct obd_export *exp, const struct lu_fid *fid,
+			    struct list_head *cancels, enum ldlm_mode mode,
+			    u64 bits)
+{
+	struct ldlm_res_id res_id;
+
+	fid_build_reg_res_name(fid, &res_id);
+	return mdc_resource_get_unused_res(exp, &res_id, cancels, mode, bits);
 }
 
 int mdc_setattr(struct obd_export *exp, struct md_op_data *op_data,
