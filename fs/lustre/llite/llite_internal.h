@@ -707,7 +707,6 @@ static inline bool ll_sbi_has_tiny_write(struct ll_sb_info *sbi)
 void ll_ras_enter(struct file *f);
 
 /* llite/lcommon_misc.c */
-int cl_init_ea_size(struct obd_export *md_exp, struct obd_export *dt_exp);
 int cl_ocd_update(struct obd_device *host, struct obd_device *watched,
 		  enum obd_notify_event ev, void *owner);
 int cl_get_grouplock(struct cl_object *obj, unsigned long gid, int nonblock,
@@ -975,9 +974,9 @@ struct ll_cl_context {
 
 struct ll_thread_info {
 	struct iov_iter		lti_iter;
-	struct vvp_io_args   lti_args;
-	struct ra_io_arg     lti_ria;
-	struct ll_cl_context lti_io_ctx;
+	struct vvp_io_args	lti_args;
+	struct ra_io_arg	lti_ria;
+	struct ll_cl_context	lti_io_ctx;
 };
 
 extern struct lu_context_key ll_thread_key;
@@ -1165,6 +1164,7 @@ void ll_deauthorize_statahead(struct inode *dir, void *key);
 blkcnt_t dirty_cnt(struct inode *inode);
 
 int __cl_glimpse_size(struct inode *inode, int agl);
+
 int cl_glimpse_lock(const struct lu_env *env, struct cl_io *io,
 		    struct inode *inode, struct cl_object *clob, int agl);
 

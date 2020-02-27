@@ -166,7 +166,7 @@ static inline struct cl_io *vvp_env_thread_io(const struct lu_env *env)
 }
 
 struct vvp_session {
-	struct vvp_io	cs_ios;
+	struct vvp_io	vs_ios;
 };
 
 static inline struct vvp_session *vvp_env_session(const struct lu_env *env)
@@ -181,11 +181,11 @@ static inline struct vvp_session *vvp_env_session(const struct lu_env *env)
 
 static inline struct vvp_io *vvp_env_io(const struct lu_env *env)
 {
-	return &vvp_env_session(env)->cs_ios;
+	return &vvp_env_session(env)->vs_ios;
 }
 
 /**
- * ccc-private object state.
+ * VPP-private object state.
  */
 struct vvp_object {
 	struct cl_object_header vob_header;
@@ -245,13 +245,6 @@ struct vvp_device {
 	struct cl_device	vdv_cl;
 	struct cl_device	*vdv_next;
 };
-
-void *ccc_key_init(const struct lu_context *ctx,
-		   struct lu_context_key *key);
-void ccc_key_fini(const struct lu_context *ctx,
-		  struct lu_context_key *key, void *data);
-
-void ccc_umount(const struct lu_env *env, struct cl_device *dev);
 
 static inline struct lu_device *vvp2lu_dev(struct vvp_device *vdv)
 {

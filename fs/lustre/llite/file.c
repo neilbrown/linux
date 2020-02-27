@@ -49,6 +49,7 @@
 
 #include <cl_object.h>
 #include "llite_internal.h"
+#include "vvp_internal.h"
 
 struct split_param {
 	struct inode	*sp_inode;
