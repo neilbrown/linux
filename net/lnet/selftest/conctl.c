@@ -121,7 +121,6 @@ lst_debug_ioctl(struct lstio_debug_args *args)
 		return -EINVAL;
 
 	if (args->lstio_dbg_namep) {
-
 		if (copy_from_user(name, args->lstio_dbg_namep,
 				   args->lstio_dbg_nmlen))
 			return -EFAULT;
@@ -727,7 +726,8 @@ lstcon_ioctl_entry(struct notifier_block *nb,
 		goto out;
 	}
 
-	memset(&console_session.ses_trans_stat, 0, sizeof(struct lstcon_trans_stat));
+	memset(&console_session.ses_trans_stat,
+	       0, sizeof(struct lstcon_trans_stat));
 
 	switch (opc) {
 	case LSTIO_SESSION_NEW:
