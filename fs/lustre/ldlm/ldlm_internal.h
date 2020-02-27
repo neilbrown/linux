@@ -153,7 +153,9 @@ int ldlm_lock_remove_from_lru_check(struct ldlm_lock *lock, ktime_t last_use);
 #define ldlm_lock_remove_from_lru(lock) \
 		ldlm_lock_remove_from_lru_check(lock, ktime_set(0, 0))
 int ldlm_lock_remove_from_lru_nolock(struct ldlm_lock *lock);
+void ldlm_lock_add_to_lru_nolock(struct ldlm_lock *lock);
 void ldlm_lock_destroy_nolock(struct ldlm_lock *lock);
+void ldlm_grant_lock_with_skiplist(struct ldlm_lock *lock);
 
 /* ldlm_lockd.c */
 int ldlm_bl_to_thread_lock(struct ldlm_namespace *ns, struct ldlm_lock_desc *ld,
