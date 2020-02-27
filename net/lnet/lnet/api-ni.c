@@ -126,7 +126,7 @@ module_param_call(lnet_peer_discovery_disabled, discovery_set, param_get_int,
 MODULE_PARM_DESC(lnet_peer_discovery_disabled,
 		 "Set to 1 to disable peer discovery on this node.");
 
-unsigned int lnet_transaction_timeout = 5;
+unsigned int lnet_transaction_timeout = 50;
 static int transaction_to_set(const char *val, const struct kernel_param *kp);
 static struct kernel_param_ops param_ops_transaction_timeout = {
 	.set = transaction_to_set,
