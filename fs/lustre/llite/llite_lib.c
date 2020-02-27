@@ -1329,8 +1329,12 @@ static int ll_update_lsm_md(struct inode *inode, struct lustre_md *md)
 	/*
 	 * if dir layout mismatch, check whether version is increased, which
 	 * means layout is changed, this happens in dir migration and lfsck.
+	 *
+	 * foreign LMV should not change.
 	 */
-	if (lli->lli_lsm_md && !lsm_md_eq(lli->lli_lsm_md, lsm)) {
+	if (lli->lli_lsm_md &&
+	    lli->lli_lsm_md->lsm_md_magic != LMV_MAGIC_FOREIGN &&
+	   !lsm_md_eq(lli->lli_lsm_md, lsm)) {
 		if (lsm->lsm_md_layout_version <=
 		    lli->lli_lsm_md->lsm_md_layout_version) {
 			CERROR("%s: " DFID " dir layout mismatch:\n",
@@ -1351,6 +1355,16 @@ static int ll_update_lsm_md(struct inode *inode, struct lustre_md *md)
 	/* set directory layout */
 	if (!lli->lli_lsm_md) {
 		struct cl_attr *attr;
+
+		if (lsm->lsm_md_magic == LMV_MAGIC_FOREIGN) {
+			/* set md->lmv to NULL, so the following free lustre_md
+			 * will not free this lsm
+			 */
+			md->lmv = NULL;
+			lli->lli_lsm_md = lsm;
+			up_write(&lli->lli_lsm_sem);
+			return 0;
+		}
 
 		rc = ll_init_lsm_md(inode, md);
 		up_write(&lli->lli_lsm_sem);
@@ -2297,7 +2311,7 @@ int ll_prep_inode(struct inode **inode, struct ptlrpc_request *req,
 	rc = md_get_lustre_md(sbi->ll_md_exp, req, sbi->ll_dt_exp,
 			      sbi->ll_md_exp, &md);
 	if (rc)
-		goto cleanup;
+		goto out;
 
 	if (*inode) {
 		rc = ll_update_inode(*inode, &md);
@@ -2365,8 +2379,8 @@ int ll_prep_inode(struct inode **inode, struct ptlrpc_request *req,
 	}
 
 out:
+	/* cleanup will be done if necessary */
 	md_free_lustre_md(sbi->ll_md_exp, &md);
-cleanup:
 	if (rc != 0 && it && it->it_op & IT_OPEN)
 		ll_open_cleanup(sb ? sb : (*inode)->i_sb, req);
 
