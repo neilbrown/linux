@@ -1570,7 +1570,6 @@ static bool osc_enter_cache_try(struct client_obd *cli,
 					      cmd1, cmd2)		\
 ({									\
 	long __ret = timeout;						\
-	might_sleep();							\
 	if (!___wait_cond_timeout(condition))				\
 		__ret = __wait_event_idle_exclusive_timeout_cmd(	\
 			wq_head, condition, timeout, cmd1, cmd2);	\
