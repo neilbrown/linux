@@ -93,7 +93,6 @@ int mdc_resource_get_unused(struct obd_export *exp, const struct lu_fid *fid,
 int mdc_fid_alloc(const struct lu_env *env, struct obd_export *exp,
 		  struct lu_fid *fid, struct md_op_data *op_data);
 int mdc_setup(struct obd_device *obd, struct lustre_cfg *cfg);
-int mdc_process_config(struct obd_device *obd, u32 len, void *buf);
 
 struct obd_client_handle;
 
