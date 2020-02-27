@@ -600,6 +600,9 @@ struct lnet_peer {
 	/* primary NID of the peer */
 	lnet_nid_t		lp_primary_nid;
 
+	/* net to perform discovery on */
+	u32			lp_disc_net_id;
+
 	/* CPT of peer_table */
 	int			lp_cpt;
 
@@ -620,9 +623,6 @@ struct lnet_peer {
 
 	/* routes on this peer */
 	struct list_head	lp_routes;
-
-	/* time of last router check attempt */
-	time64_t		lp_rtrcheck_timestamp;
 
 	/* reference count */
 	atomic_t		lp_refcount;
@@ -743,6 +743,9 @@ struct lnet_peer_net {
 
 	/* Net ID */
 	u32			lpn_net_id;
+
+	/* time of last router net check attempt */
+	time64_t		lpn_rtrcheck_timestamp;
 
 	/* reference count */
 	atomic_t		lpn_refcount;
