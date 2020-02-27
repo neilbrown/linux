@@ -55,7 +55,7 @@
 		       ctxt->loc_idx);					\
 		imp = NULL;						\
 		mutex_unlock(&ctxt->loc_mutex);				\
-		return (-EINVAL);					\
+		return -EINVAL;						\
 	}								\
 	mutex_unlock(&ctxt->loc_mutex);					\
 } while (0)
@@ -64,12 +64,13 @@
 	mutex_lock(&ctxt->loc_mutex);					\
 	if (ctxt->loc_imp != imp)					\
 		CWARN("loc_imp has changed from %p to %p\n",		\
-		       ctxt->loc_imp, imp);				\
+		      ctxt->loc_imp, imp);				\
 	class_import_put(imp);						\
 	mutex_unlock(&ctxt->loc_mutex);					\
 } while (0)
 
-/* This is a callback from the llog_* functions.
+/*
+ * This is a callback from the llog_* functions.
  * Assumes caller has already pushed us into the kernel context.
  */
 static int llog_client_open(const struct lu_env *env,
@@ -171,7 +172,8 @@ static int llog_client_next_block(const struct lu_env *env,
 	req_capsule_set_size(&req->rq_pill, &RMF_EADATA, RCL_SERVER, len);
 	ptlrpc_request_set_replen(req);
 	rc = ptlrpc_queue_wait(req);
-	/* -EIO has a special meaning here. If llog_osd_next_block()
+	/*
+	 * -EIO has a special meaning here. If llog_osd_next_block()
 	 * reaches the end of the log without finding the desired
 	 * record then it updates *cur_offset and *cur_idx and returns
 	 * -EIO. In llog_process_thread() we use this to detect
@@ -338,8 +340,9 @@ err_exit:
 static int llog_client_close(const struct lu_env *env,
 			     struct llog_handle *handle)
 {
-	/* this doesn't call LLOG_ORIGIN_HANDLE_CLOSE because
-	 *  the servers all close the file at the end of every
+	/*
+	 * this doesn't call LLOG_ORIGIN_HANDLE_CLOSE because
+	 * the servers all close the file at the end of every
 	 * other LLOG_ RPC.
 	 */
 	return 0;
