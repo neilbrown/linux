@@ -2925,7 +2925,7 @@ static int lmv_rmfid(struct obd_export *exp, struct fid_array *fa,
 		rc = md_rmfid(tgt->ltd_exp, fat, rcs[tgt->ltd_index], set);
 	}
 
-	rc = ptlrpc_set_wait(set);
+	rc = ptlrpc_set_wait(NULL, set);
 	if (rc == 0) {
 		int j = 0;
 

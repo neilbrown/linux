@@ -1574,7 +1574,8 @@ out:
  * Does not block. As a result of enqueue the lock would be put
  * into granted or waiting list.
  */
-enum ldlm_error ldlm_lock_enqueue(struct ldlm_namespace *ns,
+enum ldlm_error ldlm_lock_enqueue(const struct lu_env *env,
+				  struct ldlm_namespace *ns,
 				  struct ldlm_lock **lockp,
 				  void *cookie, u64 *flags)
 {
@@ -1826,7 +1827,7 @@ int ldlm_run_ast_work(struct ldlm_namespace *ns, struct list_head *rpc_list,
 		goto out;
 	}
 
-	ptlrpc_set_wait(arg->set);
+	ptlrpc_set_wait(NULL, arg->set);
 	ptlrpc_set_destroy(arg->set);
 
 	rc = atomic_read(&arg->restart) ? -ERESTART : 0;
@@ -1938,6 +1939,7 @@ int ldlm_lock_set_data(const struct lustre_handle *lockh, void *data)
 EXPORT_SYMBOL(ldlm_lock_set_data);
 
 struct export_cl_data {
+	const struct lu_env	*ecl_env;
 	struct obd_export	*ecl_exp;
 	int			ecl_loop;
 };

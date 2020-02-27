@@ -470,7 +470,7 @@ static int ptlrpcd(void *arg)
 	 * Wait for inflight requests to drain.
 	 */
 	if (!list_empty(&set->set_requests))
-		ptlrpc_set_wait(set);
+		ptlrpc_set_wait(&env, set);
 	lu_context_fini(&env.le_ctx);
 	lu_context_fini(env.le_ses);
 
