@@ -662,7 +662,7 @@ out:
 	return -ENOMEM;
 }
 
-static struct portals_handle_ops export_handle_ops;
+static const char export_handle_owner[] = "export";
 
 /* map connection to client */
 struct obd_export *class_conn2export(struct lustre_handle *conn)
@@ -680,7 +680,7 @@ struct obd_export *class_conn2export(struct lustre_handle *conn)
 	}
 
 	CDEBUG(D_INFO, "looking for export cookie %#llx\n", conn->cookie);
-	export = class_handle2object(conn->cookie, &export_handle_ops);
+	export = class_handle2object(conn->cookie, export_handle_owner);
 	return export;
 }
 EXPORT_SYMBOL(class_conn2export);
@@ -731,10 +731,6 @@ static void class_export_destroy(struct obd_export *exp)
 
 	kfree_rcu(exp, exp_handle.h_rcu);
 }
-
-static struct portals_handle_ops export_handle_ops = {
-	.hop_type	= "export",
-};
 
 struct obd_export *class_export_get(struct obd_export *exp)
 {
@@ -819,7 +815,7 @@ static struct obd_export *__class_new_export(struct obd_device *obd,
 	INIT_LIST_HEAD(&export->exp_req_replay_queue);
 	INIT_LIST_HEAD_RCU(&export->exp_handle.h_link);
 	INIT_LIST_HEAD(&export->exp_hp_rpcs);
-	class_handle_hash(&export->exp_handle, &export_handle_ops);
+	class_handle_hash(&export->exp_handle, export_handle_owner);
 	spin_lock_init(&export->exp_lock);
 	spin_lock_init(&export->exp_rpc_lock);
 	spin_lock_init(&export->exp_bl_list_lock);
