@@ -1096,6 +1096,7 @@ lnet_prepare(lnet_pid_t requested_pid)
 	INIT_LIST_HEAD(&the_lnet.ln_mt_peerNIRecovq);
 	init_waitqueue_head(&the_lnet.ln_dc_waitq);
 	init_completion(&the_lnet.ln_started);
+	the_lnet.ln_mt_eqh = NULL;
 
 	rc = lnet_slab_setup();
 	if (rc != 0)
@@ -1177,6 +1178,8 @@ lnet_unprepare(void)
 		lnet_clean_zombie_rstqs();
 		the_lnet.ln_mt_zombie_rstqs = NULL;
 	}
+
+	the_lnet.ln_mt_eqh = NULL;
 
 	lnet_portals_destroy();
 
@@ -2538,6 +2541,8 @@ LNetNIInit(lnet_pid_t requested_pid)
 		goto err_acceptor_stop;
 
 	lnet_ping_target_update(pbuf, ping_mdh);
+
+	the_lnet.ln_mt_eqh = lnet_mt_event_handler;
 
 	rc = lnet_push_target_init();
 	if (rc)

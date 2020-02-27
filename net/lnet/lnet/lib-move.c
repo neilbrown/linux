@@ -3414,7 +3414,7 @@ lnet_handle_recovery_reply(struct lnet_mt_event_info *ev_info,
 	}
 }
 
-static void
+void
 lnet_mt_event_handler(struct lnet_event *event)
 {
 	struct lnet_mt_event_info *ev_info = event->md_user_ptr;
@@ -3489,8 +3489,6 @@ int lnet_monitor_thr_start(void)
 	if (rc)
 		return rc;
 
-	the_lnet.ln_mt_eqh = lnet_mt_event_handler;
-
 	init_completion(&the_lnet.ln_mt_signal);
 
 	lnet_net_lock(LNET_LOCK_EX);
@@ -3523,7 +3521,6 @@ clean_thread:
 	lnet_clean_local_ni_recoveryq();
 	lnet_clean_peer_ni_recoveryq();
 	lnet_clean_resendqs();
-	the_lnet.ln_mt_eqh = NULL;
 	return rc;
 }
 

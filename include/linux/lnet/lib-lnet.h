@@ -425,6 +425,8 @@ extern int portal_rotor;
 int lnet_lib_init(void);
 void lnet_lib_exit(void);
 
+void lnet_mt_event_handler(struct lnet_event *event);
+
 int lnet_notify(struct lnet_ni *ni, lnet_nid_t peer, bool alive, bool reset,
 		time64_t when);
 void lnet_notify_locked(struct lnet_peer_ni *lp, int notifylnd, int alive,
