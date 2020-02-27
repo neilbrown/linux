@@ -46,6 +46,151 @@
 char obd_jobid_var[JOBSTATS_JOBID_VAR_MAX_LEN + 1] = JOBSTATS_DISABLE;
 char obd_jobid_name[LUSTRE_JOBID_SIZE] = "%e.%u";
 
+/*
+ * Jobid can be set for a session (see setsid(2)) by writing to
+ * a sysfs file from any process in that session.
+ * The jobids are stored in a hash table indexed by the relevant
+ * struct pid.  We periodically look for entries where the pid has
+ * no PIDTYPE_SID tasks any more, and prune them.  This happens within
+ * 5 seconds of a jobid being added, and every 5 minutes when jobids exist,
+ * but none are added.
+ */
+#define JOBID_EXPEDITED_CLEAN	(5)
+#define JOBID_BACKGROUND_CLEAN	(5 * 60)
+
+struct session_jobid {
+	struct pid		*sj_session;
+	struct rhash_head	sj_linkage;
+	struct rcu_head		sj_rcu;
+	char			sj_jobid[1];
+};
+
+static const struct rhashtable_params jobid_params = {
+	.key_len	= sizeof(struct pid *),
+	.key_offset	= offsetof(struct session_jobid, sj_session),
+	.head_offset	= offsetof(struct session_jobid, sj_linkage),
+};
+
+static struct rhashtable session_jobids;
+
+/*
+ * jobid_current must be called with rcu_read_lock held.
+ * if it returns non-NULL, the string can only be used
+ * until rcu_read_unlock is called.
+ */
+char *jobid_current(void)
+{
+	struct pid *sid = task_session(current);
+	struct session_jobid *sj;
+
+	sj = rhashtable_lookup_fast(&session_jobids, &sid, jobid_params);
+	if (sj)
+		return sj->sj_jobid;
+	return NULL;
+}
+
+static void jobid_prune_expedite(void);
+/*
+ * jobid_set_current will try to add a new entry
+ * to the table.  If one exists with the same key, the
+ * jobid will be replaced
+ */
+int jobid_set_current(char *jobid)
+{
+	struct pid *sid;
+	struct session_jobid *sj, *origsj;
+	int ret;
+	int len = strlen(jobid);
+
+	sj = kmalloc(sizeof(*sj) + len, GFP_KERNEL);
+	if (!sj)
+		return -ENOMEM;
+	rcu_read_lock();
+	sid = task_session(current);
+	sj->sj_session = get_pid(sid);
+	strncpy(sj->sj_jobid, jobid, len+1);
+	origsj = rhashtable_lookup_get_insert_fast(&session_jobids,
+						   &sj->sj_linkage,
+						   jobid_params);
+	if (!origsj) {
+		/* successful insert */
+		rcu_read_unlock();
+		jobid_prune_expedite();
+		return 0;
+	}
+
+	if (IS_ERR(origsj)) {
+		put_pid(sj->sj_session);
+		kfree(sj);
+		rcu_read_unlock();
+		return PTR_ERR(origsj);
+	}
+	ret = rhashtable_replace_fast(&session_jobids,
+				      &origsj->sj_linkage,
+				      &sj->sj_linkage,
+				      jobid_params);
+	if (ret) {
+		put_pid(sj->sj_session);
+		kfree(sj);
+		rcu_read_unlock();
+		return ret;
+	}
+	put_pid(origsj->sj_session);
+	rcu_read_unlock();
+	kfree_rcu(origsj, sj_rcu);
+	jobid_prune_expedite();
+
+	return 0;
+}
+
+static void jobid_free(void *vsj, void *arg)
+{
+	struct session_jobid *sj = vsj;
+
+	put_pid(sj->sj_session);
+	kfree(sj);
+}
+
+static void jobid_prune(struct work_struct *work);
+static DECLARE_DELAYED_WORK(jobid_prune_work, jobid_prune);
+static int jobid_prune_expedited;
+static void jobid_prune(struct work_struct *work)
+{
+	int remaining = 0;
+	struct rhashtable_iter iter;
+	struct session_jobid *sj;
+
+	jobid_prune_expedited = 0;
+	rhashtable_walk_enter(&session_jobids, &iter);
+	rhashtable_walk_start(&iter);
+	while ((sj = rhashtable_walk_next(&iter)) != NULL) {
+		if (!hlist_empty(&sj->sj_session->tasks[PIDTYPE_SID])) {
+			remaining++;
+			continue;
+		}
+		if (rhashtable_remove_fast(&session_jobids,
+					   &sj->sj_linkage,
+					   jobid_params) == 0) {
+			put_pid(sj->sj_session);
+			kfree_rcu(sj, sj_rcu);
+		}
+	}
+	rhashtable_walk_stop(&iter);
+	rhashtable_walk_exit(&iter);
+	if (remaining)
+		schedule_delayed_work(&jobid_prune_work,
+				      JOBID_BACKGROUND_CLEAN * HZ);
+}
+
+static void jobid_prune_expedite(void)
+{
+	if (!jobid_prune_expedited) {
+		jobid_prune_expedited = 1;
+		mod_delayed_work(system_wq, &jobid_prune_work,
+				 JOBID_EXPEDITED_CLEAN * HZ);
+	}
+}
+
 /* Get jobid of current process from stored variable or calculate
  * it from pid and user_id.
  *
@@ -134,13 +279,39 @@ out:
 	return joblen < 0 ? -EOVERFLOW : 0;
 }
 
+/**
+ * Generate the job identifier string for this process for tracking purposes.
+ *
+ * Fill in @jobid string based on the value of obd_jobid_var:
+ * JOBSTATS_DISABLE:	  none
+ * JOBSTATS_NODELOCAL:	  content of obd_jobid_name (jobid_interpret_string())
+ * JOBSTATS_PROCNAME_UID: process name/UID
+ * JOBSTATS_SESSION	  per-session value set by
+ *			  /sys/fs/lustre/jobid_this_session
+ *
+ * Return -ve error number, 0 on success.
+ */
 int lustre_get_jobid(char *jobid, size_t joblen)
 {
 	char tmp_jobid[LUSTRE_JOBID_SIZE] = "";
 
+	if (unlikely(joblen < 2)) {
+		if (joblen == 1)
+			jobid[0] = '\0';
+		return -EINVAL;
+	}
+
 	/* Jobstats isn't enabled */
 	if (strcmp(obd_jobid_var, JOBSTATS_DISABLE) == 0)
 		goto out_cache_jobid;
+
+	/* Whole node dedicated to single job */
+	if (strcmp(obd_jobid_var, JOBSTATS_NODELOCAL) == 0) {
+		int rc2 = jobid_interpret_string(obd_jobid_name,
+						 tmp_jobid, joblen);
+		if (!rc2)
+			goto out_cache_jobid;
+	}
 
 	/* Use process name + fsuid as jobid */
 	if (strcmp(obd_jobid_var, JOBSTATS_PROCNAME_UID) == 0) {
@@ -150,13 +321,17 @@ int lustre_get_jobid(char *jobid, size_t joblen)
 		goto out_cache_jobid;
 	}
 
-	/* Whole node dedicated to single job */
-	if (strcmp(obd_jobid_var, JOBSTATS_NODELOCAL) == 0) {
-		int rc2 = jobid_interpret_string(obd_jobid_name,
-						 tmp_jobid, joblen);
-		if (!rc2)
-			goto out_cache_jobid;
+	if (strcmp(obd_jobid_var, JOBSTATS_SESSION) == 0) {
+		char *jid;
+
+		rcu_read_lock();
+		jid = jobid_current();
+		if (jid)
+			strlcpy(jobid, jid, sizeof(jobid));
+		rcu_read_unlock();
+		goto out_cache_jobid;
 	}
+
 	return -ENOENT;
 
 out_cache_jobid:
@@ -167,3 +342,15 @@ out_cache_jobid:
 	return 0;
 }
 EXPORT_SYMBOL(lustre_get_jobid);
+
+int jobid_cache_init(void)
+{
+	return rhashtable_init(&session_jobids, &jobid_params);
+}
+
+void jobid_cache_fini(void)
+{
+	cancel_delayed_work_sync(&jobid_prune_work);
+
+	rhashtable_free_and_destroy(&session_jobids, jobid_free, NULL);
+}

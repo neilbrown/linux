@@ -259,6 +259,44 @@ static ssize_t jobid_name_store(struct kobject *kobj, struct attribute *attr,
 	return count;
 }
 
+static ssize_t jobid_this_session_show(struct kobject *kobj,
+				       struct attribute *attr,
+				       char *buf)
+{
+	char *jid;
+	int ret = -ENOENT;
+
+	rcu_read_lock();
+	jid = jobid_current();
+	if (jid)
+		ret = snprintf(buf, PAGE_SIZE, "%s\n", jid);
+	rcu_read_unlock();
+	return ret;
+}
+
+static ssize_t jobid_this_session_store(struct kobject *kobj,
+					struct attribute *attr,
+					const char *buffer,
+					size_t count)
+{
+	char *jobid;
+	int len;
+	int ret;
+
+	if (!count || count > LUSTRE_JOBID_SIZE)
+		return -EINVAL;
+
+	jobid = kstrndup(buffer, count, GFP_KERNEL);
+	if (!jobid)
+		return -ENOMEM;
+	len = strcspn(jobid, "\n ");
+	jobid[len] = '\0';
+	ret = jobid_set_current(jobid);
+	kfree(jobid);
+
+	return ret ?: count;
+}
+
 /* Root for /sys/kernel/debug/lustre */
 struct dentry *debugfs_lustre_root;
 EXPORT_SYMBOL_GPL(debugfs_lustre_root);
@@ -268,6 +306,7 @@ LUSTRE_RO_ATTR(pinger);
 LUSTRE_RO_ATTR(health_check);
 LUSTRE_RW_ATTR(jobid_var);
 LUSTRE_RW_ATTR(jobid_name);
+LUSTRE_RW_ATTR(jobid_this_session);
 
 static struct attribute *lustre_attrs[] = {
 	&lustre_attr_version.attr,
@@ -275,6 +314,7 @@ static struct attribute *lustre_attrs[] = {
 	&lustre_attr_health_check.attr,
 	&lustre_attr_jobid_name.attr,
 	&lustre_attr_jobid_var.attr,
+	&lustre_attr_jobid_this_session.attr,
 	&lustre_sattr_timeout.u.attr,
 	&lustre_attr_max_dirty_mb.attr,
 	&lustre_sattr_debug_peer_on_timeout.u.attr,
@@ -441,6 +481,12 @@ int class_procfs_init(void)
 		goto out;
 	}
 
+	rc = jobid_cache_init();
+	if (rc) {
+		kset_unregister(lustre_kset);
+		goto out;
+	}
+
 	debugfs_lustre_root = debugfs_create_dir("lustre", NULL);
 
 	debugfs_create_file("devices", 0444, debugfs_lustre_root, NULL,
@@ -457,6 +503,8 @@ int class_procfs_clean(void)
 	debugfs_remove_recursive(debugfs_lustre_root);
 
 	debugfs_lustre_root = NULL;
+
+	jobid_cache_fini();
 
 	sysfs_remove_group(&lustre_kset->kobj, &lustre_attr_group);
 
