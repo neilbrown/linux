@@ -418,7 +418,7 @@ void libcfs_debug_dumplog(void)
 			     "libcfs_debug_dumper");
 	set_current_state(TASK_INTERRUPTIBLE);
 	if (IS_ERR(dumper))
-		pr_err("LustreError: cannot start log dump thread: %ld\n",
+		pr_err("LustreError: cannot start log dump thread: rc = %ld\n",
 		       PTR_ERR(dumper));
 	else
 		schedule();
