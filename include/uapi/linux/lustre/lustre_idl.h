@@ -194,12 +194,14 @@ enum {
 	LUSTRE_FID_INIT_OID  = 1UL
 };
 
-/* copytool uses a 32b bitmask field to encode archive-Ids during register
- * with MDT thru kuc.
+/* copytool can use any nonnegative integer to represent archive-Ids during
+ * register with MDT thru kuc.
  * archive num = 0 => all
- * archive num from 1 to 32
+ * archive num from 1 to MAX_U32
  */
-#define LL_HSM_MAX_ARCHIVE (sizeof(__u32) * 8)
+#define LL_HSM_ORIGIN_MAX_ARCHIVE	(sizeof(__u32) * 8)
+/* the max count of archive ids that one agent can support */
+#define LL_HSM_MAX_ARCHIVES_PER_AGENT	1024
 
 /**
  * Different FID Format

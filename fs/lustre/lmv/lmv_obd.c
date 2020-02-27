@@ -788,18 +788,39 @@ static int lmv_hsm_ct_register(struct obd_device *obd, unsigned int cmd,
 	u32 i, j;
 	int err;
 	bool any_set = false;
-	struct kkuc_ct_data kcd = {
-		.kcd_magic	= KKUC_CT_DATA_MAGIC,
-		.kcd_archive	= lk->lk_data,
-	};
+	struct kkuc_ct_data *kcd;
+	size_t kcd_size;
 	int rc = 0;
 
 	filp = fget(lk->lk_wfd);
 	if (!filp)
 		return -EBADF;
 
+	if (lk->lk_flags & LK_FLG_DATANR)
+		kcd_size = offsetof(struct kkuc_ct_data,
+				    kcd_archives[lk->lk_data_count]);
+	else
+		kcd_size = sizeof(*kcd);
+
+	kcd = kmalloc(kcd_size, GFP_KERNEL);
+	if (!kcd) {
+		rc = -ENOMEM;
+		goto err_fput;
+	}
+
+	kcd->kcd_nr_archives = lk->lk_data_count;
+	if (lk->lk_flags & LK_FLG_DATANR) {
+		kcd->kcd_magic = KKUC_CT_DATA_ARRAY_MAGIC;
+		if (lk->lk_data_count > 0)
+			memcpy(kcd->kcd_archives, lk->lk_data,
+			       sizeof(*kcd->kcd_archives) * lk->lk_data_count);
+	} else {
+		kcd->kcd_magic = KKUC_CT_DATA_BITMAP_MAGIC;
+	}
+
 	rc = libcfs_kkuc_group_add(filp, &obd->obd_uuid, lk->lk_uid,
-				   lk->lk_group, &kcd, sizeof(kcd));
+				   lk->lk_group, kcd, kcd_size);
+	kfree(kcd);
 	if (rc)
 		goto err_fput;
 
