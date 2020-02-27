@@ -222,7 +222,7 @@ static int llog_cat_process_or_fork(const struct lu_env *env,
 	LASSERT(llh->llh_flags & LLOG_F_IS_CAT);
 	d.lpd_data = data;
 	d.lpd_cb = cb;
-	d.lpd_startcat = startcat;
+	d.lpd_startcat = (startcat == LLOG_CAT_FIRST ? 0 : startcat);
 	d.lpd_startidx = startidx;
 
 	if (llh->llh_cat_idx > cat_llh->lgh_last_idx) {
@@ -231,14 +231,29 @@ static int llog_cat_process_or_fork(const struct lu_env *env,
 		CWARN("%s: catlog " DFID " crosses index zero\n",
 		      cat_llh->lgh_ctxt->loc_obd->obd_name,
 		      PFID(&cat_llh->lgh_id.lgl_oi.oi_fid));
-
-		cd.lpcd_first_idx = llh->llh_cat_idx;
-		cd.lpcd_last_idx = 0;
-		rc = llog_process_or_fork(env, cat_llh, cat_cb, &d, &cd, fork);
-		if (rc != 0)
-			return rc;
-
-		cd.lpcd_first_idx = 0;
+		/*startcat = 0 is default value for general processing */
+		if ((startcat != LLOG_CAT_FIRST &&
+		    startcat >= llh->llh_cat_idx) || !startcat) {
+			/* processing the catalog part at the end */
+			cd.lpcd_first_idx = (startcat ? startcat :
+					     llh->llh_cat_idx);
+			cd.lpcd_last_idx = 0;
+			rc = llog_process_or_fork(env, cat_llh, cat_cb,
+						  &d, &cd, fork);
+			/* Reset the startcat because it has already reached
+			 * catalog bottom.
+			 */
+			startcat = 0;
+			if (rc != 0)
+				return rc;
+		}
+		/* processing the catalog part at the beginning */
+		cd.lpcd_first_idx = (startcat == LLOG_CAT_FIRST) ? 0 : startcat;
+		/* Note, the processing will stop at the lgh_last_idx value,
+		 * and it could be increased during processing. So records
+		 * between current lgh_last_idx and lgh_last_idx in future
+		 * would left unprocessed.
+		 */
 		cd.lpcd_last_idx = cat_llh->lgh_last_idx;
 		rc = llog_process_or_fork(env, cat_llh, cat_cb, &d, &cd, fork);
 	} else {
