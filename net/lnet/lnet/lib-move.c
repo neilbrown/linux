@@ -195,8 +195,7 @@ lnet_fail_nid(lnet_nid_t nid, unsigned int threshold)
 		if (!tp->tp_threshold ||    /* needs culling anyway */
 		    nid == LNET_NID_ANY ||       /* removing all entries */
 		    tp->tp_nid == nid) {	  /* matched this one */
-			list_del(&tp->tp_list);
-			list_add(&tp->tp_list, &cull);
+			list_move(&tp->tp_list, &cull);
 		}
 	}
 
@@ -236,8 +235,7 @@ fail_peer(lnet_nid_t nid, int outgoing)
 				 * since we may be at interrupt priority on
 				 * incoming messages.
 				 */
-				list_del(&tp->tp_list);
-				list_add(&tp->tp_list, &cull);
+				list_move(&tp->tp_list, &cull);
 			}
 			continue;
 		}
@@ -251,8 +249,7 @@ fail_peer(lnet_nid_t nid, int outgoing)
 				if (outgoing &&
 				    !tp->tp_threshold) {
 					/* see above */
-					list_del(&tp->tp_list);
-					list_add(&tp->tp_list, &cull);
+					list_move(&tp->tp_list, &cull);
 				}
 			}
 			break;
