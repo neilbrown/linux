@@ -264,10 +264,9 @@ struct ksock_nal_data {
  * received into either struct iovec or struct bio_vec fragments, depending on
  * what the header matched or whether the message needs forwarding.
  */
-struct ksock_conn;  /* forward ref */
-struct ksock_peer_ni;  /* forward ref */
-struct ksock_route; /* forward ref */
-struct ksock_proto; /* forward ref */
+struct ksock_conn;				/* forward ref */
+struct ksock_route;				/* forward ref */
+struct ksock_proto;				/* forward ref */
 
 struct ksock_tx {				/* transmit packet */
 	struct list_head	tx_list;	/* queue on conn for transmission etc
