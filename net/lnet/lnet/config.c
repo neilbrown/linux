@@ -1535,9 +1535,9 @@ lnet_match_networks(char **networksp, char *ip2nets, u32 *ipaddrs, int nip)
 
 			list_move_tail(&tb->ltb_list, &matched_nets);
 
-			len += snprintf(networks + len, sizeof(networks) - len,
-					"%s%s", !len ? "" : ",",
-					tb->ltb_text);
+			len += scnprintf(networks + len, sizeof(networks) - len,
+					 "%s%s", !len ? "" : ",",
+					 tb->ltb_text);
 
 			if (len >= sizeof(networks)) {
 				CERROR("Too many matched networks\n");
