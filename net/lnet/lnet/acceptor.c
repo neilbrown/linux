@@ -174,16 +174,11 @@ lnet_connect(struct socket **sockp, lnet_nid_t peer_nid,
 
 		if (the_lnet.ln_testprotocompat) {
 			/* single-shot proto check */
-			lnet_net_lock(LNET_LOCK_EX);
-			if (the_lnet.ln_testprotocompat & 4) {
+			if (test_and_clear_bit(2, &the_lnet.ln_testprotocompat))
 				cr.acr_version++;
-				the_lnet.ln_testprotocompat &= ~4;
-			}
-			if (the_lnet.ln_testprotocompat & 8) {
+
+			if (test_and_clear_bit(3, &the_lnet.ln_testprotocompat))
 				cr.acr_magic = LNET_PROTO_MAGIC;
-				the_lnet.ln_testprotocompat &= ~8;
-			}
-			lnet_net_unlock(LNET_LOCK_EX);
 		}
 
 		rc = lnet_sock_write(sock, &cr, sizeof(cr), accept_timeout);
