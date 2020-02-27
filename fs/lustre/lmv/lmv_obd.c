@@ -3480,6 +3480,7 @@ static const struct obd_ops lmv_obd_ops = {
 	.set_info_async		= lmv_set_info_async,
 	.notify			= lmv_notify,
 	.get_uuid		= lmv_get_uuid,
+	.fid_alloc		= lmv_fid_alloc,
 	.iocontrol		= lmv_iocontrol,
 	.quotactl		= lmv_quotactl
 };

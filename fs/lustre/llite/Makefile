@@ -7,6 +7,6 @@ lustre-y := dcache.o dir.o file.o llite_lib.o llite_nfs.o \
 	    xattr.o xattr_cache.o xattr_security.o \
 	    super25.o statahead.o glimpse.o lcommon_cl.o lcommon_misc.o \
 	    vvp_dev.o vvp_page.o vvp_io.o vvp_object.o \
-	    lproc_llite.o
+	    lproc_llite.o pcc.o
 
 lustre-$(CONFIG_LUSTRE_FS_POSIX_ACL) += acl.o
