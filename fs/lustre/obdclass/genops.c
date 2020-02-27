@@ -863,7 +863,6 @@ static struct obd_export *__class_new_export(struct obd_device *obd,
 
 exit_unlock:
 	spin_unlock(&obd->obd_dev_lock);
-	class_handle_unhash(&export->exp_handle);
 	obd_destroy_export(export);
 	kfree(export);
 	return ERR_PTR(rc);
@@ -903,7 +902,7 @@ void class_unlink_export(struct obd_export *exp)
 }
 
 /* Import management functions */
-static void class_import_destroy(struct obd_import *imp)
+static void obd_zombie_import_free(struct obd_import *imp)
 {
 	struct obd_import_conn *imp_conn;
 
@@ -924,18 +923,8 @@ static void class_import_destroy(struct obd_import *imp)
 
 	LASSERT(!imp->imp_sec);
 	class_decref(imp->imp_obd, "import", imp);
-	OBD_FREE_RCU(imp, sizeof(*imp), &imp->imp_handle);
+	kfree(imp);
 }
-
-static void import_handle_addref(void *import)
-{
-	class_import_get(import);
-}
-
-static struct portals_handle_ops import_handle_ops = {
-	.hop_addref	= import_handle_addref,
-	.hop_free	= NULL,
-};
 
 struct obd_import *class_import_get(struct obd_import *import)
 {
@@ -985,7 +974,7 @@ static void obd_zombie_imp_cull(struct work_struct *ws)
 	struct obd_import *import = container_of(ws, struct obd_import,
 						 imp_zombie_work);
 
-	class_import_destroy(import);
+	obd_zombie_import_free(import);
 }
 
 struct obd_import *class_new_import(struct obd_device *obd)
@@ -1018,8 +1007,6 @@ struct obd_import *class_new_import(struct obd_device *obd)
 	atomic_set(&imp->imp_replay_inflight, 0);
 	atomic_set(&imp->imp_inval_count, 0);
 	INIT_LIST_HEAD(&imp->imp_conn_list);
-	INIT_LIST_HEAD_RCU(&imp->imp_handle.h_link);
-	class_handle_hash(&imp->imp_handle, &import_handle_ops);
 	init_imp_at(&imp->imp_at);
 
 	/* the default magic is V2, will be used in connect RPC, and
@@ -1035,8 +1022,6 @@ void class_destroy_import(struct obd_import *import)
 {
 	LASSERT(import);
 	LASSERT(import != LP_POISON);
-
-	class_handle_unhash(&import->imp_handle);
 
 	spin_lock(&import->imp_lock);
 	import->imp_generation++;
