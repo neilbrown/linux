@@ -1321,9 +1321,9 @@ static int osc_brw_prep_request(int cmd, struct client_obd *cli,
 	for (i = 0; i < page_count; i++)
 		short_io_size += pga[i]->count;
 
-	/* Check if we can do a short io. */
-	if (!(short_io_size <= cli->cl_short_io_bytes && niocount == 1 &&
-	    imp_connect_shortio(cli->cl_import)))
+	/* Check if read/write is small enough to be a short io. */
+	if (short_io_size > cli->cl_max_short_io_bytes || niocount > 1 ||
+	    !imp_connect_shortio(cli->cl_import))
 		short_io_size = 0;
 
 	req_capsule_set_size(pill, &RMF_SHORT_IO, RCL_CLIENT,
@@ -1762,7 +1762,6 @@ static int osc_brw_fini_request(struct ptlrpc_request *req, int rc)
 			CERROR("Unexpected +ve rc %d\n", rc);
 			return -EPROTO;
 		}
-		LASSERT(req->rq_bulk->bd_nob == aa->aa_requested_nob);
 
 		if (req->rq_bulk &&
 		    sptlrpc_cli_unwrap_bulk_write(req, req->rq_bulk))
