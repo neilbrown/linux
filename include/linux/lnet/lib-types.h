@@ -732,6 +732,8 @@ struct lnet_peer {
 
 /* gw undergoing alive discovery */
 #define LNET_PEER_RTR_DISCOVERY	BIT(16)
+/* gw has undergone discovery (does not indicate success or failure) */
+#define LNET_PEER_RTR_DISCOVERED BIT(17)
 
 struct lnet_peer_net {
 	/* chain on lp_peer_nets */
