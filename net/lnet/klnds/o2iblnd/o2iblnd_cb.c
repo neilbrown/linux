@@ -3550,7 +3550,7 @@ kiblnd_connd(void *arg)
 					     kiblnd_data.kib_peer_hash_size;
 			}
 
-			deadline += msecs_to_jiffies(p * MSEC_PER_SEC);
+			deadline += p * HZ;
 			spin_lock_irqsave(lock, flags);
 		}
 

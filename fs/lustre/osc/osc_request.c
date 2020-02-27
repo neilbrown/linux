@@ -901,9 +901,8 @@ static void osc_grant_work_handler(struct work_struct *data)
 		return;
 
 	if (next_shrink > ktime_get_seconds())
-		schedule_delayed_work(&work, msecs_to_jiffies(
-					(next_shrink - ktime_get_seconds()) *
-					MSEC_PER_SEC));
+		schedule_delayed_work(&work,
+				      (next_shrink - ktime_get_seconds()) * HZ);
 	else
 		schedule_work(&work.work);
 }
