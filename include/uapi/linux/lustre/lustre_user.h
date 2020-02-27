@@ -44,10 +44,10 @@
 
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include <linux/quota.h>
 
 #ifdef __KERNEL__
 # include <linux/fs.h>
-# include <linux/quota.h>
 # include <linux/sched/signal.h>
 # include <linux/string.h> /* snprintf() */
 # include <linux/version.h>
@@ -58,7 +58,6 @@
 # include <stdio.h> /* snprintf() */
 # include <stdint.h>
 # include <string.h>
-# include <sys/quota.h>
 # include <sys/stat.h>
 #endif /* __KERNEL__ */
 #include <uapi/linux/lustre/lustre_fiemap.h>
