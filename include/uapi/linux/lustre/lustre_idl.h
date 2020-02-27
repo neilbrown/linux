@@ -803,6 +803,7 @@ struct ptlrpc_body_v2 {
 						 * locks
 						 */
 #define OBD_CONNECT2_LOCK_CONVERT	0x80ULL /* IBITS lock convert support */
+#define OBD_CONNECT2_ARCHIVE_ID_ARRAY  0x100ULL	/* store HSM archive_id in array */
 #define OBD_CONNECT2_INC_XID		0x200ULL /* Increasing xid */
 #define OBD_CONNECT2_SELINUX_POLICY	0x400ULL /* has client SELinux policy */
 #define OBD_CONNECT2_SELINUX_POLICY	0x400ULL /* has client SELinux policy */
@@ -813,6 +814,7 @@ struct ptlrpc_body_v2 {
 						   * discard
 						   */
 #define OBD_CONNECT2_ENCRYPT		0x8000ULL /* client-to-disk encrypt */
+
 /* XXX README XXX:
  * Please DO NOT add flag values here before first ensuring that this same
  * flag value is not in use on some other branch.  Please clear any such

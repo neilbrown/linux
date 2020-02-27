@@ -119,7 +119,7 @@ static const char * const obd_connect_names[] = {
 	"flr",		/* 0x20 */
 	"wbc",		/* 0x40 */
 	"lock_convert",	/* 0x80 */
-	"unknown",		/* 0x100 */
+	"archive_id_array",	/* 0x100 */
 	"increasing_xid",	/* 0x200 */
 	"selinux_policy",	/* 0x400 */
 	"lsom",			/* 0x800 */
