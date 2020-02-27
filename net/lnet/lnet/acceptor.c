@@ -44,6 +44,7 @@ static struct {
 	int			pta_shutdown;
 	struct socket		*pta_sock;
 	struct completion	pta_signal;
+	struct net		*pta_ns;
 } lnet_acceptor_state = {
 	.pta_shutdown = 1
 };
@@ -142,7 +143,7 @@ EXPORT_SYMBOL(lnet_connect_console_error);
 
 int
 lnet_connect(struct socket **sockp, lnet_nid_t peer_nid,
-	     u32 local_ip, u32 peer_ip, int peer_port)
+	     u32 local_ip, u32 peer_ip, int peer_port, struct net *ns)
 {
 	struct lnet_acceptor_connreq cr;
 	struct socket *sock;
@@ -158,7 +159,7 @@ lnet_connect(struct socket **sockp, lnet_nid_t peer_nid,
 		/* Iterate through reserved ports. */
 
 		rc = lnet_sock_connect(&sock, &fatal, local_ip, port, peer_ip,
-				       peer_port);
+				       peer_port, ns);
 		if (rc) {
 			if (fatal)
 				goto failed;
@@ -335,8 +336,9 @@ lnet_acceptor(void *arg)
 
 	LASSERT(!lnet_acceptor_state.pta_sock);
 
-	rc = lnet_sock_listen(&lnet_acceptor_state.pta_sock, 0, accept_port,
-			      accept_backlog);
+	rc = lnet_sock_listen(&lnet_acceptor_state.pta_sock,
+			      0, accept_port, accept_backlog,
+			      lnet_acceptor_state.pta_ns);
 	if (rc) {
 		if (rc == -EADDRINUSE)
 			LCONSOLE_ERROR_MSG(0x122, "Can't start acceptor on port %d: port already in use\n",
@@ -457,6 +459,7 @@ lnet_acceptor_start(void)
 	if (!lnet_count_acceptor_nets())  /* not required */
 		return 0;
 
+	lnet_acceptor_state.pta_ns = current->nsproxy->net_ns;
 	task = kthread_run(lnet_acceptor, (void *)(uintptr_t)secure,
 			   "acceptor_%03ld", secure);
 	if (IS_ERR(task)) {
