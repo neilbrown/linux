@@ -2491,14 +2491,13 @@ ksocknal_reaper(void *arg)
 	wait_queue_entry_t wait;
 	struct ksock_conn *conn;
 	struct ksock_sched *sched;
-	struct list_head enomem_conns;
+	LIST_HEAD(enomem_conns);
 	int nenomem_conns;
 	time64_t timeout;
 	int i;
 	int peer_index = 0;
 	time64_t deadline = ktime_get_seconds();
 
-	INIT_LIST_HEAD(&enomem_conns);
 	init_waitqueue_entry(&wait, current);
 
 	spin_lock_bh(&ksocknal_data.ksnd_reaper_lock);
