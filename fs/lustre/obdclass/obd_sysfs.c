@@ -194,8 +194,12 @@ health_check_show(struct kobject *kobj, struct attribute *attr, char *buf)
 
 		if (obd_health_check(NULL, obd))
 			healthy = false;
+
 		class_decref(obd, __func__, current);
 		read_lock(&obd_dev_lock);
+
+		if (!healthy)
+			break;
 	}
 	read_unlock(&obd_dev_lock);
 
@@ -372,6 +376,40 @@ static const struct file_operations obd_device_list_fops = {
 	.release = seq_release,
 };
 
+static int
+health_check_seq_show(struct seq_file *m, void *unused)
+{
+	int i;
+
+	read_lock(&obd_dev_lock);
+	for (i = 0; i < class_devno_max(); i++) {
+		struct obd_device *obd;
+
+		obd = class_num2obd(i);
+		if (!obd || !obd->obd_attached || !obd->obd_set_up)
+			continue;
+
+		LASSERT(obd->obd_magic == OBD_DEVICE_MAGIC);
+		if (obd->obd_stopping)
+			continue;
+
+		class_incref(obd, __func__, current);
+		read_unlock(&obd_dev_lock);
+
+		if (obd_health_check(NULL, obd)) {
+			seq_printf(m, "device %s reported unhealthy\n",
+				   obd->obd_name);
+		}
+		class_decref(obd, __func__, current);
+		read_lock(&obd_dev_lock);
+	}
+	read_unlock(&obd_dev_lock);
+
+	return 0;
+}
+
+LPROC_SEQ_FOPS_RO(health_check);
+
 struct kset *lustre_kset;
 EXPORT_SYMBOL_GPL(lustre_kset);
 
@@ -416,6 +454,9 @@ int class_procfs_init(void)
 
 	debugfs_create_file("devices", 0444, debugfs_lustre_root, NULL,
 			    &obd_device_list_fops);
+
+	debugfs_create_file("health_check", 0444, debugfs_lustre_root,
+			    NULL, &health_check_fops);
 out:
 	return rc;
 }
