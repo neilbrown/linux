@@ -1082,6 +1082,8 @@ ldlm_handle2lock_long(const struct lustre_handle *h, u64 flags)
 	return lock;
 }
 
+int is_granted_or_cancelled_nolock(struct ldlm_lock *lock);
+
 int ldlm_error2errno(enum ldlm_error error);
 
 #if LUSTRE_TRACKS_LOCK_EXP_REFS

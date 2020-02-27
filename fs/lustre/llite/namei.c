@@ -224,8 +224,18 @@ void ll_lock_cancel_bits(struct ldlm_lock *lock, u64 to_cancel)
 	u64 bits = to_cancel;
 	int rc;
 
-	if (!inode)
+	if (!inode) {
+		/* That means the inode is evicted most likely and may cause
+		 * the skipping of lock cleanups below, so print the message
+		 * about that in log.
+		 */
+		if (lock->l_resource->lr_lvb_inode)
+			LDLM_DEBUG(lock,
+				   "can't take inode for the lock (%sevicted)\n",
+				   lock->l_resource->lr_lvb_inode->i_state &
+				   I_FREEING ? "" : "not ");
 		return;
+	}
 
 	if (!fid_res_name_eq(ll_inode2fid(inode),
 			     &lock->l_resource->lr_name)) {
