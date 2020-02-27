@@ -512,6 +512,9 @@ struct ldlm_lock *__ldlm_handle2lock(const struct lustre_handle *handle,
 
 	LASSERT(handle);
 
+	if (!lustre_handle_is_used(handle))
+		return NULL;
+
 	lock = class_handle2object(handle->cookie, &lock_handle_ops);
 	if (!lock)
 		return NULL;
