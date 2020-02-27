@@ -214,6 +214,21 @@ static void ldlm_handle_cp_callback(struct ptlrpc_request *req,
 	}
 
 	lock_res_and_lock(lock);
+
+	if (!ldlm_res_eq(&dlm_req->lock_desc.l_resource.lr_name,
+			 &lock->l_resource->lr_name)) {
+		ldlm_resource_unlink_lock(lock);
+		unlock_res_and_lock(lock);
+		rc = ldlm_lock_change_resource(ns, lock,
+				&dlm_req->lock_desc.l_resource.lr_name);
+		if (rc < 0) {
+			LDLM_ERROR(lock, "Failed to allocate resource");
+			goto out;
+		}
+		LDLM_DEBUG(lock, "completion AST, new resource");
+		lock_res_and_lock(lock);
+	}
+
 	if (ldlm_is_destroyed(lock) ||
 	    lock->l_granted_mode == lock->l_req_mode) {
 		/* bug 11300: the lock has already been granted */
@@ -240,20 +255,6 @@ static void ldlm_handle_cp_callback(struct ptlrpc_request *req,
 	}
 
 	ldlm_resource_unlink_lock(lock);
-	if (memcmp(&dlm_req->lock_desc.l_resource.lr_name,
-		   &lock->l_resource->lr_name,
-		   sizeof(lock->l_resource->lr_name)) != 0) {
-		unlock_res_and_lock(lock);
-		rc = ldlm_lock_change_resource(ns, lock,
-					       &dlm_req->lock_desc.l_resource.lr_name);
-		if (rc < 0) {
-			LDLM_ERROR(lock, "Failed to allocate resource");
-			goto out;
-		}
-		LDLM_DEBUG(lock, "completion AST, new resource");
-		CERROR("change resource!\n");
-		lock_res_and_lock(lock);
-	}
 
 	if (dlm_req->lock_flags & LDLM_FL_AST_SENT) {
 		/* BL_AST locks are not needed in LRU.
