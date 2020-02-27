@@ -120,6 +120,7 @@ static const char * const obd_connect_names[] = {
 	"wbc",		/* 0x40 */
 	"lock_convert",	/* 0x80 */
 	"archive_id_array",	/* 0x100 */
+	"selinux_policy",	/* 0x200 */
 	NULL
 };
 

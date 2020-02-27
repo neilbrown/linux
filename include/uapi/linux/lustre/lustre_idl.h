@@ -805,6 +805,7 @@ struct ptlrpc_body_v2 {
 						 */
 #define OBD_CONNECT2_LOCK_CONVERT	0x80ULL /* IBITS lock convert support */
 #define OBD_CONNECT2_ARCHIVE_ID_ARRAY  0x100ULL	/* store HSM archive_id in array */
+#define OBD_CONNECT2_SELINUX_POLICY    0x400ULL	/* has client SELinux policy */
 
 /* XXX README XXX:
  * Please DO NOT add flag values here before first ensuring that this same

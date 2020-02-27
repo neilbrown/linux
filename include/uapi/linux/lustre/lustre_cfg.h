@@ -107,6 +107,7 @@ enum lcfg_command_type {
 	LCFG_SET_PARAM		  = 0x00ce032, /**< use set_param syntax to set
 						 * a proc parameters
 						 */
+	LCFG_NODEMAP_SET_SEPOL	  = 0x00ce05b, /**< set SELinux policy */
 };
 
 struct lustre_cfg_bufs {
