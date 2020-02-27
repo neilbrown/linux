@@ -622,27 +622,37 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 					      obd_kset.kobj);
 	struct client_obd *cli = &obd->u.cli;
 	struct ptlrpc_request *req;
+	unsigned int idle_debug = 0;
 	unsigned int val;
 	int rc;
 
-	rc = kstrtouint(buffer, 0, &val);
-	if (rc)
-		return rc;
+	if (strncmp(buffer, "debug", 5) == 0) {
+		idle_debug = D_CONSOLE;
+	} else if (strncmp(buffer, "nodebug", 6) == 0) {
+		idle_debug = D_HA;
+	} else {
+		rc = kstrtouint(buffer, 0, &val);
+		if (rc)
+			return rc;
 
-	if (val > CONNECTION_SWITCH_MAX)
-		return -ERANGE;
+		if (val > CONNECTION_SWITCH_MAX)
+			return -ERANGE;
+	}
 
 	rc = lprocfs_climp_check(obd);
 	if (rc)
 		return rc;
 
-	cli->cl_import->imp_idle_timeout = val;
-
-	/* to initiate the connection if it's in IDLE state */
-	if (!val) {
-		req = ptlrpc_request_alloc(cli->cl_import, &RQF_OST_STATFS);
-		if (req)
-			ptlrpc_req_finished(req);
+	if (idle_debug) {
+		cli->cl_import->imp_idle_timeout = val;
+	} else {
+		/* to initiate the connection if it's in IDLE state */
+		if (!val) {
+			req = ptlrpc_request_alloc(cli->cl_import,
+						   &RQF_OST_STATFS);
+			if (req)
+				ptlrpc_req_finished(req);
+		}
 	}
 	up_read(&obd->u.cli.cl_sem);
 
