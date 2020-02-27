@@ -314,7 +314,6 @@ int fld_client_rpc(struct obd_export *exp,
 
 	LASSERT(exp);
 
-again:
 	imp = class_exp2cliimp(exp);
 	switch (fld_op) {
 	case FLD_QUERY:
@@ -363,17 +362,23 @@ again:
 	req->rq_reply_portal = MDC_REPLY_PORTAL;
 	ptlrpc_at_set_req_timeout(req);
 
-	obd_get_request_slot(&exp->exp_obd->u.cli);
-	rc = ptlrpc_queue_wait(req);
-	obd_put_request_slot(&exp->exp_obd->u.cli);
+	if (OBD_FAIL_CHECK(OBD_FAIL_FLD_QUERY_REQ && req->rq_no_delay)) {
+		/* the same error returned by ptlrpc_import_delay_req */
+		rc = -EWOULDBLOCK;
+		req->rq_status = rc;
+	} else {
+		obd_get_request_slot(&exp->exp_obd->u.cli);
+		rc = ptlrpc_queue_wait(req);
+		obd_put_request_slot(&exp->exp_obd->u.cli);
+	}
+
 	if (rc != 0) {
 		if (imp->imp_state != LUSTRE_IMP_CLOSED && !imp->imp_deactive) {
-			/* Since LWP is not replayable, so it will keep
-			 * trying unless umount happens, otherwise it would
-			 * cause unnecessary failure of the application.
+			/*
+			 * Since LWP is not replayable, so notify the caller
+			 * to retry if needed after a while.
 			 */
-			ptlrpc_req_finished(req);
-			goto again;
+			rc = -EAGAIN;
 		}
 		goto out_req;
 	}
