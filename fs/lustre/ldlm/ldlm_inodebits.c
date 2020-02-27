@@ -81,7 +81,7 @@ int ldlm_inodebits_drop(struct ldlm_lock *lock, u64 to_drop)
 
 	/* Just return if there are no conflicting bits */
 	if ((lock->l_policy_data.l_inodebits.bits & to_drop) == 0) {
-		LDLM_WARN(lock, "try to drop unset bits %#llx/%#llx\n",
+		LDLM_WARN(lock, "try to drop unset bits %#llx/%#llx",
 			  lock->l_policy_data.l_inodebits.bits, to_drop);
 		/* nothing to do */
 		return 0;
@@ -111,11 +111,18 @@ int ldlm_cli_dropbits(struct ldlm_lock *lock, u64 drop_bits)
 
 	ldlm_lock2handle(lock, &lockh);
 	lock_res_and_lock(lock);
-	/* check if all bits are cancelled */
+	/* check if all bits are blocked */
 	if (!(lock->l_policy_data.l_inodebits.bits & ~drop_bits)) {
 		unlock_res_and_lock(lock);
 		/* return error to continue with cancel */
 		rc = -EINVAL;
+		goto exit;
+	}
+
+	/* check if no common bits, consider this as successful convert */
+	if (!(lock->l_policy_data.l_inodebits.bits & drop_bits)) {
+		unlock_res_and_lock(lock);
+		rc = 0;
 		goto exit;
 	}
 
@@ -167,9 +174,11 @@ int ldlm_cli_dropbits(struct ldlm_lock *lock, u64 drop_bits)
 	rc = ldlm_cli_convert(lock, &flags);
 	if (rc) {
 		lock_res_and_lock(lock);
-		ldlm_clear_converting(lock);
-		ldlm_set_cbpending(lock);
-		ldlm_set_bl_ast(lock);
+		if (ldlm_is_converting(lock)) {
+			ldlm_clear_converting(lock);
+			ldlm_set_cbpending(lock);
+			ldlm_set_bl_ast(lock);
+		}
 		unlock_res_and_lock(lock);
 		goto exit;
 	}
