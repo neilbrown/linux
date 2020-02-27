@@ -196,8 +196,30 @@ EXPORT_SYMBOL(osc_object_glimpse);
 
 static int osc_object_ast_clear(struct ldlm_lock *lock, void *data)
 {
-	if (lock->l_ast_data == data)
+	struct osc_object *osc = (struct osc_object *)data;
+	struct ost_lvb *lvb = lock->l_lvb_data;
+	struct lov_oinfo *oinfo;
+
+	if (lock->l_ast_data == data) {
 		lock->l_ast_data = NULL;
+
+		LASSERT(osc);
+		LASSERT(osc->oo_oinfo);
+		LASSERT(lvb);
+
+		/* Updates lvb in lock by the cached oinfo */
+		oinfo = osc->oo_oinfo;
+		cl_object_attr_lock(&osc->oo_cl);
+		memcpy(lvb, &oinfo->loi_lvb, sizeof(oinfo->loi_lvb));
+		cl_object_attr_unlock(&osc->oo_cl);
+
+		LDLM_DEBUG(lock,
+			   "update lvb size %llu blocks %llu [cma]time: %llu %llu %llu",
+			   lvb->lvb_size, lvb->lvb_blocks,
+			   lvb->lvb_ctime, lvb->lvb_mtime, lvb->lvb_atime);
+
+		ldlm_clear_lvb_cached(lock);
+	}
 	return LDLM_ITER_CONTINUE;
 }
 
