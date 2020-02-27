@@ -191,8 +191,8 @@ void lu_object_put(const struct lu_env *env, struct lu_object *o)
 		LASSERT(list_empty(&top->loh_lru));
 		list_add_tail(&top->loh_lru, &bkt->lsb_lru);
 		percpu_counter_inc(&site->ls_lru_len_counter);
-		CDEBUG(D_INODE, "Add %p to site lru. hash: %p, bkt: %p\n",
-		       o, site->ls_obj_hash, bkt);
+		CDEBUG(D_INODE, "Add %p/%p to site lru. hash: %p, bkt: %p\n",
+		       orig, top, site->ls_obj_hash, bkt);
 		cfs_hash_bd_unlock(site->ls_obj_hash, &bd, 1);
 		return;
 	}
