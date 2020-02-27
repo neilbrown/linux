@@ -257,8 +257,6 @@ void lustre_assert_wire_constants(void)
 		 (long long)MDS_ATTR_KILL_SGID);
 	LASSERTF(MDS_ATTR_CTIME_SET == 0x0000000000002000ULL, "found 0x%.16llxULL\n",
 		 (long long)MDS_ATTR_CTIME_SET);
-	LASSERTF(MDS_ATTR_FROM_OPEN == 0x0000000000004000ULL, "found 0x%.16llxULL\n",
-		 (long long)MDS_ATTR_FROM_OPEN);
 	LASSERTF(MDS_ATTR_BLOCKS == 0x0000000000008000ULL, "found 0x%.16llxULL\n",
 		 (long long)MDS_ATTR_BLOCKS);
 	LASSERTF(MDS_ATTR_PROJID == 0x0000000000010000ULL, "found 0x%.16llxULL\n",
@@ -268,6 +266,8 @@ void lustre_assert_wire_constants(void)
 		 (long long)MDS_ATTR_LSIZE);
 	LASSERTF(MDS_ATTR_LBLOCKS == 0x0000000000040000ULL, "found 0x%.16llxULL\n",
 		 (long long)MDS_ATTR_LBLOCKS);
+	LASSERTF(MDS_ATTR_OVERRIDE == 0x0000000002000000ULL, "found 0x%.16llxULL\n",
+		 (long long)MDS_ATTR_OVERRIDE);
 	LASSERTF(FLD_QUERY == 900, "found %lld\n",
 		 (long long)FLD_QUERY);
 	LASSERTF(FLD_FIRST_OPC == 900, "found %lld\n",
@@ -2131,8 +2131,6 @@ void lustre_assert_wire_constants(void)
 		 MDS_FMODE_EXEC);
 	LASSERTF(MDS_OPEN_CREATED == 000000000010UL, "found 0%.11oUL\n",
 		 MDS_OPEN_CREATED);
-	LASSERTF(MDS_OPEN_CROSS == 000000000020UL, "found 0%.11oUL\n",
-		 MDS_OPEN_CROSS);
 	LASSERTF(MDS_OPEN_CREAT == 000000000100UL, "found 0%.11oUL\n",
 		 MDS_OPEN_CREAT);
 	LASSERTF(MDS_OPEN_EXCL == 000000000200UL, "found 0%.11oUL\n",
