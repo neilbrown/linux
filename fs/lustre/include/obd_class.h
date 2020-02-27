@@ -907,8 +907,8 @@ static inline int obd_statfs_async(struct obd_export *exp,
 				   time64_t max_age,
 				   struct ptlrpc_request_set *rqset)
 {
-	int rc = 0;
 	struct obd_device *obd;
+	int rc = 0;
 
 	if (!exp || !exp->exp_obd)
 		return -EINVAL;
@@ -920,8 +920,8 @@ static inline int obd_statfs_async(struct obd_export *exp,
 		return rc;
 	}
 
-	CDEBUG(D_SUPER, "%s: osfs %p age %lld, max_age %lld\n",
-	       obd->obd_name, &obd->obd_osfs, obd->obd_osfs_age, max_age);
+	CDEBUG(D_SUPER, "%s: age %lld, max_age %lld\n",
+	       obd->obd_name, obd->obd_osfs_age, max_age);
 	rc = OBP(obd, statfs_async)(exp, oinfo, max_age, rqset);
 
 	return rc;
@@ -939,20 +939,20 @@ static inline int obd_statfs(const struct lu_env *env, struct obd_export *exp,
 	struct obd_device *obd = exp->exp_obd;
 	int rc = 0;
 
-	if (!obd)
+	if (unlikely(!obd))
 		return -EINVAL;
 
 	rc = obd_check_dev_active(obd);
 	if (rc)
 		return rc;
 
-	if (!obd->obd_type || !obd->obd_type->typ_dt_ops->statfs) {
+	if (unlikely(!obd->obd_type || !obd->obd_type->typ_dt_ops->statfs)) {
 		CERROR("%s: no %s operation\n", obd->obd_name, __func__);
 		return -EOPNOTSUPP;
 	}
 
-	CDEBUG(D_SUPER, "osfs %lld, max_age %lld\n",
-	       obd->obd_osfs_age, max_age);
+	CDEBUG(D_SUPER, "%s: age %lld, max_age %lld\n",
+	       obd->obd_name, obd->obd_osfs_age, max_age);
 	/* ignore cache if aggregated isn't expected */
 	if (obd->obd_osfs_age < max_age ||
 	    ((obd->obd_osfs.os_state & OS_STATE_SUM) &&
