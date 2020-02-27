@@ -1026,16 +1026,26 @@ void cl_req_attr_set(const struct lu_env *env, struct cl_object *obj,
 EXPORT_SYMBOL(cl_req_attr_set);
 
 /**
- * Initialize synchronous io wait anchor
+ * Initialize synchronous io wait @anchor for @nr pages with optional
+ * @end handler.
+ *
+ * @anchor	owned by caller, initialzied here.
+ * @nr		number of pages initally pending in sync.
+ * @end		optional callback sync_io completion, can be used to
+ *		trigger erasure coding, integrity, dedupe, or similar
+ *		operation. @end is called with a spinlock on
+ *		anchor->csi_waitq.lock
  */
-void cl_sync_io_init(struct cl_sync_io *anchor, int nr)
+void cl_sync_io_init_notify(struct cl_sync_io *anchor, int nr,
+			    cl_sync_io_end_t *end)
 {
 	memset(anchor, 0, sizeof(*anchor));
 	init_waitqueue_head(&anchor->csi_waitq);
 	atomic_set(&anchor->csi_sync_nr, nr);
 	anchor->csi_sync_rc = 0;
+	anchor->csi_end_io = end;
 }
-EXPORT_SYMBOL(cl_sync_io_init);
+EXPORT_SYMBOL(cl_sync_io_init_notify);
 
 /**
  * Wait until all IO completes. Transfer completion routine has to call
@@ -1091,12 +1101,17 @@ void cl_sync_io_note(const struct lu_env *env, struct cl_sync_io *anchor,
 	if (atomic_dec_and_lock(&anchor->csi_sync_nr,
 				&anchor->csi_waitq.lock)) {
 
+		cl_sync_io_end_t *end_io = anchor->csi_end_io;
+
 		/*
 		 * Holding the lock across both the decrement and
 		 * the wakeup ensures cl_sync_io_wait() doesn't complete
 		 * before the wakeup completes.
 		 */
 		wake_up_all_locked(&anchor->csi_waitq);
+		if (end_io)
+			end_io(env, anchor);
+
 		spin_unlock(&anchor->csi_waitq.lock);
 
 		/* Can't access anchor any more */
