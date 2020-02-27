@@ -864,6 +864,13 @@ static void ptlrpc_server_drop_request(struct ptlrpc_request *req)
 	}
 }
 
+static void ptlrpc_del_exp_list(struct ptlrpc_request *req)
+{
+	spin_lock(&req->rq_export->exp_rpc_lock);
+	list_del_init(&req->rq_exp_list);
+	spin_unlock(&req->rq_export->exp_rpc_lock);
+}
+
 /**
  * to finish a request: stop sending more early replies, and release
  * the request.
@@ -1367,9 +1374,7 @@ static void ptlrpc_server_hpreq_fini(struct ptlrpc_request *req)
 		if (req->rq_ops->hpreq_fini)
 			req->rq_ops->hpreq_fini(req);
 
-		spin_lock(&req->rq_export->exp_rpc_lock);
-		list_del_init(&req->rq_exp_list);
-		spin_unlock(&req->rq_export->exp_rpc_lock);
+		ptlrpc_del_exp_list(req);
 	}
 }
 
