@@ -312,7 +312,8 @@ static int lov_disconnect(struct obd_export *exp)
 {
 	struct obd_device *obd = class_exp2obd(exp);
 	struct lov_obd *lov = &obd->u.lov;
-	int i, rc;
+	u32 index;
+	int rc;
 
 	if (!lov->lov_tgts)
 		goto out;
@@ -321,19 +322,19 @@ static int lov_disconnect(struct obd_export *exp)
 	lov->lov_connects--;
 	if (lov->lov_connects != 0) {
 		/* why should there be more than 1 connect? */
-		CERROR("disconnect #%d\n", lov->lov_connects);
+		CWARN("%s: unexpected disconnect #%d\n",
+		      obd->obd_name, lov->lov_connects);
 		goto out;
 	}
 
-	/* Let's hold another reference so lov_del_obd doesn't spin through
-	 * putref every time
-	 */
+	/* hold another ref so lov_del_obd() doesn't spin in putref each time */
 	lov_tgts_getref(obd);
 
-	for (i = 0; i < lov->desc.ld_tgt_count; i++) {
-		if (lov->lov_tgts[i] && lov->lov_tgts[i]->ltd_exp) {
-			/* Disconnection is the last we know about an obd */
-			lov_del_target(obd, i, NULL, lov->lov_tgts[i]->ltd_gen);
+	for (index = 0; index < lov->desc.ld_tgt_count; index++) {
+		if (lov->lov_tgts[index] && lov->lov_tgts[index]->ltd_exp) {
+			/* Disconnection is the last we know about an OBD */
+			lov_del_target(obd, index, NULL,
+				       lov->lov_tgts[index]->ltd_gen);
 		}
 	}
 
@@ -490,13 +491,12 @@ static int lov_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
 	       uuidp->uuid, index, gen, active);
 
 	if (gen <= 0) {
-		CERROR("request to add OBD %s with invalid generation: %d\n",
-		       uuidp->uuid, gen);
+		CERROR("%s: request to add '%s' with invalid generation: %d\n",
+		       obd->obd_name, uuidp->uuid, gen);
 		return -EINVAL;
 	}
 
-	tgt_obd = class_find_client_obd(uuidp, LUSTRE_OSC_NAME,
-					&obd->obd_uuid);
+	tgt_obd = class_find_client_obd(uuidp, LUSTRE_OSC_NAME, &obd->obd_uuid);
 	if (!tgt_obd)
 		return -EINVAL;
 
@@ -504,10 +504,11 @@ static int lov_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
 
 	if ((index < lov->lov_tgt_size) && lov->lov_tgts[index]) {
 		tgt = lov->lov_tgts[index];
-		CERROR("UUID %s already assigned at LOV target index %d\n",
-		       obd_uuid2str(&tgt->ltd_uuid), index);
+		rc = -EEXIST;
+		CERROR("%s: UUID %s already assigned at index %d: rc = %d\n",
+		       obd->obd_name, obd_uuid2str(&tgt->ltd_uuid), index, rc);
 		mutex_unlock(&lov->lov_lock);
-		return -EEXIST;
+		return rc;
 	}
 
 	if (index >= lov->lov_tgt_size) {
@@ -602,8 +603,8 @@ static int lov_add_target(struct obd_device *obd, struct obd_uuid *uuidp,
 
 out:
 	if (rc) {
-		CERROR("add failed (%d), deleting %s\n", rc,
-		       obd_uuid2str(&tgt->ltd_uuid));
+		CERROR("%s: add failed, deleting %s: rc = %d\n",
+		       obd->obd_name, obd_uuid2str(&tgt->ltd_uuid), rc);
 		lov_del_target(obd, index, NULL, 0);
 	}
 	lov_tgts_putref(obd);
@@ -860,6 +861,7 @@ int lov_process_config_base(struct obd_device *obd, struct lustre_cfg *lcfg,
 	case LCFG_LOV_DEL_OBD: {
 		u32 index;
 		int gen;
+
 		/* lov_modify_tgts add  0:lov_mdsA  1:ost1_UUID  2:0  3:1 */
 		if (LUSTRE_CFG_BUFLEN(lcfg, 1) > sizeof(obd_uuid.uuid)) {
 			rc = -EINVAL;
@@ -868,11 +870,11 @@ int lov_process_config_base(struct obd_device *obd, struct lustre_cfg *lcfg,
 
 		obd_str2uuid(&obd_uuid,  lustre_cfg_buf(lcfg, 1));
 
-		rc = kstrtoint(lustre_cfg_buf(lcfg, 2), 10, indexp);
-		if (rc < 0)
+		rc = kstrtou32(lustre_cfg_buf(lcfg, 2), 10, indexp);
+		if (rc)
 			goto out;
 		rc = kstrtoint(lustre_cfg_buf(lcfg, 3), 10, genp);
-		if (rc < 0)
+		if (rc)
 			goto out;
 		index = *indexp;
 		gen = *genp;
@@ -882,6 +884,7 @@ int lov_process_config_base(struct obd_device *obd, struct lustre_cfg *lcfg,
 			rc = lov_add_target(obd, &obd_uuid, index, gen, 0);
 		else
 			rc = lov_del_target(obd, index, &obd_uuid, gen);
+
 		goto out;
 	}
 	case LCFG_PARAM: {
