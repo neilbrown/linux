@@ -1894,18 +1894,24 @@ ssize_t short_io_bytes_store(struct kobject *kobj, struct attribute *attr,
 	struct obd_device *dev = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct client_obd *cli = &dev->u.cli;
-	u32 val;
+	unsigned long long val;
+	char *endp;
 	int rc;
 
 	rc = lprocfs_climp_check(dev);
 	if (rc)
 		return rc;
 
-	rc = kstrtouint(buffer, 0, &val);
-	if (rc)
+	val = memparse(buffer, &endp);
+	if (*endp) {
+		rc = -EINVAL;
 		goto out;
+	}
 
-	if (val && (val < MIN_SHORT_IO_BYTES || val > OBD_MAX_SHORT_IO_BYTES)) {
+	if (val == -1)
+		val = OBD_DEF_SHORT_IO_BYTES;
+
+	if (val && (val < MIN_SHORT_IO_BYTES || val > LNET_MTU)) {
 		rc = -ERANGE;
 		goto out;
 	}
@@ -1913,10 +1919,8 @@ ssize_t short_io_bytes_store(struct kobject *kobj, struct attribute *attr,
 	rc = count;
 
 	spin_lock(&cli->cl_loi_list_lock);
-	if (val > (cli->cl_max_pages_per_rpc << PAGE_SHIFT))
-		rc = -ERANGE;
-	else
-		cli->cl_max_short_io_bytes = val;
+	cli->cl_max_short_io_bytes = min_t(unsigned long long,
+					   val, OST_MAX_SHORT_IO_BYTES);
 	spin_unlock(&cli->cl_loi_list_lock);
 
 out:
