@@ -304,8 +304,12 @@ struct obd_import {
 					imp_connect_tried:1,
 					/* connected but not FULL yet */
 					imp_connected:1,
-				  /* grant shrink disabled */
-				  imp_grant_shrink_disabled:1;
+					/* grant shrink disabled */
+					imp_grant_shrink_disabled:1,
+					/* to suppress LCONSOLE() at
+					 * conn.restore
+					 */
+					imp_was_idle:1;
 
 	u32				imp_connect_op;
 	u32				imp_idle_timeout;
