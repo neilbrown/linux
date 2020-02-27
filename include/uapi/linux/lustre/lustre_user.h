@@ -521,7 +521,7 @@ struct lu_extent {
 } __packed;
 
 #define DEXT "[%#llx, %#llx)"
-#define PEXT(ext) (ext)->e_start, (ext)->e_end
+#define PEXT(ext) (unsigned long long)(ext)->e_start, (unsigned long long)(ext)->e_end
 
 static inline bool lu_extent_is_overlapped(struct lu_extent *e1,
 					    struct lu_extent *e2)
