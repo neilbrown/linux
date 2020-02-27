@@ -49,6 +49,9 @@
 #include <uapi/linux/lnet/lnetctl.h>
 #include <uapi/linux/lnet/nidstr.h>
 
+/* LNET has 0xeXXX */
+#define CFS_FAIL_PTLRPC_OST_BULK_CB2	0xe000
+
 extern struct lnet the_lnet;	/* THE network */
 
 #if (BITS_PER_LONG == 32)
