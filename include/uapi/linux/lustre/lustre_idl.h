@@ -883,14 +883,36 @@ struct obd_connect_data {
 /*
  * Supported checksum algorithms. Up to 32 checksum types are supported.
  * (32-bit mask stored in obd_connect_data::ocd_cksum_types)
- * Please update DECLARE_CKSUM_NAME/OBD_CKSUM_ALL in obd.h when adding a new
- * algorithm and also the OBD_FL_CKSUM* flags.
+ * Please update DECLARE_CKSUM_NAME in obd_cksum.h when adding a new
+ * algorithm and also the OBD_FL_CKSUM* flags, OBD_CKSUM_ALL flag,
+ * OBD_FL_CKSUM_ALL flag and potentially OBD_CKSUM_T10_ALL flag.
  */
 enum cksum_type {
-	OBD_CKSUM_CRC32  = 0x00000001,
-	OBD_CKSUM_ADLER  = 0x00000002,
-	OBD_CKSUM_CRC32C = 0x00000004,
+	OBD_CKSUM_CRC32		= 0x00000001,
+	OBD_CKSUM_ADLER		= 0x00000002,
+	OBD_CKSUM_CRC32C	= 0x00000004,
+	OBD_CKSUM_RESERVED	= 0x00000008,
+	OBD_CKSUM_T10IP512	= 0x00000010,
+	OBD_CKSUM_T10IP4K	= 0x00000020,
+	OBD_CKSUM_T10CRC512	= 0x00000040,
+	OBD_CKSUM_T10CRC4K	= 0x00000080,
 };
+
+#define OBD_CKSUM_T10_ALL (OBD_CKSUM_T10IP512 | OBD_CKSUM_T10IP4K | \
+	OBD_CKSUM_T10CRC512 | OBD_CKSUM_T10CRC4K)
+
+#define OBD_CKSUM_ALL (OBD_CKSUM_CRC32 | OBD_CKSUM_ADLER | OBD_CKSUM_CRC32C | \
+		       OBD_CKSUM_T10_ALL)
+
+/*
+ * The default checksum algorithm used on top of T10PI GRD tags for RPC.
+ * Considering that the checksum-of-checksums is only computing CRC32 on a
+ * 4KB chunk of GRD tags for a 1MB RPC for 512B sectors, or 16KB of GRD
+ * tags for 16MB of 4KB sectors, this is only 1/256 or 1/1024 of the
+ * total data being checksummed, so the checksum type used here should not
+ * affect overall system performance noticeably.
+ */
+#define OBD_CKSUM_T10_TOP OBD_CKSUM_ADLER
 
 /*
  *   OST requests: OBDO & OBD request records
@@ -940,7 +962,10 @@ enum obdo_flags {
 	OBD_FL_CKSUM_CRC32	= 0x00001000, /* CRC32 checksum type */
 	OBD_FL_CKSUM_ADLER	= 0x00002000, /* ADLER checksum type */
 	OBD_FL_CKSUM_CRC32C	= 0x00004000, /* CRC32C checksum type */
-	OBD_FL_CKSUM_RSVD2	= 0x00008000, /* for future cksum types */
+	OBD_FL_CKSUM_T10IP512	= 0x00005000, /* T10PI IP cksum, 512B sector */
+	OBD_FL_CKSUM_T10IP4K	= 0x00006000, /* T10PI IP cksum, 4KB sector */
+	OBD_FL_CKSUM_T10CRC512	= 0x00007000, /* T10PI CRC cksum, 512B sector */
+	OBD_FL_CKSUM_T10CRC4K	= 0x00008000, /* T10PI CRC cksum, 4KB sector */
 	OBD_FL_CKSUM_RSVD3	= 0x00010000, /* for future cksum types */
 	OBD_FL_SHRINK_GRANT	= 0x00020000, /* object shrink the grant */
 	OBD_FL_MMAP		= 0x00040000, /* object is mmapped on the client.
@@ -953,11 +978,16 @@ enum obdo_flags {
 	OBD_FL_SHORT_IO		= 0x00400000, /* short io request */
 	/* OBD_FL_LOCAL_MASK = 0xF0000000, was local-only flags until 2.10 */
 
-	/* Note that while these checksum values are currently separate bits,
-	 * in 2.x we can actually allow all values from 1-31 if we wanted.
+	/*
+	 * Note that while the original checksum values were separate bits,
+	 * in 2.x we can actually allow all values from 1-31. T10-PI checksum
+	 * types already use values which are not separate bits.
 	 */
 	OBD_FL_CKSUM_ALL	= (OBD_FL_CKSUM_CRC32 | OBD_FL_CKSUM_ADLER |
-				   OBD_FL_CKSUM_CRC32C),
+				   OBD_FL_CKSUM_CRC32C | OBD_FL_CKSUM_T10IP512 |
+				   OBD_FL_CKSUM_T10IP4K |
+				   OBD_FL_CKSUM_T10CRC512 |
+				   OBD_FL_CKSUM_T10CRC4K),
 };
 
 /*
