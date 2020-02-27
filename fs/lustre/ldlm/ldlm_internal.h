@@ -137,7 +137,8 @@ ldlm_lock_create(struct ldlm_namespace *ns, const struct ldlm_res_id *id,
 		 enum ldlm_type type, enum ldlm_mode mode,
 		 const struct ldlm_callback_suite *cbs,
 		 void *data, u32 lvb_len, enum lvb_type lvb_type);
-enum ldlm_error ldlm_lock_enqueue(struct ldlm_namespace *ns,
+enum ldlm_error ldlm_lock_enqueue(const struct lu_env *env,
+				  struct ldlm_namespace *ns,
 				  struct ldlm_lock **lock, void *cookie,
 				  u64 *flags);
 void ldlm_lock_addref_internal(struct ldlm_lock *lock, enum ldlm_mode mode);
