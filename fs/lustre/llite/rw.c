@@ -503,7 +503,7 @@ static void ll_readahead_handle_work(struct work_struct *wq)
 	}
 
 	io = vvp_env_thread_io(env);
-	ll_io_init(io, file, 0);
+	ll_io_init(io, file, 0, NULL);
 
 	rc = ll_readahead_file_kms(env, io, &kms);
 	if (rc != 0)
