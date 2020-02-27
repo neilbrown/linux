@@ -915,7 +915,19 @@ static int ll_agl_thread(void *arg)
 			schedule();
 		__set_current_state(TASK_RUNNING);
 	}
+	return 0;
+}
 
+static void ll_stop_agl(struct ll_statahead_info *sai)
+{
+	struct ll_inode_info *plli = ll_i2info(sai->sai_dentry->d_inode);
+	struct ll_inode_info *clli;
+
+	CDEBUG(D_READA, "stop agl thread: sai %p pid %u\n",
+	       sai, (unsigned int)sai->sai_agl_task->pid);
+	kthread_stop(sai->sai_agl_task);
+
+	sai->sai_agl_task = NULL;
 	spin_lock(&plli->lli_agl_lock);
 	sai->sai_agl_valid = 0;
 	while ((clli = list_first_entry_or_null(&sai->sai_agls,
@@ -929,9 +941,8 @@ static int ll_agl_thread(void *arg)
 	}
 	spin_unlock(&plli->lli_agl_lock);
 	CDEBUG(D_READA, "agl thread stopped: sai %p, parent %pd\n",
-	       sai, parent);
+	       sai, sai->sai_dentry);
 	ll_sai_put(sai);
-	return 0;
 }
 
 /* start agl thread */
@@ -1134,13 +1145,9 @@ static int ll_statahead_thread(void *arg)
 		__set_current_state(TASK_RUNNING);
 	}
 out:
-	if (sai->sai_agl_task) {
-		kthread_stop(sai->sai_agl_task);
+	if (sai->sai_agl_task)
+		ll_stop_agl(sai);
 
-		CDEBUG(D_READA, "stop agl thread: sai %p pid %u\n",
-		       sai, (unsigned int)sai->sai_agl_task->pid);
-		sai->sai_agl_task = NULL;
-	}
 	/*
 	 * wait for inflight statahead RPCs to finish, and then we can free sai
 	 * safely because statahead RPC will access sai data
