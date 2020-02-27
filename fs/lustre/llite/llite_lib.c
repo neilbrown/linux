@@ -42,6 +42,7 @@
 #include <linux/statfs.h>
 #include <linux/types.h>
 #include <linux/mm.h>
+#include <linux/delay.h>
 #include <linux/uuid.h>
 #include <linux/random.h>
 #include <linux/security.h>
@@ -2344,7 +2345,7 @@ void ll_umount_begin(struct super_block *sb)
 	 * to decrement mnt_cnt and hope to finish it within 10sec.
 	 */
 	while (cnt < 10 && !may_umount(sbi->ll_mnt.mnt)) {
-		schedule_timeout_uninterruptible(HZ);
+		ssleep(1);
 		cnt++;
 	}
 

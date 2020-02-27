@@ -33,6 +33,8 @@
 
 #define DEBUG_SUBSYSTEM S_LOV
 
+#include <linux/delay.h>
+
 #include <obd_class.h>
 #include <uapi/linux/lustre/lustre_idl.h>
 #include "lov_internal.h"
@@ -130,7 +132,7 @@ static int lov_check_and_wait_active(struct lov_obd *lov, int ost_idx)
 	mutex_unlock(&lov->lov_lock);
 
 	while (cnt < obd_timeout && !lov_check_set(lov, ost_idx)) {
-		schedule_timeout_uninterruptible(HZ);
+		ssleep(1);
 		cnt++;
 	}
 	if (tgt->ltd_active)

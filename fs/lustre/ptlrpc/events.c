@@ -34,9 +34,8 @@
 #define DEBUG_SUBSYSTEM S_RPC
 
 #include <linux/libcfs/libcfs.h>
-# ifdef __mips64__
-#  include <linux/kernel.h>
-# endif
+#include <linux/kernel.h>
+#include <linux/delay.h>
 
 #include <obd_class.h>
 #include <lustre_net.h>
@@ -522,7 +521,7 @@ static void ptlrpc_ni_fini(void)
 			if (retries != 0)
 				CWARN("Event queue still busy\n");
 
-			schedule_timeout_uninterruptible(2 * HZ);
+			ssleep(2);
 			break;
 		}
 	}

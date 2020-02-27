@@ -40,6 +40,7 @@
 #define DEBUG_SUBSYSTEM S_FID
 
 #include <linux/module.h>
+#include <linux/delay.h>
 
 #include <obd.h>
 #include <obd_class.h>
@@ -155,6 +156,12 @@ static int seq_client_alloc_meta(const struct lu_env *env,
 		 */
 		rc = seq_client_rpc(seq, &seq->lcs_space,
 				    SEQ_ALLOC_META, "meta");
+		if (rc == -EINPROGRESS || rc == -EAGAIN)
+			/* MDT0 is not ready, let's wait for 2
+			 * seconds and retry.
+			 */
+			ssleep(2);
+
 	} while (rc == -EINPROGRESS || rc == -EAGAIN);
 
 	return rc;
