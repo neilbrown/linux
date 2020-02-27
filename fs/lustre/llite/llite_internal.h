@@ -1033,7 +1033,6 @@ struct ll_cl_context {
 };
 
 struct ll_thread_info {
-	struct iov_iter		lti_iter;
 	struct vvp_io_args	lti_args;
 	struct ra_io_arg	lti_ria;
 	struct ll_cl_context	lti_io_ctx;
