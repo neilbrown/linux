@@ -597,8 +597,8 @@ EXPORT_SYMBOL(lustre_put_lsi);
  *
  * Returns:	rc < 0  on error
  */
-static int server_name2fsname(const char *svname, char *fsname,
-			      const char **endptr)
+int server_name2fsname(const char *svname, char *fsname,
+		       const char **endptr)
 {
 	const char *dash;
 
@@ -618,6 +618,7 @@ static int server_name2fsname(const char *svname, char *fsname,
 
 	return 0;
 }
+EXPORT_SYMBOL(server_name2fsname);
 
 /* Get the index from the obd name.
  *  rc = server type, or

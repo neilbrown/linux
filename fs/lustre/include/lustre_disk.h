@@ -145,6 +145,7 @@ struct lustre_sb_info {
 /****************** prototypes *********************/
 
 /* obd_mount.c */
+int server_name2fsname(const char *svname, char *fsname, const char **endptr);
 
 int lustre_start_mgc(struct super_block *sb);
 int lustre_common_put_super(struct super_block *sb);
