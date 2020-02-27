@@ -936,4 +936,5 @@ void lnet_router_debugfs_init(void)
 
 void lnet_router_debugfs_fini(void)
 {
+	lnet_remove_debugfs(lnet_table);
 }
