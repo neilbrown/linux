@@ -166,7 +166,6 @@ void lprocfs_echo_init_vars(struct lprocfs_static_vars *lvars);
 
 /* Passed as data param to class_config_parse_llog */
 struct config_llog_instance {
-	char		       *cfg_obdname;
 	void		       *cfg_instance;
 	struct super_block     *cfg_sb;
 	struct obd_uuid		cfg_uuid;
