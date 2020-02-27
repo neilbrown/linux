@@ -165,7 +165,7 @@ static int vvp_prep_size(const struct lu_env *env, struct cl_object *obj,
 				 * --bug 17336
 				 */
 				loff_t size = i_size_read(inode);
-				loff_t cur_index = start >> PAGE_SHIFT;
+				unsigned long cur_index = start >> PAGE_SHIFT;
 				loff_t size_index = (size - 1) >> PAGE_SHIFT;
 
 				if ((size == 0 && cur_index != 0) ||

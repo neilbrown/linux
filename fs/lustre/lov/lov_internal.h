@@ -79,11 +79,15 @@ struct lov_stripe_md {
 	spinlock_t	lsm_lock;
 	pid_t		lsm_lock_owner; /* debugging */
 
-	/*
-	 * maximum possible file size, might change as OSTs status changes,
-	 * e.g. disconnected, deactivated
-	 */
-	loff_t		lsm_maxbytes;
+	union {
+		/*
+		 * maximum possible file size, might change as OSTs status
+		 * changes, e.g. disconnected, deactivated
+		 */
+		loff_t          lsm_maxbytes;
+		/* size of full foreign LOV */
+		size_t          lsm_foreign_size;
+	};
 	struct ost_id	lsm_oi;
 	u32		lsm_magic;
 	u32		lsm_layout_gen;
@@ -93,6 +97,8 @@ struct lov_stripe_md {
 	u16		lsm_entry_count;
 	struct lov_stripe_md_entry *lsm_entries[];
 };
+
+#define lsm_foreign(lsm) (lsm->lsm_entries[0])
 
 static inline bool lsme_inited(const struct lov_stripe_md_entry *lsme)
 {
@@ -118,6 +124,9 @@ static inline size_t lov_comp_md_size(const struct lov_stripe_md *lsm)
 	if (lsm->lsm_magic == LOV_MAGIC_V1 || lsm->lsm_magic == LOV_MAGIC_V3)
 		return lov_mds_md_size(lsm->lsm_entries[0]->lsme_stripe_count,
 				       lsm->lsm_entries[0]->lsme_magic);
+
+	if (lsm->lsm_magic == LOV_MAGIC_FOREIGN)
+		return lsm->lsm_foreign_size;
 
 	LASSERT(lsm->lsm_magic == LOV_MAGIC_COMP_V1);
 

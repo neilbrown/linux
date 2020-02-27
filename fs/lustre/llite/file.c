@@ -1827,7 +1827,8 @@ int ll_lov_getstripe_ea_info(struct inode *inode, const char *filename,
 
 	if (lmm->lmm_magic != cpu_to_le32(LOV_MAGIC_V1) &&
 	    lmm->lmm_magic != cpu_to_le32(LOV_MAGIC_V3) &&
-	    lmm->lmm_magic != cpu_to_le32(LOV_MAGIC_COMP_V1)) {
+	    lmm->lmm_magic != cpu_to_le32(LOV_MAGIC_COMP_V1) &&
+	    lmm->lmm_magic != cpu_to_le32(LOV_MAGIC_FOREIGN)) {
 		rc = -EPROTO;
 		goto out;
 	}
@@ -1863,6 +1864,15 @@ int ll_lov_getstripe_ea_info(struct inode *inode, const char *filename,
 								stripe_count);
 		} else if (lmm->lmm_magic == cpu_to_le32(LOV_MAGIC_COMP_V1)) {
 			lustre_swab_lov_comp_md_v1((struct lov_comp_md_v1 *)lmm);
+		} else if (lmm->lmm_magic ==
+			   cpu_to_le32(LOV_MAGIC_FOREIGN)) {
+			struct lov_foreign_md *lfm;
+
+			lfm = (struct lov_foreign_md *)lmm;
+			__swab32s(&lfm->lfm_magic);
+			__swab32s(&lfm->lfm_length);
+			__swab32s(&lfm->lfm_type);
+			__swab32s(&lfm->lfm_flags);
 		}
 	}
 
