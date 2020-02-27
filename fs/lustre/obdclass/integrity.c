@@ -229,7 +229,7 @@ static void obd_t10_performance_test(const char *obd_name,
 	for (start = jiffies, end = start + HZ / 4,
 	     bcount = 0; time_before(jiffies, end) && rc == 0; bcount++) {
 		rc = __obd_t10_performance_test(obd_name, cksum_type, page,
-						buf_len / PAGE_SIZE);
+						buf_len >> PAGE_SHIFT);
 		if (rc)
 			break;
 	}

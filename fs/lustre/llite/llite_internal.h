@@ -464,22 +464,22 @@ struct ll_ra_info {
  * counted by page index.
  */
 struct ra_io_arg {
-	pgoff_t		ria_start;	/* start offset of read-ahead*/
-	pgoff_t		ria_end;	/* end offset of read-ahead*/
+	pgoff_t		ria_start_idx;	/* start offset of read-ahead*/
+	pgoff_t		ria_end_idx;	/* end offset of read-ahead*/
 	unsigned long	ria_reserved;	/* reserved pages for read-ahead */
-	pgoff_t		ria_end_min;	/* minimum end to cover current read */
+	pgoff_t		ria_end_idx_min;/* minimum end to cover current read */
 	bool		ria_eof;	/* reach end of file */
-	/* If stride read pattern is detected, ria_stoff means where
-	 * stride read is started. Note: for normal read-ahead, the
+	/* If stride read pattern is detected, ria_stoff is the byte offset
+	 * where stride read is started. Note: for normal read-ahead, the
 	 * value here is meaningless, and also it will not be accessed
 	 */
-	unsigned long	ria_stoff;
+	loff_t		ria_stoff;
 	/* ria_length and ria_bytes are the length and pages length in the
 	 * stride I/O mode. And they will also be used to check whether
 	 * it is stride I/O read-ahead in the read-ahead pages
 	 */
-	unsigned long	ria_length;
-	unsigned long	ria_bytes;
+	loff_t		ria_length;
+	loff_t		ria_bytes;
 };
 
 /* LL_HIST_MAX=32 causes an overflow */
@@ -697,9 +697,9 @@ struct ll_sb_info {
  * per file-descriptor read-ahead data.
  */
 struct ll_readahead_state {
-	spinlock_t  ras_lock;
+	spinlock_t	ras_lock;
 	/* End byte that read(2) try to read.  */
-	unsigned long	ras_last_read_end;
+	loff_t		ras_last_read_end_bytes;
 	/*
 	 * number of bytes read after last read-ahead window reset. As window
 	 * is reset on each seek, this is effectively a number of consecutive
@@ -710,7 +710,7 @@ struct ll_readahead_state {
 	 * case, it probably doesn't make sense to expand window to
 	 * PTLRPC_MAX_BRW_PAGES on the third access.
 	 */
-	unsigned long	ras_consecutive_bytes;
+	loff_t		ras_consecutive_bytes;
 	/*
 	 * number of read requests after the last read-ahead window reset
 	 * As window is reset on each seek, this is effectively the number
@@ -724,12 +724,13 @@ struct ll_readahead_state {
 	 * expanded to PTLRPC_MAX_BRW_PAGES. Afterwards, window is enlarged by
 	 * PTLRPC_MAX_BRW_PAGES chunks up to ->ra_max_pages.
 	 */
-	pgoff_t		ras_window_start, ras_window_len;
+	pgoff_t		ras_window_start_idx;
+	pgoff_t		ras_window_pages;
 	/*
-	 * Optimal RPC size. It decides how many pages will be sent
-	 * for each read-ahead.
+	 * Optimal RPC size in pages.
+	 * It decides how many pages will be sent for each read-ahead.
 	 */
-	unsigned long	ras_rpc_size;
+	unsigned long	ras_rpc_pages;
 	/*
 	 * Where next read-ahead should start at. This lies within read-ahead
 	 * window. Read-ahead window is read in pieces rather than at once
@@ -737,7 +738,7 @@ struct ll_readahead_state {
 	 * ->ra_max_pages (see ll_ra_count_get()), 2. client cannot read pages
 	 * not covered by DLM lock.
 	 */
-	pgoff_t		ras_next_readahead;
+	pgoff_t		ras_next_readahead_idx;
 	/*
 	 * Total number of ll_file_read requests issued, reads originating
 	 * due to mmap are not counted in this total.  This value is used to
@@ -755,9 +756,9 @@ struct ll_readahead_state {
 	 * ras_stride_bytes = stride_bytes;
 	 * Note: all these three items are counted by bytes.
 	 */
-	unsigned long	ras_stride_length;
-	unsigned long	ras_stride_bytes;
-	unsigned long	ras_stride_offset;
+	loff_t		ras_stride_length;
+	loff_t		ras_stride_bytes;
+	loff_t		ras_stride_offset;
 	/*
 	 * number of consecutive stride request count, and it is similar as
 	 * ras_consecutive_requests, but used for stride I/O mode.
@@ -766,7 +767,7 @@ struct ll_readahead_state {
 	 */
 	unsigned long	ras_consecutive_stride_requests;
 	/* index of the last page that async readahead starts */
-	pgoff_t		ras_async_last_readpage;
+	pgoff_t		ras_async_last_readpage_idx;
 	/* whether we should increase readahead window */
 	bool		ras_need_increase_window;
 	/* whether ra miss check should be skipped */
@@ -776,10 +777,8 @@ struct ll_readahead_state {
 struct ll_readahead_work {
 	/** File to readahead */
 	struct file			*lrw_file;
-	/** Start bytes */
-	unsigned long			 lrw_start;
-	/** End bytes */
-	unsigned long			 lrw_end;
+	pgoff_t				 lrw_start_idx;
+	pgoff_t				 lrw_end_idx;
 
 	/* async worker to handler read */
 	struct work_struct		 lrw_readahead_work;
@@ -868,7 +867,7 @@ static inline bool ll_sbi_has_file_heat(struct ll_sb_info *sbi)
 	return !!(sbi->ll_flags & LL_SBI_FILE_HEAT);
 }
 
-void ll_ras_enter(struct file *f, unsigned long pos, unsigned long count);
+void ll_ras_enter(struct file *f, loff_t pos, size_t count);
 
 /* llite/lcommon_misc.c */
 int cl_ocd_update(struct obd_device *host, struct obd_device *watched,
