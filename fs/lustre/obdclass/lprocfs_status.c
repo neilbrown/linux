@@ -123,6 +123,7 @@ static const char * const obd_connect_names[] = {
 	"unknown",		/* 0x200 */
 	"selinux_policy",	/* 0x400 */
 	"lsom",			/* 0x800 */
+	"pcc",			/* 0x1000 */
 	NULL
 };
 
