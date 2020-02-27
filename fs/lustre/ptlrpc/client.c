@@ -2529,9 +2529,6 @@ EXPORT_SYMBOL(ptlrpc_req_xid);
  */
 static int ptlrpc_unregister_reply(struct ptlrpc_request *request, int async)
 {
-	int rc;
-	wait_queue_head_t *wq;
-
 	/* Might sleep. */
 	LASSERT(!in_interrupt());
 
@@ -2558,29 +2555,21 @@ static int ptlrpc_unregister_reply(struct ptlrpc_request *request, int async)
 	if (async)
 		return 0;
 
-	/*
-	 * We have to wait_event_idle_timeout() whatever the result, to get
-	 * a chance to run reply_in_callback(), and to make sure we've
-	 * unlinked before returning a req to the pool.
-	 */
-	if (request->rq_set)
-		wq = &request->rq_set->set_waitq;
-	else
-		wq = &request->rq_reply_waitq;
-
 	for (;;) {
+		wait_queue_head_t *wq = (request->rq_set) ?
+					&request->rq_set->set_waitq :
+					&request->rq_reply_waitq;
+		int seconds = LONG_UNLINK;
 		/*
 		 * Network access will complete in finite time but the HUGE
 		 * timeout lets us CWARN for visibility of sluggish NALs
 		 */
-		int cnt = 0;
-
-		while (cnt < LONG_UNLINK &&
-		       (rc = wait_event_idle_timeout(*wq,
-						     !ptlrpc_client_recv_or_unlink(request),
-						     HZ)) == 0)
-			cnt += 1;
-		if (rc > 0) {
+		while (seconds > LONG_UNLINK &&
+		       (wait_event_idle_timeout(*wq,
+						!ptlrpc_client_recv_or_unlink(request),
+						HZ)) == 0)
+			seconds -= 1;
+		if (seconds > 0) {
 			ptlrpc_rqphase_move(request, request->rq_next_phase);
 			return 1;
 		}

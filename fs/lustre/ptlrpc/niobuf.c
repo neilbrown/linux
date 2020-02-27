@@ -248,8 +248,6 @@ static int ptlrpc_register_bulk(struct ptlrpc_request *req)
 int ptlrpc_unregister_bulk(struct ptlrpc_request *req, int async)
 {
 	struct ptlrpc_bulk_desc *desc = req->rq_bulk;
-	wait_queue_head_t *wq;
-	int rc;
 
 	LASSERT(!in_interrupt());     /* might sleep */
 
@@ -280,23 +278,23 @@ int ptlrpc_unregister_bulk(struct ptlrpc_request *req, int async)
 	if (async)
 		return 0;
 
-	if (req->rq_set)
-		wq = &req->rq_set->set_waitq;
-	else
-		wq = &req->rq_reply_waitq;
-
 	for (;;) {
-		/* Network access will complete in finite time but the HUGE
+		/* The wq argument is ignored by user-space wait_event macros */
+		wait_queue_head_t *wq = (req->rq_set != NULL) ?
+					&req->rq_set->set_waitq :
+					&req->rq_reply_waitq;
+		/*
+		 * Network access will complete in finite time but the HUGE
 		 * timeout lets us CWARN for visibility of sluggish LNDs
 		 */
-		int cnt = 0;
+		int seconds = LONG_UNLINK;
 
-		while (cnt < LONG_UNLINK &&
-		       (rc = wait_event_idle_timeout(*wq,
-						     !ptlrpc_client_bulk_active(req),
-						     HZ)) == 0)
-			cnt += 1;
-		if (rc > 0) {
+		while (seconds > LONG_UNLINK &&
+		       wait_event_idle_timeout(*wq,
+					       !ptlrpc_client_bulk_active(req),
+					       HZ) == 0)
+			seconds -= 1;
+		if (seconds > 0) {
 			ptlrpc_rqphase_move(req, req->rq_next_phase);
 			return 1;
 		}
