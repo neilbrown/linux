@@ -1672,13 +1672,6 @@ extern int (*ptlrpc_put_connection_superhack)(struct ptlrpc_connection *c);
 /* obd_mount.c */
 int lustre_check_exclusion(struct super_block *sb, char *svname);
 
-typedef u8 class_uuid_t[16];
-
-static inline void class_uuid_unparse(class_uuid_t uu, struct obd_uuid *out)
-{
-	sprintf(out->uuid, "%pU", uu);
-}
-
 /* lustre_peer.c    */
 int lustre_uuid_to_peer(const char *uuid, lnet_nid_t *peer_nid, int index);
 int class_add_uuid(const char *uuid, u64 nid);
@@ -1689,9 +1682,6 @@ int class_check_uuid(struct obd_uuid *uuid, u64 nid);
 extern char obd_jobid_name[];
 int class_procfs_init(void);
 int class_procfs_clean(void);
-/* prng.c */
-#define ll_generate_random_uuid(uuid_out) \
-	get_random_bytes(uuid_out, sizeof(class_uuid_t))
 
 /* statfs_pack.c */
 struct kstatfs;

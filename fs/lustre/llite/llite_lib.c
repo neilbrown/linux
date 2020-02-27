@@ -38,9 +38,11 @@
 #define DEBUG_SUBSYSTEM S_LLITE
 
 #include <linux/module.h>
+#include <linux/random.h>
 #include <linux/statfs.h>
 #include <linux/types.h>
 #include <linux/mm.h>
+#include <linux/uuid.h>
 #include <linux/random.h>
 #include <linux/security.h>
 #include <linux/fs_struct.h>
@@ -69,7 +71,6 @@ static struct ll_sb_info *ll_init_sbi(void)
 	unsigned long pages;
 	unsigned long lru_page_max;
 	struct sysinfo si;
-	class_uuid_t uuid;
 	int i;
 
 	sbi = kzalloc(sizeof(*sbi), GFP_NOFS);
@@ -96,11 +97,6 @@ static struct ll_sb_info *ll_init_sbi(void)
 						    SBI_DEFAULT_READAHEAD_MAX);
 	sbi->ll_ra_info.ra_max_pages = sbi->ll_ra_info.ra_max_pages_per_file;
 	sbi->ll_ra_info.ra_max_read_ahead_whole_pages = -1;
-
-	ll_generate_random_uuid(uuid);
-	sprintf(sbi->ll_sb_uuid.uuid, "%pU", uuid);
-
-	CDEBUG(D_CONFIG, "generated uuid: %s\n", sbi->ll_sb_uuid.uuid);
 
 	sbi->ll_flags |= LL_SBI_VERBOSE;
 	sbi->ll_flags |= LL_SBI_CHECKSUM;
@@ -965,6 +961,7 @@ int ll_fill_super(struct super_block *sb)
 	char *profilenm = get_profile_name(sb);
 	struct config_llog_instance *cfg;
 	char name[MAX_OBD_NAME];
+	uuid_t uuid;
 	char *ptr;
 	int len;
 	int err;
@@ -991,12 +988,14 @@ int ll_fill_super(struct super_block *sb)
 	if (err)
 		goto out_free;
 
-	err = super_setup_bdi_name(sb, "lustre-%p", sb);
-	if (err)
-		goto out_free;
-
 	/* kernel >= 2.6.38 store dentry operations in sb->s_d_op. */
 	sb->s_d_op = &ll_d_ops;
+
+	/* UUID handling */
+	generate_random_uuid(uuid.b);
+	snprintf(sbi->ll_sb_uuid.uuid, UUID_SIZE, "%pU", uuid.b);
+
+	CDEBUG(D_CONFIG, "llite sb uuid: %s\n", sbi->ll_sb_uuid.uuid);
 
 	/* Get fsname */
 	len = strlen(lsi->lsi_lmd->lmd_profile);
@@ -1020,6 +1019,10 @@ int ll_fill_super(struct super_block *sb)
 	/* Mount info */
 	snprintf(name, sizeof(name), "%.*s-%px", len,
 		 lsi->lsi_lmd->lmd_profile, sb);
+
+	err = super_setup_bdi_name(sb, "%s", name);
+	if (err)
+		goto out_free;
 
 	/* Call ll_debugsfs_register_super() before lustre_process_log()
 	 * so that "llite.*.*" params can be processed correctly.
