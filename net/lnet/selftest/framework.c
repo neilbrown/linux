@@ -82,19 +82,19 @@ do {					\
 	__swab64s(&(rc).bulk_put);	\
 } while (0)
 
-#define sfw_unpack_lnet_counters(lc)	\
-do {					\
-	__swab32s(&(lc).errors);	\
-	__swab32s(&(lc).msgs_max);	\
-	__swab32s(&(lc).msgs_alloc);	\
-	__swab32s(&(lc).send_count);	\
-	__swab32s(&(lc).recv_count);	\
-	__swab32s(&(lc).drop_count);	\
-	__swab32s(&(lc).route_count);	\
-	__swab64s(&(lc).send_length);	\
-	__swab64s(&(lc).recv_length);	\
-	__swab64s(&(lc).drop_length);	\
-	__swab64s(&(lc).route_length);	\
+#define sfw_unpack_lnet_counters(lc)		\
+do {						\
+	__swab32s(&(lc).lcc_errors);		\
+	__swab32s(&(lc).lcc_msgs_max);		\
+	__swab32s(&(lc).lcc_msgs_alloc);	\
+	__swab32s(&(lc).lcc_send_count);	\
+	__swab32s(&(lc).lcc_recv_count);	\
+	__swab32s(&(lc).lcc_drop_count);	\
+	__swab32s(&(lc).lcc_route_count);	\
+	__swab64s(&(lc).lcc_send_length);	\
+	__swab64s(&(lc).lcc_recv_length);	\
+	__swab64s(&(lc).lcc_drop_length);	\
+	__swab64s(&(lc).lcc_route_length);	\
 } while (0)
 
 #define sfw_test_active(t)	(atomic_read(&(t)->tsi_nactive))
@@ -377,7 +377,7 @@ sfw_get_stats(struct srpc_stat_reqst *request, struct srpc_stat_reply *reply)
 		return 0;
 	}
 
-	lnet_counters_get(&reply->str_lnet);
+	lnet_counters_get_common(&reply->str_lnet);
 	srpc_get_counters(&reply->str_rpc);
 
 	/*
