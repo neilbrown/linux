@@ -363,6 +363,11 @@ getxattr_nocache:
 
 		/* only detect the xattr size */
 		if (size == 0) {
+			/* LU-11109: Older MDTs do not distinguish
+			 * between nonexistent xattrs and zero length
+			 * values in this case. Newer MDTs will return
+			 * -ENODATA or set OBD_MD_FLXATTR.
+			 */
 			rc = body->mbo_eadatasize;
 			goto out;
 		}
@@ -375,7 +380,22 @@ getxattr_nocache:
 		}
 
 		if (body->mbo_eadatasize == 0) {
-			rc = -ENODATA;
+			/* LU-11109: Newer MDTs set OBD_MD_FLXATTR on
+			 * success so that we can distinguish between
+			 * zero length value and nonexistent xattr.
+			 *
+			 * If OBD_MD_FLXATTR is not set then we keep
+			 * the old behavior and return -ENODATA for
+			 * getxattr() when mbo_eadatasize is 0. But
+			 * -ENODATA only makes sense for getxattr()
+			 * and not for listxattr().
+			 */
+			if (body->mbo_valid & OBD_MD_FLXATTR)
+				rc = 0;
+			else if (valid == OBD_MD_FLXATTR)
+				rc = -ENODATA;
+			else
+				rc = 0;
 			goto out;
 		}
 
