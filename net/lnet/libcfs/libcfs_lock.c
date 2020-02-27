@@ -66,7 +66,7 @@ cfs_percpt_lock_create(struct cfs_cpt_table *cptab,
 		return NULL;
 
 	pcl->pcl_cptab = cptab;
-	pcl->pcl_locks = cfs_percpt_alloc(cptab, sizeof(*lock));
+	pcl->pcl_locks = cfs_percpt_alloc(cptab, sizeof(*pcl->pcl_locks[0]));
 	if (!pcl->pcl_locks) {
 		kfree(pcl);
 		return NULL;

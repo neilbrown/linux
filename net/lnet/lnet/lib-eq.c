@@ -95,7 +95,7 @@ LNetEQAlloc(unsigned int count, lnet_eq_handler_t callback,
 		return -ENOMEM;
 
 	if (count) {
-		eq->eq_events = kvmalloc_array(count, sizeof(struct lnet_event),
+		eq->eq_events = kvmalloc_array(count, sizeof(*eq->eq_events),
 					       GFP_KERNEL | __GFP_ZERO);
 		if (!eq->eq_events)
 			goto failed;

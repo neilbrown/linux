@@ -793,7 +793,7 @@ lnet_ptl_setup(struct lnet_portal *ptl, int index)
 	int j;
 
 	ptl->ptl_mtables = cfs_percpt_alloc(lnet_cpt_table(),
-					    sizeof(struct lnet_match_table));
+					    sizeof(*ptl->ptl_mtables[0]));
 	if (!ptl->ptl_mtables) {
 		CERROR("Failed to create match table for portal %d\n", index);
 		return -ENOMEM;
