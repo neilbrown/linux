@@ -140,11 +140,12 @@ void *class_handle2object(u64 cookie, const char *owner)
 		if (h->h_cookie != cookie || h->h_owner != owner)
 			continue;
 
-		refcount_inc(&h->h_ref);
-		CDEBUG(D_INFO, "GET %s %p refcount=%d\n",
+		if (refcount_inc_not_zero(&h->h_ref)) {
+			CDEBUG(D_INFO, "GET %s %p refcount=%d\n",
 		       h->h_owner, h,
 		       refcount_read(&h->h_ref));
-		retval = h;
+			retval = h;
+		}
 		break;
 	}
 	rcu_read_unlock();
