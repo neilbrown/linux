@@ -2273,6 +2273,12 @@ static int ptlrpc_main(void *arg)
 			ptlrpc_start_thread(svcpt, 0);
 		}
 
+		/* reset le_ses to initial state */
+		env->le_ses = NULL;
+		/* Refill the context before execution to make sure
+		 * all thread keys are allocated
+		 */
+		lu_env_refill(env);
 		/* Process all incoming reqs before handling any */
 		if (ptlrpc_server_request_incoming(svcpt)) {
 			lu_context_enter(&env->le_ctx);
