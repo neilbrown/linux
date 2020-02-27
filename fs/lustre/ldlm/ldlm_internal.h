@@ -87,7 +87,7 @@ struct ldlm_namespace *ldlm_namespace_first_locked(enum ldlm_side client);
 
 /* ldlm_request.c */
 /* Cancel lru flag, it indicates we cancel aged locks. */
-enum {
+enum ldlm_lru_flags {
 	LDLM_LRU_FLAG_AGED	= BIT(0), /* Cancel old non-LRU resize locks */
 	LDLM_LRU_FLAG_PASSED	= BIT(1), /* Cancel passed number of locks. */
 	LDLM_LRU_FLAG_SHRINK	= BIT(2), /* Cancel locks from shrinker. */
@@ -104,10 +104,12 @@ enum {
 };
 
 int ldlm_cancel_lru(struct ldlm_namespace *ns, int nr,
-		    enum ldlm_cancel_flags sync, int flags);
+		    enum ldlm_cancel_flags cancel_flags,
+		    enum ldlm_lru_flags lru_flags);
 int ldlm_cancel_lru_local(struct ldlm_namespace *ns,
 			  struct list_head *cancels, int count, int max,
-			  enum ldlm_cancel_flags cancel_flags, int flags);
+			  enum ldlm_cancel_flags cancel_flags,
+			  enum ldlm_lru_flags lru_flags);
 extern unsigned int ldlm_enqueue_min;
 extern unsigned int ldlm_cancel_unused_locks_before_replay;
 

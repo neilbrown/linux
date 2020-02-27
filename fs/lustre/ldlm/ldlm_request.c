@@ -590,7 +590,8 @@ int ldlm_prep_elc_req(struct obd_export *exp, struct ptlrpc_request *req,
 	struct ldlm_namespace *ns = exp->exp_obd->obd_namespace;
 	struct req_capsule *pill = &req->rq_pill;
 	struct ldlm_request *dlm = NULL;
-	int flags, avail, to_free, pack = 0;
+	enum ldlm_lru_flags lru_flags;
+	int avail, to_free, pack = 0;
 	LIST_HEAD(head);
 	int rc;
 
@@ -601,9 +602,9 @@ int ldlm_prep_elc_req(struct obd_export *exp, struct ptlrpc_request *req,
 		req_capsule_filled_sizes(pill, RCL_CLIENT);
 		avail = ldlm_capsule_handles_avail(pill, RCL_CLIENT, canceloff);
 
-		flags = LDLM_LRU_FLAG_NO_WAIT |
-			(ns_connect_lru_resize(ns) ?
-			 LDLM_LRU_FLAG_LRUR : LDLM_LRU_FLAG_AGED);
+		lru_flags = LDLM_LRU_FLAG_NO_WAIT |
+			    (ns_connect_lru_resize(ns) ?
+			     LDLM_LRU_FLAG_LRUR : LDLM_LRU_FLAG_AGED);
 		to_free = !ns_connect_lru_resize(ns) &&
 			  opc == LDLM_ENQUEUE ? 1 : 0;
 
@@ -614,7 +615,8 @@ int ldlm_prep_elc_req(struct obd_export *exp, struct ptlrpc_request *req,
 		 */
 		if (avail > count)
 			count += ldlm_cancel_lru_local(ns, cancels, to_free,
-						       avail - count, 0, flags);
+						       avail - count, 0,
+						       lru_flags);
 		if (avail > count)
 			pack = count;
 		else
@@ -1279,7 +1281,8 @@ int ldlm_cli_cancel(const struct lustre_handle *lockh,
 		    enum ldlm_cancel_flags cancel_flags)
 {
 	struct obd_export *exp;
-	int avail, flags, count = 1;
+	enum ldlm_lru_flags lru_flags;
+	int avail, count = 1;
 	u64 rc = 0;
 	struct ldlm_namespace *ns;
 	struct ldlm_lock *lock;
@@ -1354,10 +1357,10 @@ int ldlm_cli_cancel(const struct lustre_handle *lockh,
 		LASSERT(avail > 0);
 
 		ns = ldlm_lock_to_ns(lock);
-		flags = ns_connect_lru_resize(ns) ?
-			LDLM_LRU_FLAG_LRUR : LDLM_LRU_FLAG_AGED;
+		lru_flags = ns_connect_lru_resize(ns) ?
+			    LDLM_LRU_FLAG_LRUR : LDLM_LRU_FLAG_AGED;
 		count += ldlm_cancel_lru_local(ns, &cancels, 0, avail - 1,
-					       LCF_BL_AST, flags);
+					       LCF_BL_AST, lru_flags);
 	}
 	ldlm_cli_cancel_list(&cancels, count, NULL, cancel_flags);
 	return 0;
@@ -1593,7 +1596,7 @@ typedef enum ldlm_policy_res (*ldlm_cancel_lru_policy_t)(struct ldlm_namespace *
 							 int, int, int);
 
 static ldlm_cancel_lru_policy_t
-ldlm_cancel_lru_policy(struct ldlm_namespace *ns, int lru_flags)
+ldlm_cancel_lru_policy(struct ldlm_namespace *ns, enum ldlm_lru_flags lru_flags)
 {
 	if (ns_connect_lru_resize(ns)) {
 		if (lru_flags & LDLM_LRU_FLAG_SHRINK) {
@@ -1662,16 +1665,16 @@ ldlm_cancel_lru_policy(struct ldlm_namespace *ns, int lru_flags)
  */
 static int ldlm_prepare_lru_list(struct ldlm_namespace *ns,
 				 struct list_head *cancels, int count, int max,
-				 int flags)
+				 enum ldlm_lru_flags lru_flags)
 {
 	ldlm_cancel_lru_policy_t pf;
 	int added = 0;
-	int no_wait = flags & LDLM_LRU_FLAG_NO_WAIT;
+	int no_wait = lru_flags & LDLM_LRU_FLAG_NO_WAIT;
 
 	if (!ns_connect_lru_resize(ns))
 		count += ns->ns_nr_unused - ns->ns_max_unused;
 
-	pf = ldlm_cancel_lru_policy(ns, flags);
+	pf = ldlm_cancel_lru_policy(ns, lru_flags);
 	LASSERT(pf);
 
 	/* For any flags, stop scanning if @max is reached. */
@@ -1787,7 +1790,7 @@ static int ldlm_prepare_lru_list(struct ldlm_namespace *ns,
 		 */
 		lock->l_flags |= LDLM_FL_CBPENDING | LDLM_FL_CANCELING;
 
-		if ((flags & LDLM_LRU_FLAG_CLEANUP) &&
+		if ((lru_flags & LDLM_LRU_FLAG_CLEANUP) &&
 		    (lock->l_resource->lr_type == LDLM_EXTENT ||
 		     ldlm_has_dom(lock)) && lock->l_granted_mode == LCK_PR)
 			ldlm_set_discard_data(lock);
@@ -1811,11 +1814,12 @@ static int ldlm_prepare_lru_list(struct ldlm_namespace *ns,
 
 int ldlm_cancel_lru_local(struct ldlm_namespace *ns,
 			  struct list_head *cancels, int count, int max,
-			  enum ldlm_cancel_flags cancel_flags, int flags)
+			  enum ldlm_cancel_flags cancel_flags,
+			  enum ldlm_lru_flags lru_flags)
 {
 	int added;
 
-	added = ldlm_prepare_lru_list(ns, cancels, count, max, flags);
+	added = ldlm_prepare_lru_list(ns, cancels, count, max, lru_flags);
 	if (added <= 0)
 		return added;
 	return ldlm_cli_cancel_list_local(cancels, added, cancel_flags);
@@ -1831,7 +1835,7 @@ int ldlm_cancel_lru_local(struct ldlm_namespace *ns,
  */
 int ldlm_cancel_lru(struct ldlm_namespace *ns, int nr,
 		    enum ldlm_cancel_flags cancel_flags,
-		    int flags)
+		    enum ldlm_lru_flags lru_flags)
 {
 	LIST_HEAD(cancels);
 	int count, rc;
@@ -1840,7 +1844,7 @@ int ldlm_cancel_lru(struct ldlm_namespace *ns, int nr,
 	 * Just prepare the list of locks, do not actually cancel them yet.
 	 * Locks are cancelled later in a separate thread.
 	 */
-	count = ldlm_prepare_lru_list(ns, &cancels, nr, 0, flags);
+	count = ldlm_prepare_lru_list(ns, &cancels, nr, 0, lru_flags);
 	rc = ldlm_bl_to_thread_list(ns, NULL, &cancels, count, cancel_flags);
 	if (rc == 0)
 		return count;
