@@ -254,8 +254,9 @@ mdc_intent_open_pack(struct obd_export *exp, struct lookup_intent *it,
 	u32 lmmsize = op_data->op_data_size;
 	LIST_HEAD(cancels);
 	int count = 0;
-	int mode;
+	enum ldlm_mode mode;
 	int rc;
+	int repsize;
 
 	it->it_create_mode = (it->it_create_mode & ~S_IFMT) | S_IFREG;
 
@@ -336,7 +337,32 @@ mdc_intent_open_pack(struct obd_export *exp, struct lookup_intent *it,
 			     obddev->u.cli.cl_max_mds_easize);
 	req_capsule_set_size(&req->rq_pill, &RMF_ACL, RCL_SERVER, acl_bufsize);
 
+	/**
+	 * Inline buffer for possible data from Data-on-MDT files.
+	 */
+	req_capsule_set_size(&req->rq_pill, &RMF_NIOBUF_INLINE, RCL_SERVER,
+			     sizeof(struct niobuf_remote));
 	ptlrpc_request_set_replen(req);
+
+	/* Get real repbuf allocated size as rounded up power of 2 */
+	repsize = size_roundup_power2(req->rq_replen +
+				      lustre_msg_early_size());
+
+	/* Estimate free space for DoM files in repbuf */
+	repsize -= req->rq_replen - obddev->u.cli.cl_max_mds_easize +
+		   sizeof(struct lov_comp_md_v1) +
+		   sizeof(struct lov_comp_md_entry_v1) +
+		   lov_mds_md_size(0, LOV_MAGIC_V3);
+
+	if (repsize < obddev->u.cli.cl_dom_min_inline_repsize) {
+		repsize = obddev->u.cli.cl_dom_min_inline_repsize - repsize;
+		req_capsule_set_size(&req->rq_pill, &RMF_NIOBUF_INLINE,
+				     RCL_SERVER,
+				     sizeof(struct niobuf_remote) + repsize);
+		ptlrpc_request_set_replen(req);
+		CDEBUG(D_INFO, "Increase repbuf by %d bytes, total: %d\n",
+		       repsize, req->rq_replen);
+	}
 	return req;
 }
 
