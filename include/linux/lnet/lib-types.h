@@ -79,6 +79,12 @@ struct lnet_msg {
 	lnet_nid_t		msg_src_nid_param;
 	lnet_nid_t		msg_rtr_nid_param;
 
+	/*
+	 * Deadline for the message after which it will be finalized if it
+	 * has not completed.
+	 */
+	ktime_t			msg_deadline;
+
 	/* committed for sending */
 	unsigned int		msg_tx_committed:1;
 	/* CPT # this message committed for sending */
@@ -905,9 +911,9 @@ struct lnet_msg_container {
 
 /* Router Checker states */
 enum lnet_rc_state {
-	LNET_RC_STATE_SHUTDOWN,	/* not started */
-	LNET_RC_STATE_RUNNING,	/* started up OK */
-	LNET_RC_STATE_STOPPING,	/* telling thread to stop */
+	LNET_MT_STATE_SHUTDOWN,	/* not started */
+	LNET_MT_STATE_RUNNING,	/* started up OK */
+	LNET_MT_STATE_STOPPING,	/* telling thread to stop */
 };
 
 /* LNet states */
@@ -1014,8 +1020,8 @@ struct lnet {
 	/* discovery startup/shutdown state */
 	int				ln_dc_state;
 
-	/* router checker startup/shutdown state */
-	enum lnet_rc_state		ln_rc_state;
+	/* monitor thread startup/shutdown state */
+	enum lnet_rc_state		ln_mt_state;
 	/* router checker's event queue */
 	struct lnet_handle_eq		ln_rc_eqh;
 	/* rcd still pending on net */
@@ -1023,7 +1029,7 @@ struct lnet {
 	/* rcd ready for free */
 	struct list_head		ln_rcd_zombie;
 	/* serialise startup/shutdown */
-	struct completion		ln_rc_signal;
+	struct completion		ln_mt_signal;
 
 	struct mutex			ln_api_mutex;
 	struct mutex			ln_lnd_mutex;
@@ -1053,13 +1059,10 @@ struct lnet {
 	 */
 	bool				ln_nis_from_mod_params;
 
-	/*
-	 * waitq for router checker.  As long as there are no routes in
-	 * the list, the router checker will sleep on this queue.  when
-	 * routes are added the thread will wake up
+	/* waitq for the monitor thread. The monitor thread takes care of
+	 * checking routes, timedout messages and resending messages.
 	 */
-	wait_queue_head_t		ln_rc_waitq;
-
+	wait_queue_head_t		ln_mt_waitq;
 };
 
 #endif
