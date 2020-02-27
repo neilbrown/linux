@@ -2615,13 +2615,13 @@ lnet_resend_pending_msgs(void)
 
 /* called with cpt and ni_lock held */
 static void
-lnet_unlink_ni_recovery_mdh_locked(struct lnet_ni *ni, int cpt)
+lnet_unlink_ni_recovery_mdh_locked(struct lnet_ni *ni, int cpt, bool force)
 {
 	struct lnet_handle_md recovery_mdh;
 
 	LNetInvalidateMDHandle(&recovery_mdh);
 
-	if (ni->ni_state & LNET_NI_STATE_RECOVERY_PENDING) {
+	if (ni->ni_state & LNET_NI_STATE_RECOVERY_PENDING || force) {
 		recovery_mdh = ni->ni_ping_mdh;
 		LNetInvalidateMDHandle(&ni->ni_ping_mdh);
 	}
@@ -2675,12 +2675,22 @@ lnet_recover_local_nis(void)
 		if (!(ni->ni_state & LNET_NI_STATE_ACTIVE) ||
 		    healthv == LNET_MAX_HEALTH_VALUE) {
 			list_del_init(&ni->ni_recovery);
-			lnet_unlink_ni_recovery_mdh_locked(ni, 0);
+			lnet_unlink_ni_recovery_mdh_locked(ni, 0, false);
 			lnet_ni_unlock(ni);
 			lnet_ni_decref_locked(ni, 0);
 			lnet_net_unlock(0);
 			continue;
 		}
+
+		/* if the local NI failed recovery we must unlink the md.
+		 * But we want to keep the local_ni on the recovery queue
+		 * so we can continue the attempts to recover it.
+		 */
+		if (ni->ni_state & LNET_NI_STATE_RECOVERY_FAILED) {
+			lnet_unlink_ni_recovery_mdh_locked(ni, 0, true);
+			ni->ni_state &= ~LNET_NI_STATE_RECOVERY_FAILED;
+		}
+
 		lnet_ni_unlock(ni);
 		lnet_net_unlock(0);
 
@@ -2829,7 +2839,7 @@ lnet_clean_local_ni_recoveryq(void)
 				struct lnet_ni, ni_recovery);
 		list_del_init(&ni->ni_recovery);
 		lnet_ni_lock(ni);
-		lnet_unlink_ni_recovery_mdh_locked(ni, 0);
+		lnet_unlink_ni_recovery_mdh_locked(ni, 0, true);
 		lnet_ni_unlock(ni);
 		lnet_ni_decref_locked(ni, 0);
 	}
@@ -2838,13 +2848,14 @@ lnet_clean_local_ni_recoveryq(void)
 }
 
 static void
-lnet_unlink_lpni_recovery_mdh_locked(struct lnet_peer_ni *lpni, int cpt)
+lnet_unlink_lpni_recovery_mdh_locked(struct lnet_peer_ni *lpni, int cpt,
+				     bool force)
 {
 	struct lnet_handle_md recovery_mdh;
 
 	LNetInvalidateMDHandle(&recovery_mdh);
 
-	if (lpni->lpni_state & LNET_PEER_NI_RECOVERY_PENDING) {
+	if (lpni->lpni_state & LNET_PEER_NI_RECOVERY_PENDING || force) {
 		recovery_mdh = lpni->lpni_recovery_ping_mdh;
 		LNetInvalidateMDHandle(&lpni->lpni_recovery_ping_mdh);
 	}
@@ -2867,7 +2878,7 @@ lnet_clean_peer_ni_recoveryq(void)
 				 lpni_recovery) {
 		list_del_init(&lpni->lpni_recovery);
 		spin_lock(&lpni->lpni_lock);
-		lnet_unlink_lpni_recovery_mdh_locked(lpni, LNET_LOCK_EX);
+		lnet_unlink_lpni_recovery_mdh_locked(lpni, LNET_LOCK_EX, true);
 		spin_unlock(&lpni->lpni_lock);
 		lnet_peer_ni_decref_locked(lpni);
 	}
@@ -2933,12 +2944,22 @@ lnet_recover_peer_nis(void)
 		if (lpni->lpni_state & LNET_PEER_NI_DELETING ||
 		    healthv == LNET_MAX_HEALTH_VALUE) {
 			list_del_init(&lpni->lpni_recovery);
-			lnet_unlink_lpni_recovery_mdh_locked(lpni, 0);
+			lnet_unlink_lpni_recovery_mdh_locked(lpni, 0, false);
 			spin_unlock(&lpni->lpni_lock);
 			lnet_peer_ni_decref_locked(lpni);
 			lnet_net_unlock(0);
 			continue;
 		}
+
+		/* If the peer NI has failed recovery we must unlink the
+		 * md. But we want to keep the peer ni on the recovery
+		 * queue so we can try to continue recovering it
+		 */
+		if (lpni->lpni_state & LNET_PEER_NI_RECOVERY_FAILED) {
+			lnet_unlink_lpni_recovery_mdh_locked(lpni, 0, true);
+			lpni->lpni_state &= ~LNET_PEER_NI_RECOVERY_FAILED;
+		}
+
 		spin_unlock(&lpni->lpni_lock);
 		lnet_net_unlock(0);
 
@@ -3152,11 +3173,14 @@ lnet_handle_recovery_reply(struct lnet_mt_event_info *ev_info,
 		}
 		lnet_ni_lock(ni);
 		ni->ni_state &= ~LNET_NI_STATE_RECOVERY_PENDING;
+		if (status)
+			ni->ni_state |= LNET_NI_STATE_RECOVERY_FAILED;
 		lnet_ni_unlock(ni);
 		lnet_net_unlock(0);
 
 		if (status != 0) {
-			CERROR("local NI recovery failed with %d\n", status);
+			CERROR("local NI (%s) recovery failed with %d\n",
+			       libcfs_nid2str(nid), status);
 			return;
 		}
 		/* need to increment healthv for the ni here, because in
@@ -3178,12 +3202,15 @@ lnet_handle_recovery_reply(struct lnet_mt_event_info *ev_info,
 		}
 		spin_lock(&lpni->lpni_lock);
 		lpni->lpni_state &= ~LNET_PEER_NI_RECOVERY_PENDING;
+		if (status)
+			lpni->lpni_state |= LNET_PEER_NI_RECOVERY_FAILED;
 		spin_unlock(&lpni->lpni_lock);
 		lnet_peer_ni_decref_locked(lpni);
 		lnet_net_unlock(cpt);
 
 		if (status != 0)
-			CERROR("peer NI recovery failed with %d\n", status);
+			CERROR("peer NI (%s) recovery failed with %d\n",
+			       libcfs_nid2str(nid), status);
 	}
 }
 
@@ -3214,6 +3241,7 @@ lnet_mt_event_handler(struct lnet_event *event)
 		       libcfs_nid2str(ev_info->mt_nid),
 		       (event->status) ? "unsuccessfully" :
 		       "successfully", event->status);
+		lnet_handle_recovery_reply(ev_info, event->status);
 		break;
 	default:
 		CERROR("Unexpected event: %d\n", event->type);
