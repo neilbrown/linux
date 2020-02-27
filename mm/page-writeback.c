@@ -2433,6 +2433,7 @@ void account_page_dirtied(struct page *page, struct address_space *mapping)
 		mem_cgroup_track_foreign_dirty(page, wb);
 	}
 }
+EXPORT_SYMBOL(account_page_dirtied);
 
 /*
  * Helper function for deaccounting dirty page without writeback.
