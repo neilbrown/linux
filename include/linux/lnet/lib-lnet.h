@@ -85,6 +85,7 @@ extern struct kmem_cache *lnet_mes_cachep;	 /* MEs kmem_cache */
 extern struct kmem_cache *lnet_small_mds_cachep; /* <= LNET_SMALL_MD_SIZE bytes
 						  * MDs kmem_cache
 						  */
+#define LNET_LND_DEFAULT_TIMEOUT 5
 
 static inline int lnet_is_route_alive(struct lnet_route *route)
 {
@@ -676,6 +677,7 @@ void lnet_md_deconstruct(struct lnet_libmd *lmd, struct lnet_md *umd);
 struct page *lnet_kvaddr_to_page(unsigned long vaddr);
 int lnet_cpt_of_md(struct lnet_libmd *md, unsigned int offset);
 
+unsigned int lnet_get_lnd_timeout(void);
 void lnet_register_lnd(struct lnet_lnd *lnd);
 void lnet_unregister_lnd(struct lnet_lnd *lnd);
 
