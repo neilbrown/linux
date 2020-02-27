@@ -431,46 +431,6 @@ int fld_cache_insert(struct fld_cache *cache,
 }
 
 /**
- * Delete FLD entry in FLD cache.
- *
- */
-
-struct fld_cache_entry
-*fld_cache_entry_lookup_nolock(struct fld_cache *cache,
-			      struct lu_seq_range *range)
-{
-	struct fld_cache_entry *flde;
-	struct fld_cache_entry *got = NULL;
-	struct list_head *head;
-
-	head = &cache->fci_entries_head;
-	list_for_each_entry(flde, head, fce_list) {
-		if (range->lsr_start == flde->fce_range.lsr_start ||
-		    (range->lsr_end == flde->fce_range.lsr_end &&
-		     range->lsr_flags == flde->fce_range.lsr_flags)) {
-			got = flde;
-			break;
-		}
-	}
-
-	return got;
-}
-
-/**
- * lookup @seq sequence for range in fld cache.
- */
-struct fld_cache_entry
-*fld_cache_entry_lookup(struct fld_cache *cache, struct lu_seq_range *range)
-{
-	struct fld_cache_entry *got = NULL;
-
-	read_lock(&cache->fci_lock);
-	got = fld_cache_entry_lookup_nolock(cache, range);
-	read_unlock(&cache->fci_lock);
-	return got;
-}
-
-/**
  * lookup @seq sequence for range in fld cache.
  */
 int fld_cache_lookup(struct fld_cache *cache,
