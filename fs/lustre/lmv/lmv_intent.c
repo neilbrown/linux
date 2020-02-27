@@ -162,6 +162,7 @@ int lmv_revalidate_slaves(struct obd_export *exp,
 	struct ptlrpc_request *req = NULL;
 	struct mdt_body *body;
 	struct md_op_data *op_data;
+	int valid_stripe_count = 0;
 	int rc = 0, i;
 
 	/**
@@ -185,6 +186,9 @@ int lmv_revalidate_slaves(struct obd_export *exp,
 
 		fid = lsm->lsm_md_oinfo[i].lmo_fid;
 		inode = lsm->lsm_md_oinfo[i].lmo_root;
+
+		if (!inode)
+			continue;
 
 		/*
 		 * Prepare op_data for revalidating. Note that @fid2 shluld be
@@ -211,6 +215,12 @@ int lmv_revalidate_slaves(struct obd_export *exp,
 
 		rc = md_intent_lock(tgt->ltd_exp, op_data, &it, &req,
 				    cb_blocking, extra_lock_flags);
+		if (rc == -ENOENT) {
+			/* skip stripe is not exists */
+			rc = 0;
+			continue;
+		}
+
 		if (rc < 0)
 			goto cleanup;
 
@@ -249,11 +259,17 @@ int lmv_revalidate_slaves(struct obd_export *exp,
 			ldlm_lock_decref(lockh, it.it_lock_mode);
 			it.it_lock_mode = 0;
 		}
+
+		valid_stripe_count++;
 	}
 
 cleanup:
 	if (req)
 		ptlrpc_req_finished(req);
+
+	/* if all stripes are invalid, return -ENOENT to notify user */
+	if (!rc && !valid_stripe_count)
+		rc = -ENOENT;
 
 	kfree(op_data);
 	return rc;
