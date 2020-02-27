@@ -196,7 +196,7 @@ static int vvp_object_glimpse(const struct lu_env *env,
 static void vvp_req_attr_set(const struct lu_env *env, struct cl_object *obj,
 			     struct cl_req_attr *attr)
 {
-	u64 valid_flags = OBD_MD_FLTYPE;
+	u64 valid_flags = OBD_MD_FLTYPE | OBD_MD_FLUID | OBD_MD_FLGID;
 	struct inode *inode;
 	struct obdo *oa;
 
@@ -204,8 +204,7 @@ static void vvp_req_attr_set(const struct lu_env *env, struct cl_object *obj,
 	inode = vvp_object_inode(obj);
 
 	if (attr->cra_type == CRT_WRITE) {
-		valid_flags |= OBD_MD_FLMTIME | OBD_MD_FLCTIME |
-			       OBD_MD_FLUID | OBD_MD_FLGID;
+		valid_flags |= OBD_MD_FLMTIME | OBD_MD_FLCTIME;
 		obdo_set_o_projid(oa, ll_i2info(inode)->lli_projid);
 	}
 	obdo_from_inode(oa, inode, valid_flags & attr->cra_flags);

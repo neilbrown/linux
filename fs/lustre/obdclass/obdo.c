@@ -144,6 +144,11 @@ void lustre_set_wire_obdo(const struct obd_connect_data *ocd,
 	if (!ocd)
 		return;
 
+	if (!(wobdo->o_valid & OBD_MD_FLUID))
+		wobdo->o_uid = from_kuid(&init_user_ns, current_uid());
+	if (!(wobdo->o_valid & OBD_MD_FLGID))
+		wobdo->o_gid = from_kgid(&init_user_ns, current_gid());
+
 	if (unlikely(!(ocd->ocd_connect_flags & OBD_CONNECT_FID)) &&
 	    fid_seq_is_echo(ostid_seq(&lobdo->o_oi))) {
 		/*
