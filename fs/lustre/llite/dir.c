@@ -433,6 +433,10 @@ static int ll_dir_setdirstripe(struct dentry *dparent, struct lmv_user_md *lump,
 	    !(exp_connect_flags(sbi->ll_md_exp) & OBD_CONNECT_DIR_STRIPE))
 		return -EINVAL;
 
+	if (IS_DEADDIR(parent) &&
+	    !OBD_FAIL_CHECK(OBD_FAIL_LLITE_NO_CHECK_DEAD))
+		return -ENOENT;
+
 	if (lump->lum_magic != cpu_to_le32(LMV_USER_MAGIC) &&
 	    lump->lum_magic != cpu_to_le32(LMV_USER_MAGIC_SPECIFIC))
 		lustre_swab_lmv_user_md(lump);
