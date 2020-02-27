@@ -1068,9 +1068,12 @@ static int vvp_io_write_start(const struct lu_env *env,
 	struct cl_object *obj = io->ci_obj;
 	struct inode *inode = vvp_object_inode(obj);
 	struct ll_inode_info *lli = ll_i2info(inode);
+	struct file *file = vio->vui_fd->fd_file;
 	bool lock_inode = !inode_is_locked(inode) && !IS_NOSEC(inode);
 	loff_t pos = io->u.ci_wr.wr.crw_pos;
 	size_t cnt = io->u.ci_wr.wr.crw_count;
+	size_t nob = io->ci_nob;
+	size_t written = 0;
 	ssize_t result = 0;
 
 	down_read(&lli->lli_trunc_sem);
@@ -1135,6 +1138,7 @@ static int vvp_io_write_start(const struct lu_env *env,
 		if (unlikely(lock_inode))
 			inode_unlock(inode);
 
+		written = result;
 		if (result > 0 || result == -EIOCBQUEUED)
 			result = generic_write_sync(vio->vui_iocb, result);
 	}
@@ -1148,6 +1152,15 @@ static int vvp_io_write_start(const struct lu_env *env,
 			CDEBUG(D_VFSTRACE, "write: nob %zd, result: %zd\n",
 			       io->ci_nob, result);
 		}
+	}
+	if (vio->vui_iocb->ki_pos != (pos + io->ci_nob - nob)) {
+		CDEBUG(D_VFSTRACE,
+		       "%s: write position mismatch: ki_pos %lld vs. pos %lld, written %ld, commit %ld rc %ld\n",
+		       file_dentry(file)->d_name.name,
+		       vio->vui_iocb->ki_pos, pos + io->ci_nob - nob,
+		       written, io->ci_nob - nob, result);
+		/* rewind ki_pos to where it has successfully committed */
+		vio->vui_iocb->ki_pos = pos + io->ci_nob - nob;
 	}
 	if (result > 0) {
 		set_bit(LLIF_DATA_MODIFIED, &(ll_i2info(inode))->lli_flags);
