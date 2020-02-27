@@ -504,14 +504,6 @@ LDLM_POOL_SYSFS_READER_NOLOCK_SHOW(lock_volume_factor, atomic);
 LDLM_POOL_SYSFS_WRITER_NOLOCK_STORE(lock_volume_factor, atomic);
 LUSTRE_RW_ATTR(lock_volume_factor);
 
-#define LDLM_POOL_ADD_VAR(_name, var, ops)			\
-	do {							\
-		pool_vars[0].name = #_name;			\
-		pool_vars[0].data = var;			\
-		pool_vars[0].fops = ops;			\
-		ldebugfs_add_vars(pl->pl_debugfs_entry, pool_vars, NULL);\
-	} while (0)
-
 /* These are for pools in /sys/fs/lustre/ldlm/namespaces/.../pool */
 static struct attribute *ldlm_pl_attrs[] = {
 	&lustre_attr_grant_speed.attr,
@@ -571,7 +563,8 @@ static int ldlm_pool_debugfs_init(struct ldlm_pool *pl)
 
 	memset(pool_vars, 0, sizeof(pool_vars));
 
-	LDLM_POOL_ADD_VAR(state, pl, &lprocfs_pool_state_fops);
+	ldlm_add_var(&pool_vars[0], pl->pl_debugfs_entry, "state", pl,
+		     &lprocfs_pool_state_fops);
 
 	pl->pl_stats = lprocfs_alloc_stats(LDLM_POOL_LAST_STAT -
 					   LDLM_POOL_FIRST_STAT, 0);
