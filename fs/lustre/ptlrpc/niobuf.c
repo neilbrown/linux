@@ -179,8 +179,13 @@ static int ptlrpc_register_bulk(struct ptlrpc_request *req)
 			      LNET_MD_OP_GET : LNET_MD_OP_PUT);
 		ptlrpc_fill_bulk_md(&md, desc, posted_md);
 
-		rc = LNetMEAttach(desc->bd_portal, peer, mbits, 0,
-				  LNET_UNLINK, LNET_INS_AFTER, &me_h);
+		if (posted_md > 0 && posted_md + 1 == total_md &&
+		    OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_BULK_ATTACH)) {
+			rc = -ENOMEM;
+		} else {
+			rc = LNetMEAttach(desc->bd_portal, peer, mbits, 0,
+					  LNET_UNLINK, LNET_INS_AFTER, &me_h);
+		}
 		if (rc != 0) {
 			CERROR("%s: LNetMEAttach failed x%llu/%d: rc = %d\n",
 			       desc->bd_import->imp_obd->obd_name, mbits,
@@ -209,6 +214,7 @@ static int ptlrpc_register_bulk(struct ptlrpc_request *req)
 		LASSERT(desc->bd_md_count >= 0);
 		mdunlink_iterate_helper(desc->bd_mds, desc->bd_md_max_brw);
 		req->rq_status = -ENOMEM;
+		desc->bd_registered = 0;
 		return -ENOMEM;
 	}
 
@@ -585,7 +591,7 @@ int ptl_send_rpc(struct ptlrpc_request *request, int noreply)
 	if (request->rq_bulk) {
 		rc = ptlrpc_register_bulk(request);
 		if (rc != 0)
-			goto out;
+			goto cleanup_bulk;
 		/*
 		 * All the mds in the request will have the same cpt
 		 * encoded in the cookie. So we can just get the first
