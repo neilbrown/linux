@@ -246,10 +246,9 @@ struct ksock_nal_data {
  * receive (the header).  Once the header has been received, the payload is
  * received into struct bio_vec fragments.
  */
-struct ksock_conn;  /* forward ref */
-struct ksock_peer_ni;  /* forward ref */
-struct ksock_route; /* forward ref */
-struct ksock_proto; /* forward ref */
+struct ksock_conn;				/* forward ref */
+struct ksock_route;				/* forward ref */
+struct ksock_proto;				/* forward ref */
 
 struct ksock_tx {				/* transmit packet */
 	struct list_head	tx_list;	/* queue on conn for transmission etc
