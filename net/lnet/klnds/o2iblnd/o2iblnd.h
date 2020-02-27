@@ -515,6 +515,7 @@ struct kib_tx {					/* transmit message */
 	short			tx_queued;	/* queued for sending */
 	short			tx_waiting;	/* waiting for peer_ni */
 	int			tx_status;	/* LNET completion status */
+	enum lnet_msg_hstatus	tx_hstatus;	/* health status of the transmit */
 	ktime_t			tx_deadline;	/* completion deadline */
 	u64			tx_cookie;	/* completion cookie */
 	struct lnet_msg	       *tx_lntmsg[2];	/* lnet msgs to finalize on completion */
@@ -1027,7 +1028,8 @@ void kiblnd_close_conn(struct kib_conn *conn, int error);
 void kiblnd_close_conn_locked(struct kib_conn *conn, int error);
 
 void kiblnd_launch_tx(struct lnet_ni *ni, struct kib_tx *tx, lnet_nid_t nid);
-void kiblnd_txlist_done(struct list_head *txlist, int status);
+void kiblnd_txlist_done(struct list_head *txlist, int status,
+			enum lnet_msg_hstatus hstatus);
 
 void kiblnd_qp_event(struct ib_event *event, void *arg);
 void kiblnd_cq_event(struct ib_event *event, void *arg);
