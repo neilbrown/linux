@@ -536,4 +536,10 @@ do {							\
 	(keylen >= (sizeof(str) - 1) &&			\
 	memcmp(key, str, (sizeof(str) - 1)) == 0)
 
+struct obd_heat_instance {
+	u64 ohi_heat;
+	u64 ohi_time_second;
+	u64 ohi_count;
+};
+
 #endif
