@@ -758,7 +758,6 @@ lnet_register_lnd(struct lnet_lnd *lnd)
 	LASSERT(!lnet_find_lnd_by_type(lnd->lnd_type));
 
 	list_add_tail(&lnd->lnd_list, &the_lnet.ln_lnds);
-	lnd->lnd_refcount = 0;
 
 	CDEBUG(D_NET, "%s LND registered\n", libcfs_lnd2str(lnd->lnd_type));
 
@@ -772,7 +771,6 @@ lnet_unregister_lnd(struct lnet_lnd *lnd)
 	mutex_lock(&the_lnet.ln_lnd_mutex);
 
 	LASSERT(lnet_find_lnd_by_type(lnd->lnd_type) == lnd);
-	LASSERT(!lnd->lnd_refcount);
 
 	list_del(&lnd->lnd_list);
 	CDEBUG(D_NET, "%s LND unregistered\n", libcfs_lnd2str(lnd->lnd_type));
@@ -2045,15 +2043,6 @@ lnet_shutdown_lndnet(struct lnet_net *net)
 	/* Do peer table cleanup for this net */
 	lnet_peer_tables_cleanup(net);
 
-	lnet_net_lock(LNET_LOCK_EX);
-	/*
-	 * decrement ref count on lnd only when the entire network goes
-	 * away
-	 */
-	net->net_lnd->lnd_refcount--;
-
-	lnet_net_unlock(LNET_LOCK_EX);
-
 	lnet_net_free(net);
 }
 
@@ -2134,9 +2123,6 @@ lnet_startup_lndni(struct lnet_ni *ni, struct lnet_lnd_tunables *tun)
 	if (rc) {
 		LCONSOLE_ERROR_MSG(0x105, "Error %d starting up LNI %s\n",
 				   rc, libcfs_lnd2str(net->net_lnd->lnd_type));
-		lnet_net_lock(LNET_LOCK_EX);
-		net->net_lnd->lnd_refcount--;
-		lnet_net_unlock(LNET_LOCK_EX);
 		goto failed0;
 	}
 
@@ -2246,10 +2232,6 @@ lnet_startup_lndnet(struct lnet_net *net, struct lnet_lnd_tunables *tun)
 				goto failed0;
 			}
 		}
-
-		lnet_net_lock(LNET_LOCK_EX);
-		lnd->lnd_refcount++;
-		lnet_net_unlock(LNET_LOCK_EX);
 
 		net->net_lnd = lnd;
 
