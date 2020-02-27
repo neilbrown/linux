@@ -344,8 +344,6 @@ int ll_listsecurity(struct inode *inode, char *secctx_name,
 void ll_inode_size_lock(struct inode *inode);
 void ll_inode_size_unlock(struct inode *inode);
 
-/* FIXME: replace the name of this with LL_I to conform to kernel stuff */
-/* static inline struct ll_inode_info *LL_I(struct inode *inode) */
 static inline struct ll_inode_info *ll_i2info(struct inode *inode)
 {
 	return container_of(inode, struct ll_inode_info, lli_vfs_inode);
@@ -360,10 +358,10 @@ static inline struct pcc_inode *ll_i2pcci(struct inode *inode)
 #define RA_REMAIN_WINDOW_MIN			MiB_TO_PAGES(16UL)
 
 /* default to about 64M of readahead on a given system. */
-#define SBI_DEFAULT_READAHEAD_MAX	(64UL << (20 - PAGE_SHIFT))
+#define SBI_DEFAULT_READAHEAD_MAX		MiB_TO_PAGES(64UL)
 
 /* default to read-ahead full files smaller than 2MB on the second read */
-#define SBI_DEFAULT_READAHEAD_WHOLE_MAX (2UL << (20 - PAGE_SHIFT))
+#define SBI_DEFAULT_READAHEAD_WHOLE_MAX		MiB_TO_PAGES(2UL)
 
 enum ra_stat {
 	RA_STAT_HIT = 0,

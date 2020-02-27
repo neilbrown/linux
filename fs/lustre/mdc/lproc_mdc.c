@@ -47,7 +47,7 @@ static int mdc_max_dirty_mb_seq_show(struct seq_file *m, void *v)
 	unsigned long val;
 
 	spin_lock(&cli->cl_loi_list_lock);
-	val = cli->cl_dirty_max_pages >> (20 - PAGE_SHIFT);
+	val = PAGES_TO_MiB(cli->cl_dirty_max_pages);
 	spin_unlock(&cli->cl_loi_list_lock);
 
 	seq_printf(m, "%lu\n", val);
@@ -76,10 +76,10 @@ static ssize_t mdc_max_dirty_mb_seq_write(struct file *file,
 	if (rc < 0)
 		return rc;
 
-	pages_number >>= PAGE_SHIFT;
-
+	/* MB -> pages */
+	pages_number = round_up(pages_number, 1024 * 1024) >> PAGE_SHIFT;
 	if (pages_number <= 0 ||
-	    pages_number >= OSC_MAX_DIRTY_MB_MAX << (20 - PAGE_SHIFT) ||
+	    pages_number >= MiB_TO_PAGES(OSC_MAX_DIRTY_MB_MAX) ||
 	    pages_number > totalram_pages() / 4) /* 1/4 of RAM */
 		return -ERANGE;
 

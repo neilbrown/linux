@@ -367,8 +367,6 @@ void lustre_register_client_process_config(int (*cpc)(struct lustre_cfg *lcfg));
 
 int lprocfs_write_frac_helper(const char __user *buffer,
 			      unsigned long count, int *val, int mult);
-int lprocfs_read_frac_helper(char *buffer, unsigned long count,
-			     long val, int mult);
 
 int lprocfs_stats_alloc_one(struct lprocfs_stats *stats,
 			    unsigned int cpuid);

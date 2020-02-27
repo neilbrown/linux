@@ -145,12 +145,13 @@ static ssize_t max_dirty_mb_show(struct kobject *kobj,
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct client_obd *cli = &obd->u.cli;
-	long val;
-	int mult;
+	unsigned long val;
 
-	val = cli->cl_dirty_max_pages;
-	mult = 1 << (20 - PAGE_SHIFT);
-	return lprocfs_read_frac_helper(buf, PAGE_SIZE, val, mult);
+	spin_lock(&cli->cl_loi_list_lock);
+	val = PAGES_TO_MiB(cli->cl_dirty_max_pages);
+	spin_unlock(&cli->cl_loi_list_lock);
+
+	return scnprintf(buf, PAGE_SIZE, "%lu\n", val);
 }
 
 static ssize_t max_dirty_mb_store(struct kobject *kobj,
@@ -161,17 +162,15 @@ static ssize_t max_dirty_mb_store(struct kobject *kobj,
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct client_obd *cli = &obd->u.cli;
-	unsigned long pages_number;
+	unsigned long pages_number, max_dirty_mb;
 	int rc;
 
-	rc = kstrtoul(buffer, 10, &pages_number);
+	rc = kstrtoul(buffer, 10, &max_dirty_mb);
 	if (rc)
 		return rc;
 
-	pages_number *= 1 << (20 - PAGE_SHIFT); /* MB -> pages */
-
-	if (pages_number <= 0 ||
-	    pages_number >= OSC_MAX_DIRTY_MB_MAX << (20 - PAGE_SHIFT) ||
+	pages_number = MiB_TO_PAGES(max_dirty_mb);
+	if (pages_number >= MiB_TO_PAGES(OSC_MAX_DIRTY_MB_MAX) ||
 	    pages_number > totalram_pages() / 4) /* 1/4 of RAM */
 		return -ERANGE;
 
