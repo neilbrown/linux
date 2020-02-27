@@ -239,8 +239,8 @@ int pcc_file_mmap(struct file *file, struct vm_area_struct *vma, bool *cached);
 void pcc_vm_open(struct vm_area_struct *vma);
 void pcc_vm_close(struct vm_area_struct *vma);
 int pcc_fault(struct vm_area_struct *mva, struct vm_fault *vmf, bool *cached);
-int pcc_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf,
-		     bool *cached);
+vm_fault_t pcc_page_mkwrite(struct vm_area_struct *vma, struct vm_fault *vmf,
+			    bool *cached);
 int pcc_inode_create(struct super_block *sb, struct pcc_dataset *dataset,
 		     struct lu_fid *fid, struct dentry **pcc_dentry);
 int pcc_inode_create_fini(struct inode *inode, struct pcc_create_attach *pca);

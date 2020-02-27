@@ -91,6 +91,7 @@ static int ll_xattr_set_common(const struct xattr_handler *handler,
 	struct ptlrpc_request *req = NULL;
 	const char *pv = value;
 	char *fullname;
+	ktime_t kstart = ktime_get();
 	u64 valid;
 	int rc;
 
@@ -98,13 +99,10 @@ static int ll_xattr_set_common(const struct xattr_handler *handler,
 	 * unconditionally replaced by "". When removexattr() is
 	 * called we get a NULL value and XATTR_REPLACE for flags.
 	 */
-	if (!value && flags == XATTR_REPLACE) {
-		ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_REMOVEXATTR, 1);
+	if (!value && flags == XATTR_REPLACE)
 		valid = OBD_MD_FLXATTRRM;
-	} else {
-		ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_SETXATTR, 1);
+	else
 		valid = OBD_MD_FLXATTR;
-	}
 
 	rc = xattr_type_filter(sbi, handler);
 	if (rc)
@@ -153,6 +151,11 @@ static int ll_xattr_set_common(const struct xattr_handler *handler,
 	}
 
 	ptlrpc_req_finished(req);
+
+	ll_stats_ops_tally(ll_i2sbi(inode), valid == OBD_MD_FLXATTRRM ?
+				LPROC_LL_REMOVEXATTR : LPROC_LL_SETXATTR,
+			   ktime_us_delta(ktime_get(), kstart));
+
 	return 0;
 }
 
@@ -294,6 +297,11 @@ static int ll_xattr_set(const struct xattr_handler *handler,
 			const char *name, const void *value, size_t size,
 			int flags)
 {
+	ktime_t kstart = ktime_get();
+	int op_type = flags == XATTR_REPLACE ? LPROC_LL_REMOVEXATTR :
+					       LPROC_LL_SETXATTR;
+	int rc;
+
 	LASSERT(inode);
 	LASSERT(name);
 
@@ -302,18 +310,14 @@ static int ll_xattr_set(const struct xattr_handler *handler,
 
 	/* lustre/trusted.lov.xxx would be passed through xattr API */
 	if (!strcmp(name, "lov")) {
-		int op_type = flags == XATTR_REPLACE ? LPROC_LL_REMOVEXATTR :
-						       LPROC_LL_SETXATTR;
-
-		ll_stats_ops_tally(ll_i2sbi(inode), op_type, 1);
-
-		return ll_setstripe_ea(dentry, (struct lov_user_md *)value,
+		rc = ll_setstripe_ea(dentry, (struct lov_user_md *)value,
 				       size);
+		ll_stats_ops_tally(ll_i2sbi(inode), op_type,
+				   ktime_us_delta(ktime_get(), kstart));
+		return rc;
 	} else if (!strcmp(name, "lma") || !strcmp(name, "link")) {
-		int op_type = flags == XATTR_REPLACE ? LPROC_LL_REMOVEXATTR :
-						       LPROC_LL_SETXATTR;
-
-		ll_stats_ops_tally(ll_i2sbi(inode), op_type, 1);
+		ll_stats_ops_tally(ll_i2sbi(inode), op_type,
+				   ktime_us_delta(ktime_get(), kstart));
 		return 0;
 	}
 
@@ -402,13 +406,12 @@ static int ll_xattr_get_common(const struct xattr_handler *handler,
 			       const char *name, void *buffer, size_t size)
 {
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
+	ktime_t kstart = ktime_get();
 	char *fullname;
 	int rc;
 
 	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID "(%p)\n",
 	       PFID(ll_inode2fid(inode)), inode);
-
-	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_GETXATTR, 1);
 
 	rc = xattr_type_filter(sbi, handler);
 	if (rc)
@@ -444,6 +447,9 @@ static int ll_xattr_get_common(const struct xattr_handler *handler,
 	rc = ll_xattr_list(inode, fullname, handler->flags, buffer, size,
 			   OBD_MD_FLXATTR);
 	kfree(fullname);
+	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_GETXATTR,
+			   ktime_us_delta(ktime_get(), kstart));
+
 	return rc;
 }
 
@@ -569,6 +575,7 @@ ssize_t ll_listxattr(struct dentry *dentry, char *buffer, size_t size)
 {
 	struct inode *inode = d_inode(dentry);
 	struct ll_sb_info *sbi = ll_i2sbi(inode);
+	ktime_t kstart = ktime_get();
 	char *xattr_name;
 	ssize_t rc, rc2;
 	size_t len, rem;
@@ -577,8 +584,6 @@ ssize_t ll_listxattr(struct dentry *dentry, char *buffer, size_t size)
 
 	CDEBUG(D_VFSTRACE, "VFS Op:inode=" DFID "(%p)\n",
 	       PFID(ll_inode2fid(inode)), inode);
-
-	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_LISTXATTR, 1);
 
 	rc = ll_xattr_list(inode, NULL, XATTR_OTHER_T, buffer, size,
 			   OBD_MD_FLXATTRLS);
@@ -591,7 +596,7 @@ ssize_t ll_listxattr(struct dentry *dentry, char *buffer, size_t size)
 	 * exists.
 	 */
 	if (!size)
-		return rc + sizeof(XATTR_LUSTRE_LOV);
+		goto out;
 
 	xattr_name = buffer;
 	rem = rc;
@@ -624,6 +629,10 @@ ssize_t ll_listxattr(struct dentry *dentry, char *buffer, size_t size)
 		return -ERANGE;
 
 	memcpy(buffer + rc, XATTR_LUSTRE_LOV, sizeof(XATTR_LUSTRE_LOV));
+
+out:
+	ll_stats_ops_tally(ll_i2sbi(inode), LPROC_LL_LISTXATTR,
+			   ktime_us_delta(ktime_get(), kstart));
 
 	return rc + sizeof(XATTR_LUSTRE_LOV);
 }
