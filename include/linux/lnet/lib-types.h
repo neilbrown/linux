@@ -553,8 +553,6 @@ struct lnet_peer_ni {
 	int			 lpni_rtrcredits;
 	/* low water mark */
 	int			 lpni_minrtrcredits;
-	/* alive/dead? */
-	bool			 lpni_alive;
 	/* notification outstanding? */
 	bool			 lpni_notify;
 	/* outstanding notification for LND? */
