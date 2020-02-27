@@ -860,6 +860,7 @@ restart:
 		if (rc)
 			goto out_och_free;
 	}
+
 	rc = pcc_file_open(inode, file);
 	if (rc)
 		goto out_och_free;
@@ -1787,7 +1788,7 @@ static ssize_t ll_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	 * from PCC cache automatically.
 	 */
 	result = pcc_file_write_iter(iocb, from, &cached);
-	if (cached && result != -ENOSPC)
+	if (cached && result != -ENOSPC && result != -EDQUOT)
 		return result;
 
 	/* NB: we can't do direct IO for tiny writes because they use the page
