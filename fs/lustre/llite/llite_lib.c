@@ -2037,7 +2037,7 @@ int ll_iocontrol(struct inode *inode, struct file *file,
 	int rc, flags = 0;
 
 	switch (cmd) {
-	case FSFILT_IOC_GETFLAGS: {
+	case FS_IOC_GETFLAGS: {
 		struct mdt_body *body;
 		struct md_op_data *op_data;
 
@@ -2065,7 +2065,7 @@ int ll_iocontrol(struct inode *inode, struct file *file,
 
 		return put_user(flags, (int __user *)arg);
 	}
-	case FSFILT_IOC_SETFLAGS: {
+	case FS_IOC_SETFLAGS: {
 		struct md_op_data *op_data;
 		struct cl_object *obj;
 		struct iattr *attr;
