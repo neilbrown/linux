@@ -316,8 +316,8 @@ LUSTRE_RW_ATTR(max_mod_rpcs_in_flight);
 
 LUSTRE_RW_ATTR(max_pages_per_rpc);
 
-#define mdc_conn_uuid_show conn_uuid_show
-LUSTRE_RO_ATTR(mdc_conn_uuid);
+LUSTRE_ATTR(mds_conn_uuid, 0444, conn_uuid_show, NULL);
+LUSTRE_RO_ATTR(conn_uuid);
 
 LUSTRE_RO_ATTR(ping);
 
@@ -540,7 +540,8 @@ static struct attribute *mdc_attrs[] = {
 	&lustre_attr_max_rpcs_in_flight.attr,
 	&lustre_attr_max_mod_rpcs_in_flight.attr,
 	&lustre_attr_max_pages_per_rpc.attr,
-	&lustre_attr_mdc_conn_uuid.attr,
+	&lustre_attr_mds_conn_uuid.attr,
+	&lustre_attr_conn_uuid.attr,
 	&lustre_attr_ping.attr,
 	NULL,
 };
