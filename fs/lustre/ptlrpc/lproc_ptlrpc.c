@@ -1240,6 +1240,7 @@ void ptlrpc_lprocfs_unregister_obd(struct obd_device *obd)
 }
 EXPORT_SYMBOL(ptlrpc_lprocfs_unregister_obd);
 
+/* Kept for older tools */
 ssize_t ping_show(struct kobject *kobj, struct attribute *attr,
 		  char *buffer)
 {
@@ -1265,6 +1266,14 @@ ssize_t ping_show(struct kobject *kobj, struct attribute *attr,
 	return rc;
 }
 EXPORT_SYMBOL(ping_show);
+
+ssize_t ping_store(struct kobject *kobj, struct attribute *attr,
+		   const char *buffer, size_t count)
+{
+	return ping_show(kobj, attr, (char *)buffer);
+}
+EXPORT_SYMBOL(ping_store);
+
 
 #undef BUFLEN
 

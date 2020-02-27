@@ -319,7 +319,7 @@ LUSTRE_RW_ATTR(max_pages_per_rpc);
 LUSTRE_ATTR(mds_conn_uuid, 0444, conn_uuid_show, NULL);
 LUSTRE_RO_ATTR(conn_uuid);
 
-LUSTRE_RO_ATTR(ping);
+LUSTRE_RW_ATTR(ping);
 
 static ssize_t mdc_rpc_stats_seq_write(struct file *file,
 				       const char __user *buf,

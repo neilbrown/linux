@@ -466,7 +466,8 @@ int lprocfs_rd_connect_flags(struct seq_file *m, void *data);
 struct adaptive_timeout;
 int lprocfs_at_hist_helper(struct seq_file *m, struct adaptive_timeout *at);
 int lprocfs_rd_timeouts(struct seq_file *m, void *data);
-
+ssize_t ping_store(struct kobject *kobj, struct attribute *attr,
+		   const char *buffer, size_t count);
 ssize_t ping_show(struct kobject *kobj, struct attribute *attr,
 		  char *buffer);
 
