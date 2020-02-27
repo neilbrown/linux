@@ -2616,6 +2616,7 @@ free:
 
 int ll_hsm_state_set(struct inode *inode, struct hsm_state_set *hss)
 {
+	struct obd_export *exp = ll_i2mdexp(inode);
 	struct md_op_data *op_data;
 	int rc;
 
@@ -2630,18 +2631,20 @@ int ll_hsm_state_set(struct inode *inode, struct hsm_state_set *hss)
 	    !capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	/* Detect out-of range archive id */
-	if ((hss->hss_valid & HSS_ARCHIVE_ID) &&
-	    (hss->hss_archive_id > LL_HSM_MAX_ARCHIVE))
-		return -EINVAL;
+	if (!exp_connect_archive_id_array(exp)) {
+		/* Detect out-of range archive id */
+		if ((hss->hss_valid & HSS_ARCHIVE_ID) &&
+		    (hss->hss_archive_id > LL_HSM_ORIGIN_MAX_ARCHIVE))
+			return -EINVAL;
+	}
 
 	op_data = ll_prep_md_op_data(NULL, inode, NULL, NULL, 0, 0,
 				     LUSTRE_OPC_ANY, hss);
 	if (IS_ERR(op_data))
 		return PTR_ERR(op_data);
 
-	rc = obd_iocontrol(LL_IOC_HSM_STATE_SET, ll_i2mdexp(inode),
-			   sizeof(*op_data), op_data, NULL);
+	rc = obd_iocontrol(LL_IOC_HSM_STATE_SET, exp, sizeof(*op_data),
+			   op_data, NULL);
 
 	ll_finish_md_op_data(op_data);
 

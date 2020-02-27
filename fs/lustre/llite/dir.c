@@ -996,19 +996,114 @@ progress:
 	return rc ? rc : rc2;
 }
 
-static int copy_and_ioctl(int cmd, struct obd_export *exp,
-			  const void __user *data, size_t size)
+static int copy_and_ct_start(int cmd, struct obd_export *exp,
+			     const struct lustre_kernelcomm __user *data)
 {
-	void *copy;
+	struct lustre_kernelcomm *lk;
+	struct lustre_kernelcomm *tmp;
+	size_t size = sizeof(*lk);
+	size_t new_size;
 	int rc;
+	int i;
 
-	copy = memdup_user(data, size);
-	if (IS_ERR(copy))
-		return PTR_ERR(copy);
+	lk = memdup_user(data, size);
+	if (IS_ERR(lk)) {
+		rc = PTR_ERR(lk);
+		goto out_lk;
+	}
 
-	rc = obd_iocontrol(cmd, exp, size, copy, NULL);
-	kfree(copy);
+	if (lk->lk_flags & LK_FLG_STOP)
+		goto do_ioctl;
 
+	if (!(lk->lk_flags & LK_FLG_DATANR)) {
+		u32 archive_mask = lk->lk_data_count;
+		int count;
+
+		/* old hsm agent to old MDS */
+		if (!exp_connect_archive_id_array(exp))
+			goto do_ioctl;
+
+		/* old hsm agent to new MDS */
+		lk->lk_flags |= LK_FLG_DATANR;
+
+		if (archive_mask == 0)
+			goto do_ioctl;
+
+		count = hweight32(archive_mask);
+		new_size = offsetof(struct lustre_kernelcomm, lk_data[count]);
+		tmp = kmalloc(new_size, GFP_KERNEL);
+		if (!tmp) {
+			rc = -ENOMEM;
+			goto out_lk;
+		}
+		memcpy(tmp, lk, size);
+		tmp->lk_data_count = count;
+		kfree(lk);
+		lk = tmp;
+		size = new_size;
+
+		count = 0;
+		for (i = 0; i < sizeof(archive_mask) * 8; i++) {
+			if (BIT(i) & archive_mask) {
+				lk->lk_data[count] = i + 1;
+				count++;
+			}
+		}
+		goto do_ioctl;
+	}
+
+	/* new hsm agent to new mds */
+	if (lk->lk_data_count > 0) {
+		new_size = offsetof(struct lustre_kernelcomm,
+				    lk_data[lk->lk_data_count]);
+		tmp = kmalloc(new_size, GFP_KERNEL);
+		if (!tmp) {
+			rc = -ENOMEM;
+			goto out_lk;
+		}
+
+		kfree(lk);
+		lk = tmp;
+		size = new_size;
+
+		if (copy_from_user(lk, data, size)) {
+			rc = -EFAULT;
+			goto out_lk;
+		}
+	}
+
+	/* new hsm agent to old MDS */
+	if (!exp_connect_archive_id_array(exp)) {
+		u32 archives = 0;
+
+		if (lk->lk_data_count > LL_HSM_ORIGIN_MAX_ARCHIVE) {
+			rc = -EINVAL;
+			goto out_lk;
+		}
+
+		for (i = 0; i < lk->lk_data_count; i++) {
+			if (lk->lk_data[i] > LL_HSM_ORIGIN_MAX_ARCHIVE) {
+				rc = -EINVAL;
+				CERROR("%s: archive id %d requested but only [0 - %zu] supported: rc = %d\n",
+				       exp->exp_obd->obd_name, lk->lk_data[i],
+				LL_HSM_ORIGIN_MAX_ARCHIVE, rc);
+				goto out_lk;
+			}
+
+			if (lk->lk_data[i] == 0) {
+				archives = 0;
+				break;
+			}
+
+			archives |= BIT(lk->lk_data[i] - 1);
+		}
+		lk->lk_flags &= ~LK_FLG_DATANR;
+		lk->lk_data_count = archives;
+	}
+do_ioctl:
+	rc = obd_iocontrol(cmd, exp, size, lk, NULL);
+out_lk:
+	kfree(lk);
 	return rc;
 }
 
@@ -1926,8 +2021,8 @@ out_quotactl:
 		if (!capable(CAP_SYS_ADMIN))
 			return -EPERM;
 
-		rc = copy_and_ioctl(cmd, sbi->ll_md_exp, (void __user *)arg,
-				    sizeof(struct lustre_kernelcomm));
+		rc = copy_and_ct_start(cmd, sbi->ll_md_exp,
+				       (struct lustre_kernelcomm __user *)arg);
 		return rc;
 
 	case LL_IOC_HSM_COPY_START: {
