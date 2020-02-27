@@ -375,8 +375,8 @@ int osc_io_iter_init(const struct lu_env *env, const struct cl_io_slice *ios)
 }
 EXPORT_SYMBOL(osc_io_iter_init);
 
-int osc_io_write_iter_init(const struct lu_env *env,
-			   const struct cl_io_slice *ios)
+int osc_io_rw_iter_init(const struct lu_env *env,
+			const struct cl_io_slice *ios)
 {
 	struct cl_io *io = ios->cis_io;
 	struct osc_io *oio = osc_env_io(env);
@@ -394,7 +394,7 @@ int osc_io_write_iter_init(const struct lu_env *env,
 
 	return osc_io_iter_init(env, ios);
 }
-EXPORT_SYMBOL(osc_io_write_iter_init);
+EXPORT_SYMBOL(osc_io_rw_iter_init);
 
 void osc_io_iter_fini(const struct lu_env *env,
 		      const struct cl_io_slice *ios)
@@ -412,8 +412,8 @@ void osc_io_iter_fini(const struct lu_env *env,
 }
 EXPORT_SYMBOL(osc_io_iter_fini);
 
-void osc_io_write_iter_fini(const struct lu_env *env,
-			    const struct cl_io_slice *ios)
+void osc_io_rw_iter_fini(const struct lu_env *env,
+			 const struct cl_io_slice *ios)
 {
 	struct osc_io *oio = osc_env_io(env);
 	struct osc_object *osc = cl2osc(ios->cis_obj);
@@ -426,7 +426,7 @@ void osc_io_write_iter_fini(const struct lu_env *env,
 
 	osc_io_iter_fini(env, ios);
 }
-EXPORT_SYMBOL(osc_io_write_iter_fini);
+EXPORT_SYMBOL(osc_io_rw_iter_fini);
 
 int osc_io_fault_start(const struct lu_env *env, const struct cl_io_slice *ios)
 {
@@ -970,14 +970,14 @@ EXPORT_SYMBOL(osc_io_end);
 static const struct cl_io_operations osc_io_ops = {
 	.op = {
 		[CIT_READ] = {
-			.cio_iter_init	= osc_io_iter_init,
-			.cio_iter_fini	= osc_io_iter_fini,
+			.cio_iter_init	= osc_io_rw_iter_init,
+			.cio_iter_fini	= osc_io_rw_iter_fini,
 			.cio_start	= osc_io_read_start,
 			.cio_fini	= osc_io_fini
 		},
 		[CIT_WRITE] = {
-			.cio_iter_init	= osc_io_write_iter_init,
-			.cio_iter_fini	= osc_io_write_iter_fini,
+			.cio_iter_init	= osc_io_rw_iter_init,
+			.cio_iter_fini	= osc_io_rw_iter_fini,
 			.cio_start	= osc_io_write_start,
 			.cio_end	= osc_io_end,
 			.cio_fini	= osc_io_fini
