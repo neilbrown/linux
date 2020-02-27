@@ -1778,8 +1778,44 @@ int lu_context_refill(struct lu_context *ctx)
  * predefined when the lu_device type are registered, during the module probe
  * phase.
  */
-u32 lu_context_tags_default;
-u32 lu_session_tags_default;
+u32 lu_context_tags_default = LCT_CL_THREAD;
+u32 lu_session_tags_default = LCT_SESSION;
+
+void lu_context_tags_update(__u32 tags)
+{
+	spin_lock(&lu_context_remembered_guard);
+	lu_context_tags_default |= tags;
+	atomic_inc(&key_set_version);
+	spin_unlock(&lu_context_remembered_guard);
+}
+EXPORT_SYMBOL(lu_context_tags_update);
+
+void lu_context_tags_clear(__u32 tags)
+{
+	spin_lock(&lu_context_remembered_guard);
+	lu_context_tags_default &= ~tags;
+	atomic_inc(&key_set_version);
+	spin_unlock(&lu_context_remembered_guard);
+}
+EXPORT_SYMBOL(lu_context_tags_clear);
+
+void lu_session_tags_update(__u32 tags)
+{
+	spin_lock(&lu_context_remembered_guard);
+	lu_session_tags_default |= tags;
+	atomic_inc(&key_set_version);
+	spin_unlock(&lu_context_remembered_guard);
+}
+EXPORT_SYMBOL(lu_session_tags_update);
+
+void lu_session_tags_clear(__u32 tags)
+{
+	spin_lock(&lu_context_remembered_guard);
+	lu_session_tags_default &= ~tags;
+	atomic_inc(&key_set_version);
+	spin_unlock(&lu_context_remembered_guard);
+}
+EXPORT_SYMBOL(lu_session_tags_clear);
 
 int lu_env_init(struct lu_env *env, u32 tags)
 {
@@ -1800,6 +1836,34 @@ void lu_env_fini(struct lu_env *env)
 	env->le_ses = NULL;
 }
 EXPORT_SYMBOL(lu_env_fini);
+
+/**
+ * Currently, this API will only be used by echo client.
+ * Because echo client and normal lustre client will share
+ * same cl_env cache. So echo client needs to refresh
+ * the env context after it get one from the cache, especially
+ * when normal client and echo client co-exist in the same client.
+ */
+int lu_env_refill_by_tags(struct lu_env *env, u32 ctags,
+			  u32 stags)
+{
+	int result;
+
+	if ((env->le_ctx.lc_tags & ctags) != ctags) {
+		env->le_ctx.lc_version = 0;
+		env->le_ctx.lc_tags |= ctags;
+	}
+
+	if (env->le_ses && (env->le_ses->lc_tags & stags) != stags) {
+		env->le_ses->lc_version = 0;
+		env->le_ses->lc_tags |= stags;
+	}
+
+	result = lu_env_refill(env);
+
+	return result;
+}
+EXPORT_SYMBOL(lu_env_refill_by_tags);
 
 int lu_env_refill(struct lu_env *env)
 {

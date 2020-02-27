@@ -1208,6 +1208,14 @@ void lu_context_key_degister_many(struct lu_context_key *k, ...);
 void lu_context_key_revive_many(struct lu_context_key *k, ...);
 void lu_context_key_quiesce_many(struct lu_context_key *k, ...);
 
+/*
+ * update/clear ctx/ses tags.
+ */
+void lu_context_tags_update(u32 tags);
+void lu_context_tags_clear(u32 tags);
+void lu_session_tags_update(u32 tags);
+void lu_session_tags_clear(u32 tags);
+
 /**
  * Environment.
  */
@@ -1225,6 +1233,7 @@ struct lu_env {
 int lu_env_init(struct lu_env *env, u32 tags);
 void lu_env_fini(struct lu_env *env);
 int lu_env_refill(struct lu_env *env);
+int lu_env_refill_by_tags(struct lu_env *env, u32 ctags, u32 stags);
 
 struct lu_env *lu_env_find(void);
 int lu_env_add(struct lu_env *env);
