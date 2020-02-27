@@ -463,7 +463,12 @@ enum lu_object_header_flags {
 	 * Object is initialized, when object is found in cache, it may not be
 	 * initialized yet, the object allocator will initialize it.
 	 */
-	LU_OBJECT_INITED	= 2
+	LU_OBJECT_INITED	= 2,
+	/**
+	 * Object is being purged, so mustn't be returned by
+	 * htable_lookup()
+	 */
+	LU_OBJECT_PURGING	= 3,
 };
 
 enum lu_object_header_attr {
@@ -553,6 +558,12 @@ struct lu_site {
 	 * objects hash table
 	 */
 	struct cfs_hash	       *ls_obj_hash;
+	/*
+	 * buckets for summary data
+	 */
+	struct lu_site_bkt_data	*ls_bkts;
+	int			ls_bkt_cnt;
+	u32			ls_bkt_seed;
 	/**
 	 * index of bucket on hash table while purging
 	 */
