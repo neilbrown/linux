@@ -381,7 +381,8 @@ static vm_fault_t ll_fault(struct vm_fault *vmf)
 		return VM_FAULT_SIGBUS;
 restart:
 	result = __ll_fault(vmf->vma, vmf);
-	if (!(result & (VM_FAULT_RETRY | VM_FAULT_ERROR | VM_FAULT_LOCKED))) {
+	if (vmf->page &&
+	    !(result & (VM_FAULT_RETRY | VM_FAULT_ERROR | VM_FAULT_LOCKED))) {
 		struct page *vmpage = vmf->page;
 
 		/* check if this page has been truncated */
