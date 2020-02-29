@@ -111,7 +111,8 @@ u64 ldlm_extent_shift_kms(struct ldlm_lock *lock, u64 old_kms)
 			 * with another lock), and don't need to update KMS.
 			 * Record old_kms and stop looking.
 			 */
-			if (lck->l_policy_data.l_extent.end >= old_kms) {
+			if (lck->l_policy_data.l_extent.end == OBD_OBJECT_EOF ||
+			    lock->l_policy_data.l_extent.end + 1 >= old_kms) {
 				kms = old_kms;
 				complete = true;
 			} else
