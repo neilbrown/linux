@@ -90,6 +90,7 @@ static DEFINE_SPINLOCK(sai_generation_lock);
 /* sa_entry is ready to use */
 static inline int sa_ready(struct sa_entry *entry)
 {
+	/* Make sure sa_entry is updated and ready to use */
 	smp_rmb();
 	return (entry->se_state != SA_ENTRY_INIT);
 }
@@ -166,7 +167,7 @@ static inline int sa_low_hit(struct ll_statahead_info *sai)
 static inline int is_omitted_entry(struct ll_statahead_info *sai, u64 index)
 {
 	return ((u64)sai->sai_max + index + SA_OMITTED_ENTRY_MAX <
-		 sai->sai_index);
+		sai->sai_index);
 }
 
 /* allocate sa_entry and hash it to allow scanner process to find it */
@@ -556,7 +557,8 @@ static void ll_agl_trigger(struct inode *inode, struct ll_statahead_info *sai)
 		return;
 	}
 
-	/* In case of restore, the MDT has the right size and has already
+	/*
+	 * In case of restore, the MDT has the right size and has already
 	 * sent it back without granting the layout lock, inode is up-to-date.
 	 * Then AGL (async glimpse lock) is useless.
 	 * Also to glimpse we need the layout, in case of a runninh restore
@@ -599,16 +601,17 @@ static void ll_agl_trigger(struct inode *inode, struct ll_statahead_info *sai)
 		return;
 	}
 
-	CDEBUG(D_READA, "Handling (init) async glimpse: inode = "
-	       DFID ", idx = %llu\n", PFID(&lli->lli_fid), index);
+	CDEBUG(D_READA,
+	       "Handling (init) async glimpse: inode = " DFID ", idx = %llu\n",
+	       PFID(&lli->lli_fid), index);
 
 	cl_agl(inode);
 	lli->lli_agl_index = 0;
 	lli->lli_glimpse_time = ktime_get();
 	up_write(&lli->lli_glimpse_sem);
 
-	CDEBUG(D_READA, "Handled (init) async glimpse: inode= "
-	       DFID ", idx = %llu, rc = %d\n",
+	CDEBUG(D_READA,
+	       "Handled (init) async glimpse: inode= " DFID ", idx = %llu, rc = %d\n",
 	       PFID(&lli->lli_fid), index, rc);
 
 	iput(inode);
@@ -626,7 +629,7 @@ static void sa_instantiate(struct ll_statahead_info *sai,
 	struct md_enqueue_info *minfo;
 	struct lookup_intent *it;
 	struct ptlrpc_request *req;
-	struct mdt_body	*body;
+	struct mdt_body *body;
 	int rc = 0;
 
 	LASSERT(entry->se_handle != 0);
@@ -735,7 +738,8 @@ static int ll_statahead_interpret(struct ptlrpc_request *req,
 		ll_intent_release(it);
 		sa_fini_data(minfo);
 	} else {
-		/* release ibits lock ASAP to avoid deadlock when statahead
+		/*
+		 * release ibits lock ASAP to avoid deadlock when statahead
 		 * thread enqueues lock on parent in readdir and another
 		 * process enqueues lock on child with parent lock held, eg.
 		 * unlink.
@@ -883,7 +887,8 @@ static int ll_agl_thread(void *arg)
 	struct inode *dir = d_inode(parent);
 	struct ll_inode_info *plli = ll_i2info(dir);
 	struct ll_inode_info *clli;
-	/* We already own this reference, so it is safe to take it without
+	/*
+	 * We already own this reference, so it is safe to take it without
 	 * a lock.
 	 */
 	struct ll_statahead_info *sai = plli->lli_sai;
@@ -1001,7 +1006,7 @@ static int ll_statahead_thread(void *arg)
 		struct lu_dirent *ent;
 
 		op_data = ll_prep_md_op_data(op_data, dir, dir, NULL, 0, 0,
-				     LUSTRE_OPC_ANY, dir);
+					     LUSTRE_OPC_ANY, dir);
 		if (IS_ERR(op_data)) {
 			rc = PTR_ERR(op_data);
 			break;
@@ -1013,7 +1018,8 @@ static int ll_statahead_thread(void *arg)
 		sai->sai_in_readpage = 0;
 		if (IS_ERR(page)) {
 			rc = PTR_ERR(page);
-			CDEBUG(D_READA, "error reading dir " DFID " at %llu/%llu: opendir_pid = %u: rc = %d\n",
+			CDEBUG(D_READA,
+			       "error reading dir "DFID" at %llu /%llu opendir_pid = %u: rc = %d\n",
 			       PFID(ll_inode2fid(dir)), pos, sai->sai_index,
 			       lli->lli_opendir_pid, rc);
 			break;
@@ -1112,7 +1118,8 @@ static int ll_statahead_thread(void *arg)
 		if (sa_low_hit(sai)) {
 			rc = -EFAULT;
 			atomic_inc(&sbi->ll_sa_wrong);
-			CDEBUG(D_READA, "Statahead for dir " DFID " hit ratio too low: hit/miss %llu/%llu, sent/replied %llu/%llu, stopping statahead thread: pid %d\n",
+			CDEBUG(D_READA,
+			       "Statahead for dir " DFID " hit ratio too low: hit/miss %llu/%llu, sent/replied %llu/%llu, stoppingstatahead thread: pid %d\n",
 			       PFID(&lli->lli_fid), sai->sai_hit,
 			       sai->sai_miss, sai->sai_sent,
 			       sai->sai_replied, current->pid);
@@ -1288,7 +1295,8 @@ static int is_first_dirent(struct inode *dir, struct dentry *dentry)
 			char *name;
 
 			hash = le64_to_cpu(ent->lde_hash);
-			/* The ll_get_dir_page() can return any page containing
+			/*
+			 * The ll_get_dir_page() can return any page containing
 			 * the given hash which may be not the start hash.
 			 */
 			if (unlikely(hash < pos))
@@ -1357,6 +1365,7 @@ static int is_first_dirent(struct inode *dir, struct dentry *dentry)
 	}
 out:
 	ll_finish_md_op_data(op_data);
+
 	return rc;
 }
 
@@ -1467,7 +1476,7 @@ static int revalidate_statahead_dentry(struct inode *dir,
 					goto out_unplug;
 				}
 				*dentryp = alias;
-				/**
+				/*
 				 * statahead prepared this inode, transfer inode
 				 * refcount from sa_entry to dentry
 				 */
@@ -1475,7 +1484,7 @@ static int revalidate_statahead_dentry(struct inode *dir,
 			} else if ((*dentryp)->d_inode != inode) {
 				/* revalidate, but inode is recreated */
 				CDEBUG(D_READA,
-				       "%s: stale dentry %pd inode " DFID ", statahead inode " DFID "\n",
+				       "%s: stale dentry %pd inode " DFID", statahead inode "DFID "\n",
 				       ll_i2sbi(inode)->ll_fsname,
 				       *dentryp,
 				       PFID(ll_inode2fid((*dentryp)->d_inode)),
@@ -1558,7 +1567,7 @@ static int start_statahead_thread(struct inode *dir, struct dentry *dentry)
 	 * statahead thread won't be notified to quit.
 	 */
 	spin_lock(&lli->lli_sa_lock);
-	if (unlikely(lli->lli_sai || lli->lli_opendir_key ||
+	if (unlikely(lli->lli_sai || !lli->lli_opendir_key ||
 		     lli->lli_opendir_pid != current->pid)) {
 		spin_unlock(&lli->lli_sa_lock);
 		rc = -EPERM;
