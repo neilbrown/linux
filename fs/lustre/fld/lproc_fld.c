@@ -118,10 +118,11 @@ fld_debugfs_hash_seq_write(struct file *file,
 }
 
 static ssize_t
-fld_debugfs_cache_flush_write(struct file *file, const char __user *buffer,
-			      size_t count, loff_t *pos)
+lprocfs_wr_cache_flush(struct file *file, const char __user *buffer,
+		      size_t count, loff_t *pos)
 {
-	struct lu_client_fld *fld = file->private_data;
+	struct seq_file *m = file->private_data;
+	struct lu_client_fld *fld = m->private;
 
 	fld_cache_flush(fld->lcf_cache);
 
@@ -130,26 +131,16 @@ fld_debugfs_cache_flush_write(struct file *file, const char __user *buffer,
 	return count;
 }
 
-static int
-fld_debugfs_cache_flush_release(struct inode *inode, struct file *file)
-{
-	file->private_data = NULL;
-	return 0;
-}
-
-static const struct file_operations fld_debugfs_cache_flush_fops = {
-	.owner		= THIS_MODULE,
-	.open		= simple_open,
-	.write		= fld_debugfs_cache_flush_write,
-	.release	= fld_debugfs_cache_flush_release,
-};
-
 LPROC_SEQ_FOPS_RO(fld_debugfs_targets);
 LPROC_SEQ_FOPS(fld_debugfs_hash);
+LPROC_SEQ_FOPS_WR_ONLY(fld, cache_flush);
 
 struct lprocfs_vars fld_client_debugfs_list[] = {
-	{ "targets",	 &fld_debugfs_targets_fops },
-	{ "hash",	 &fld_debugfs_hash_fops },
-	{ "cache_flush", &fld_debugfs_cache_flush_fops },
+	{ .name =	"targets",
+	  .fops =	&fld_debugfs_targets_fops	},
+	{ .name =	"hash",
+	  .fops =	&fld_debugfs_hash_fops		},
+	{ .name =	"cache_flush",
+	  .fops =	&fld_cache_flush_fops	},
 	{ NULL }
 };
