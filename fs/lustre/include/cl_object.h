@@ -1295,7 +1295,6 @@ do {									\
 struct cl_page_list {
 	unsigned int			pl_nr;
 	struct list_head		pl_pages;
-	struct task_struct		*pl_owner;
 };
 
 /**

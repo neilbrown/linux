@@ -772,7 +772,6 @@ void cl_page_list_init(struct cl_page_list *plist)
 {
 	plist->pl_nr = 0;
 	INIT_LIST_HEAD(&plist->pl_pages);
-	plist->pl_owner = current;
 }
 EXPORT_SYMBOL(cl_page_list_init);
 
@@ -785,7 +784,6 @@ void cl_page_list_add(struct cl_page_list *plist, struct cl_page *page)
 	 * it is not passed here.
 	 */
 	LASSERT(page->cp_owner);
-	LINVRNT(plist->pl_owner == current);
 
 	LASSERT(list_empty(&page->cp_batch));
 	list_add_tail(&page->cp_batch, &plist->pl_pages);
@@ -803,7 +801,6 @@ void cl_page_list_del(const struct lu_env *env, struct cl_page_list *plist,
 {
 	LASSERT(plist->pl_nr > 0);
 	LASSERT(cl_page_is_vmlocked(env, page));
-	LINVRNT(plist->pl_owner == current);
 
 	list_del_init(&page->cp_batch);
 	--plist->pl_nr;
@@ -819,8 +816,6 @@ void cl_page_list_move(struct cl_page_list *dst, struct cl_page_list *src,
 		       struct cl_page *page)
 {
 	LASSERT(src->pl_nr > 0);
-	LINVRNT(dst->pl_owner == current);
-	LINVRNT(src->pl_owner == current);
 
 	list_move_tail(&page->cp_batch, &dst->pl_pages);
 	--src->pl_nr;
@@ -837,8 +832,6 @@ void cl_page_list_move_head(struct cl_page_list *dst, struct cl_page_list *src,
 			    struct cl_page *page)
 {
 	LASSERT(src->pl_nr > 0);
-	LINVRNT(dst->pl_owner == current);
-	LINVRNT(src->pl_owner == current);
 
 	list_move(&page->cp_batch, &dst->pl_pages);
 	--src->pl_nr;
@@ -856,8 +849,6 @@ void cl_page_list_splice(struct cl_page_list *list, struct cl_page_list *head)
 	struct cl_page *page;
 	struct cl_page *tmp;
 
-	LINVRNT(list->pl_owner == current);
-	LINVRNT(head->pl_owner == current);
 
 	cl_page_list_for_each_safe(page, tmp, list)
 		cl_page_list_move(head, list, page);
@@ -873,7 +864,6 @@ void cl_page_list_disown(const struct lu_env *env,
 	struct cl_page *page;
 	struct cl_page *temp;
 
-	LINVRNT(plist->pl_owner == current);
 
 	cl_page_list_for_each_safe(page, temp, plist) {
 		LASSERT(plist->pl_nr > 0);
@@ -904,7 +894,6 @@ void cl_page_list_fini(const struct lu_env *env, struct cl_page_list *plist)
 	struct cl_page *page;
 	struct cl_page *temp;
 
-	LINVRNT(plist->pl_owner == current);
 
 	cl_page_list_for_each_safe(page, temp, plist)
 		cl_page_list_del(env, plist, page);
@@ -920,7 +909,6 @@ static void cl_page_list_assume(const struct lu_env *env,
 {
 	struct cl_page *page;
 
-	LINVRNT(plist->pl_owner == current);
 
 	cl_page_list_for_each(page, plist)
 		cl_page_assume(env, io, page);
@@ -934,7 +922,6 @@ void cl_page_list_discard(const struct lu_env *env, struct cl_io *io,
 {
 	struct cl_page *page;
 
-	LINVRNT(plist->pl_owner == current);
 	cl_page_list_for_each(page, plist)
 		cl_page_discard(env, io, page);
 }
