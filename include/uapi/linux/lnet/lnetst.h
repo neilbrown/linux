@@ -135,7 +135,7 @@ struct lstcon_test_batch_ent {
 struct lstcon_rpc_ent {
 	struct list_head	rpe_link;	/* link chain */
 	struct lnet_process_id	rpe_peer;	/* peer's id */
-	struct timeval		rpe_stamp;	/* time stamp of RPC */
+	struct old_timeval32	rpe_stamp;	/* time stamp of RPC */
 	int			rpe_state;	/* peer's state */
 	int			rpe_rpc_errno;	/* RPC errno */
 
