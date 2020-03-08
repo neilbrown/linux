@@ -2076,7 +2076,7 @@ static void ptlrpc_watchdog_fire(struct work_struct *w)
 	}
 }
 
-static void ptlrpc_watchdog_init(struct delayed_work *work, time_t time)
+static void ptlrpc_watchdog_init(struct delayed_work *work, s32 time)
 {
 	INIT_DELAYED_WORK(work, ptlrpc_watchdog_fire);
 	schedule_delayed_work(work, time * HZ);
@@ -2087,7 +2087,7 @@ static void ptlrpc_watchdog_disable(struct delayed_work *work)
 	cancel_delayed_work_sync(work);
 }
 
-static void ptlrpc_watchdog_touch(struct delayed_work *work, time_t time)
+static void ptlrpc_watchdog_touch(struct delayed_work *work, s32 time)
 {
 	struct ptlrpc_thread *thread = container_of(&work->work,
 						    struct ptlrpc_thread,

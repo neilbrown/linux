@@ -769,7 +769,7 @@ int ptlrpc_connect_import_locked(struct obd_import *imp)
 					MSG_CONNECT_TRANSNO);
 
 	DEBUG_REQ(D_RPCTRACE, request, "(re)connect request (timeout %ld)",
-		  request->rq_timeout);
+		  (long)request->rq_timeout);
 	ptlrpcd_add_req(request);
 	rc = 0;
 out:

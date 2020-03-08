@@ -948,7 +948,7 @@ struct ptlrpc_request {
 	 * If the request is not served by this time, it is marked as timed out.
 	 * Do not change to time64_t since this is transmitted over the wire.
 	 */
-	time_t			rq_timeout;
+	s32			rq_timeout;
 	/**
 	 * when request/reply sent (secs), or time when request should be sent
 	 */
