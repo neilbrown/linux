@@ -274,7 +274,6 @@ static int llog_process_thread(void *arg)
 		unsigned int buf_offset = 0;
 		struct llog_rec_hdr *rec;
 		off_t chunk_offset = 0;
-		bool partial_chunk;
 		int synced_idx = 0;
 		int lh_last_idx;
 
@@ -318,13 +317,10 @@ repeat:
 		 * from cur_offset value and stored in chunk_offset variable.
 		 */
 		tmp_offset = cur_offset;
-		if (do_div(tmp_offset, chunk_size)) {
-			partial_chunk = true;
+		if (do_div(tmp_offset, chunk_size))
 			chunk_offset = cur_offset & ~(chunk_size - 1);
-		} else {
-			partial_chunk = false;
+		else
 			chunk_offset = cur_offset - chunk_size;
-		}
 
 		/* NB: when rec->lrh_len is accessed it is already swabbed
 		 * since it is used at the "end" of the loop and the rec
