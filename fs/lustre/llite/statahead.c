@@ -644,14 +644,15 @@ static void sa_instantiate(struct ll_statahead_info *sai,
 	}
 
 	child = entry->se_inode;
-	if (child) {
-		/* revalidate; unlinked and re-created with the same name */
-		if (unlikely(!lu_fid_eq(&minfo->mi_data.op_fid2,
-					&body->mbo_fid1))) {
+	/* revalidate; unlinked and re-created with the same name */
+	if (unlikely(!lu_fid_eq(&minfo->mi_data.op_fid2, &body->mbo_fid1))) {
+		if (child) {
 			entry->se_inode = NULL;
 			iput(child);
-			child = NULL;
 		}
+		/* The mdt_body is invalid. Skip this entry */
+		rc = -EAGAIN;
+		goto out;
 	}
 
 	it->it_lock_handle = entry->se_handle;
