@@ -444,11 +444,13 @@ static inline int obd_set_info_async(const struct lu_env *env,
 
 static inline int obd_setup(struct obd_device *obd, struct lustre_cfg *cfg)
 {
-	struct lu_device_type *ldt;
-	struct lu_device *d;
 	int rc;
+	struct obd_type *type = obd->obd_type;
+	struct lu_device_type *ldt;
 
-	ldt = obd->obd_type->typ_lu;
+	wait_var_event(&type->typ_lu,
+		       smp_load_acquire(&type->typ_lu) != OBD_LU_TYPE_SETUP);
+	ldt = type->typ_lu;
 	if (ldt) {
 		struct lu_context session_ctx;
 		struct lu_env env;
@@ -459,20 +461,20 @@ static inline int obd_setup(struct obd_device *obd, struct lustre_cfg *cfg)
 
 		rc = lu_env_init(&env, ldt->ldt_ctx_tags);
 		if (rc == 0) {
+			struct lu_device *dev;
 			env.le_ses = &session_ctx;
-			d = ldt->ldt_ops->ldto_device_alloc(&env, ldt, cfg);
+			dev = ldt->ldt_ops->ldto_device_alloc(&env, ldt, cfg);
 			lu_env_fini(&env);
-			if (!IS_ERR(d)) {
-				obd->obd_lu_dev = d;
-				d->ld_obd = obd;
+			if (!IS_ERR(dev)) {
+				obd->obd_lu_dev = dev;
+				dev->ld_obd = obd;
 				rc = 0;
 			} else {
-				rc = PTR_ERR(d);
+				rc = PTR_ERR(dev);
 			}
 		}
 		lu_context_exit(&session_ctx);
 		lu_context_fini(&session_ctx);
-
 	} else {
 		if (!obd->obd_type->typ_dt_ops->setup) {
 			CERROR("%s: no %s operation\n", obd->obd_name,

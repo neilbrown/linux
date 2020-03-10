@@ -1428,6 +1428,10 @@ int lu_context_key_register(struct lu_context_key *key)
 		if (lu_keys[i])
 			continue;
 		key->lct_index = i;
+
+		if (strncmp("osd_", module_name(key->lct_owner), 4) == 0)
+			CFS_RACE_WAIT(OBD_FAIL_OBD_SETUP);
+
 		if (cmpxchg(&lu_keys[i], NULL, key) != NULL)
 			continue;
 

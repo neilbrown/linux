@@ -183,6 +183,7 @@ int class_register_type(const struct obd_ops *dt_ops,
 	if (!type)
 		return -ENOMEM;
 
+	type->typ_lu = ldt ? OBD_LU_TYPE_SETUP : NULL;
 	type->typ_kobj.kset = lustre_kset;
 	kobject_init(&type->typ_kobj, &class_ktype);
 
@@ -197,8 +198,9 @@ int class_register_type(const struct obd_ops *dt_ops,
 						     debugfs_lustre_root);
 
 	if (ldt) {
-		type->typ_lu = ldt;
 		rc = lu_device_type_init(ldt);
+		smp_store_release(&type->typ_lu, rc ? NULL : ldt);
+		wake_up_var(&type->typ_lu);
 		if (rc != 0)
 			goto failed;
 	}
