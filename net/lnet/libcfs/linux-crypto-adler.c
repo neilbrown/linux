@@ -121,7 +121,7 @@ static struct shash_alg alg = {
 		.cra_flags		= CRYPTO_ALG_OPTIONAL_KEY,
 		.cra_blocksize		= CHKSUM_BLOCK_SIZE,
 		.cra_ctxsize		= sizeof(u32),
-		.cra_module		= THIS_MODULE,
+		.cra_module		= NULL,
 		.cra_init		= adler32_cra_init,
 	}
 };
