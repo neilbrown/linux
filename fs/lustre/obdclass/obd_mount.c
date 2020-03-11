@@ -398,10 +398,6 @@ int lustre_start_mgc(struct super_block *sb)
 				  OBD_CONNECT_FULL20 | OBD_CONNECT_IMP_RECOV |
 				  OBD_CONNECT_LVB_TYPE | OBD_CONNECT_BULK_MBITS;
 
-#if OBD_OCD_VERSION(3, 0, 53, 0) > LUSTRE_VERSION_CODE
-	data->ocd_connect_flags |= OBD_CONNECT_MNE_SWAB;
-#endif
-
 	if (lmd_is_client(lsi->lsi_lmd) &&
 	    lsi->lsi_lmd->lmd_flags & LMD_FLG_NOIR)
 		data->ocd_connect_flags &= ~OBD_CONNECT_IMP_RECOV;

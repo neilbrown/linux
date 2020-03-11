@@ -826,13 +826,6 @@ struct ptlrpc_body_v2 {
  * to reserve the flag for future use.
  */
 
-/* The MNE_SWAB flag is overloading the MDS_MDS bit only for the MGS
- * connection.  It is a temporary bug fix for Imperative Recovery interop
- * between 2.2 and 2.3 x86/ppc nodes, and can be removed when interop for
- * 2.2 clients/servers is no longer needed.  LU-1252/LU-1644.
- */
-#define OBD_CONNECT_MNE_SWAB		OBD_CONNECT_MDS_MDS
-
 #define OCD_HAS_FLAG(ocd, flg)  \
 	(!!((ocd)->ocd_connect_flags & OBD_CONNECT_##flg))
 
