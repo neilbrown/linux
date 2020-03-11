@@ -2495,18 +2495,6 @@ void _debug_req(struct ptlrpc_request *req,
 }
 EXPORT_SYMBOL(_debug_req);
 
-void lustre_swab_lustre_capa(struct lustre_capa *c)
-{
-	lustre_swab_lu_fid(&c->lc_fid);
-	__swab64s(&c->lc_opc);
-	__swab64s(&c->lc_uid);
-	__swab64s(&c->lc_gid);
-	__swab32s(&c->lc_flags);
-	__swab32s(&c->lc_keyid);
-	__swab32s(&c->lc_timeout);
-	__swab32s(&c->lc_expiry);
-}
-
 void lustre_swab_hsm_user_state(struct hsm_user_state *state)
 {
 	__swab32s(&state->hus_states);

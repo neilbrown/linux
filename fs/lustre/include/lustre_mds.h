@@ -49,10 +49,6 @@
 #include <lustre_dlm.h>
 #include <lustre_export.h>
 
-struct mds_group_info {
-	struct obd_uuid		*uuid;
-	int			group;
-};
 
 struct md_rejig_data {
 	struct md_object	*mrd_obj;
