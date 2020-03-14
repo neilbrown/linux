@@ -91,6 +91,7 @@ int it_open_error(int phase, struct lookup_intent *it)
 	CERROR("it disp: %X, status: %d\n", it->it_disposition,
 	       it->it_status);
 	LBUG();
+
 	return 0;
 }
 EXPORT_SYMBOL(it_open_error);
@@ -209,7 +210,7 @@ static inline void mdc_clear_replay_flag(struct ptlrpc_request *req, int rc)
  * original request doesn't need this buffer (at most it sends just the
  * lov_mds_md) and it is a waste of RAM/bandwidth to send the empty
  * buffer and may also be difficult to allocate and save a very large
- * request buffer for each open. (bug 5707)
+ * request buffer for each open. (b=5707)
  *
  * OOM here may cause recovery failure if lmm is needed (only for the
  * original open if the MDS crashed just when this client also OOM'd)
@@ -261,8 +262,8 @@ mdc_intent_open_pack(struct obd_export *exp, struct lookup_intent *it,
 	LIST_HEAD(cancels);
 	int count = 0;
 	enum ldlm_mode mode;
-	int rc;
 	int repsize, repsize_estimate;
+	int rc;
 
 	mdt_md_capsule_size = obd->u.cli.cl_default_mds_easize;
 
@@ -420,13 +421,12 @@ mdc_intent_open_pack(struct obd_export *exp, struct lookup_intent *it,
 	return req;
 }
 
-#define GA_DEFAULT_EA_NAME_LEN	20
+#define GA_DEFAULT_EA_NAME_LEN	 20
 #define GA_DEFAULT_EA_VAL_LEN	250
-#define GA_DEFAULT_EA_NUM	10
+#define GA_DEFAULT_EA_NUM	 10
 
 static struct ptlrpc_request *
-mdc_intent_getxattr_pack(struct obd_export *exp,
-			 struct lookup_intent *it,
+mdc_intent_getxattr_pack(struct obd_export *exp, struct lookup_intent *it,
 			 struct md_op_data *op_data)
 {
 	u32 ea_vals_buf_size = GA_DEFAULT_EA_VAL_LEN * GA_DEFAULT_EA_NUM;
@@ -462,14 +462,13 @@ mdc_intent_getxattr_pack(struct obd_export *exp,
 	CDEBUG(D_INFO, "%s: get xattrs for " DFID "\n",
 	       exp->exp_obd->obd_name, PFID(&op_data->op_fid1));
 
-	/* If the supplied buffer is too small then the server will
-	 * return -ERANGE and llite will fallback to using non cached
-	 * xattr operations. On servers before 2.10.1 a (non-cached)
-	 * listxattr RPC for an orphan or dead file causes an oops. So
-	 * let's try to avoid sending too small a buffer to too old a
-	 * server. This is effectively undoing the memory conservation
-	 * of LU-9417 when it would be *more* likely to crash the
-	 * server. See LU-9856.
+	/* If the supplied buffer is too small then the server will return
+	 * -ERANGE and llite will fallback to using non cached xattr
+	 * operations. On servers before 2.10.1 a (non-cached) listxattr RPC
+	 * for an orphan or dead file causes an oops. So let's try to avoid
+	 * sending too small a buffer to too old a server. This is effectively
+	 * undoing the memory conservation of LU-9417 when it would be *more*
+	 * likely to crash the server. See LU-9856.
 	 */
 	BUILD_BUG_ON(OBD_OCD_VERSION(3, 0, 53, 0) <= LUSTRE_VERSION_CODE);
 	if (exp->exp_connect_data.ocd_version < OBD_OCD_VERSION(2, 10, 1, 0))
@@ -581,10 +580,10 @@ static struct ptlrpc_request *mdc_intent_layout_pack(struct obd_export *exp,
 						     struct md_op_data *op_data)
 {
 	struct obd_device *obd = class_exp2obd(exp);
-	LIST_HEAD(cancels);
 	struct ptlrpc_request *req;
 	struct ldlm_intent *lit;
 	struct layout_intent *layout;
+	LIST_HEAD(cancels);
 	int count = 0, rc;
 
 	req = ptlrpc_request_alloc(class_exp2cliimp(exp),
@@ -622,8 +621,8 @@ static struct ptlrpc_request *mdc_intent_layout_pack(struct obd_export *exp,
 	return req;
 }
 
-static struct ptlrpc_request *
-mdc_enqueue_pack(struct obd_export *exp, int lvb_len)
+static struct ptlrpc_request *mdc_enqueue_pack(struct obd_export *exp,
+					       int lvb_len)
 {
 	struct ptlrpc_request *req;
 	int rc;
@@ -647,8 +646,7 @@ static int mdc_finish_enqueue(struct obd_export *exp,
 			      struct ptlrpc_request *req,
 			      struct ldlm_enqueue_info *einfo,
 			      struct lookup_intent *it,
-			      struct lustre_handle *lockh,
-			      int rc)
+			      struct lustre_handle *lockh, int rc)
 {
 	struct req_capsule *pill = &req->rq_pill;
 	struct ldlm_request *lockreq;
@@ -673,10 +671,9 @@ static int mdc_finish_enqueue(struct obd_export *exp,
 		rc = 0;
 	} else { /* rc = 0 */
 		lock = ldlm_handle2lock(lockh);
+		LASSERT(lock);
 
-		/* If the server gave us back a different lock mode, we should
-		 * fix up our variables.
-		 */
+		/* If server returned a different lock mode, fix up variables */
 		if (lock->l_req_mode != einfo->ei_mode) {
 			ldlm_lock_addref(lockh, lock->l_req_mode);
 			ldlm_lock_decref(lockh, einfo->ei_mode);
@@ -694,7 +691,7 @@ static int mdc_finish_enqueue(struct obd_export *exp,
 	it->it_request = req;
 
 	/* Technically speaking rq_transno must already be zero if
-	 * it_status is in error, so the check is a bit redundant
+	 * it_status is in error, so the check is a bit redundant.
 	 */
 	if ((!req->rq_transno || it->it_status < 0) && req->rq_replay)
 		mdc_clear_replay_flag(req, it->it_status);
@@ -704,8 +701,8 @@ static int mdc_finish_enqueue(struct obd_export *exp,
 	 * this request for unconditional replay.
 	 *
 	 * It's important that we do this first!  Otherwise we might exit the
-	 * function without doing so, and try to replay a failed create
-	 * (bug 3440)
+	 * function without doing so, and try to replay a failed create.
+	 * (b=3440)
 	 */
 	if (it->it_op & IT_OPEN && req->rq_replay &&
 	    (!it_disposition(it, DISP_OPEN_OPEN) || it->it_status != 0))
@@ -718,8 +715,10 @@ static int mdc_finish_enqueue(struct obd_export *exp,
 	if (it_has_reply_body(it)) {
 		body = req_capsule_server_get(pill, &RMF_MDT_BODY);
 		if (!body) {
-			CERROR("Can't swab mdt_body\n");
-			return -EPROTO;
+			rc = -EPROTO;
+			CERROR("%s: cannot swab mdt_body: rc = %d\n",
+			       exp->exp_obd->obd_name, rc);
+			return rc;
 		}
 
 		if (it_disposition(it, DISP_OPEN_OPEN) &&
@@ -753,8 +752,7 @@ static int mdc_finish_enqueue(struct obd_export *exp,
 			if (!eadata)
 				return -EPROTO;
 
-			/* save lvb data and length in case this is for layout
-			 * lock
+			/* save LVB data and length if for layout lock
 			 */
 			lvb_data = eadata;
 			lvb_len = body->mbo_eadatasize;
@@ -981,10 +979,10 @@ resend:
 		 * delay and let caller deal with the rest, since rest of
 		 * this function metadata processing makes no sense for flock
 		 * requests anyway. But in case of problem during comms with
-		 * Server (ETIMEDOUT) or any signal/kill attempt (EINTR), we
-		 * can not rely on caller and this mainly for F_UNLCKs
-		 * (explicits or automatically generated by Kernel to clean
-		 * current FLocks upon exit) that can't be trashed
+		 * server (-ETIMEDOUT) or any signal/kill attempt (-EINTR),
+		 * we cannot rely on caller and this mainly for F_UNLCKs
+		 * (explicits or automatically generated by kernel to clean
+		 * current flocks upon exit) that can't be trashed.
 		 */
 		ptlrpc_req_finished(req);
 		if (((rc == -EINTR) || (rc == -ETIMEDOUT)) &&
@@ -1079,6 +1077,7 @@ static int mdc_finish_intent_lock(struct obd_export *exp,
 	struct ldlm_lock *lock;
 	int rc = 0;
 
+	LASSERT(request);
 	LASSERT(request != LP_POISON);
 	LASSERT(request->rq_repmsg != LP_POISON);
 
@@ -1123,9 +1122,11 @@ static int mdc_finish_intent_lock(struct obd_export *exp,
 	    it_disposition(it, DISP_OPEN_OPEN) &&
 	    !it_open_error(DISP_OPEN_OPEN, it)) {
 		it_set_disposition(it, DISP_ENQ_OPEN_REF);
-		ptlrpc_request_addref(request); /* balanced in ll_file_open */
-		/* BUG 11546 - eviction in the middle of open rpc processing */
-		OBD_FAIL_TIMEOUT(OBD_FAIL_MDC_ENQUEUE_PAUSE, obd_timeout);
+		/* balanced in ll_file_open */
+		ptlrpc_request_addref(request);
+		/* eviction in middle of open RPC processing b=11546 */
+		OBD_FAIL_TIMEOUT(OBD_FAIL_MDC_ENQUEUE_PAUSE,
+				 obd_timeout);
 	}
 
 	if (it->it_op & IT_CREAT)
@@ -1141,7 +1142,7 @@ matching_lock:
 	 * one. We have to set the data here instead of in
 	 * mdc_enqueue, because we need to use the child's inode as
 	 * the l_ast_data to match, and that's not available until
-	 * intent_finish has performed the iget().)
+	 * intent_finish has performed the iget().
 	 */
 	lock = ldlm_handle2lock(lockh);
 	if (lock) {
@@ -1167,28 +1168,26 @@ matching_lock:
 
 		memcpy(&old_lock, lockh, sizeof(*lockh));
 		if (ldlm_lock_match(NULL, LDLM_FL_BLOCK_GRANTED, NULL,
-				    LDLM_IBITS, &policy, LCK_NL,
-				    &old_lock, 0)) {
-			ldlm_lock_decref_and_cancel(lockh,
-						    it->it_lock_mode);
+				   LDLM_IBITS, &policy, LCK_NL, &old_lock, 0)) {
+			ldlm_lock_decref_and_cancel(lockh, it->it_lock_mode);
 			memcpy(lockh, &old_lock, sizeof(old_lock));
 			it->it_lock_handle = lockh->cookie;
 		}
 	}
 out:
 	CDEBUG(D_DENTRY,
-	       "D_IT dentry %.*s intent: %s status %d disp %x rc %d\n",
+	       "D_IT dentry=%.*s intent=%s status=%d disp=%x: rc = %d\n",
 	       (int)op_data->op_namelen, op_data->op_name,
 	       ldlm_it2str(it->it_op), it->it_status, it->it_disposition, rc);
+
 	return rc;
 }
 
 int mdc_revalidate_lock(struct obd_export *exp, struct lookup_intent *it,
 			struct lu_fid *fid, u64 *bits)
 {
-	/* We could just return 1 immediately, but since we should only
-	 * be called in revalidate_it if we already have a lock, let's
-	 * verify that.
+	/* We could just return 1 immediately, but as we should only be called
+	 * in revalidate_it if we already have a lock, let's verify that.
 	 */
 	struct ldlm_res_id res_id;
 	struct lustre_handle lockh;
@@ -1292,7 +1291,6 @@ int mdc_intent_lock(struct obd_export *exp, struct md_op_data *op_data,
 	int rc = 0;
 
 	LASSERT(it);
-
 	CDEBUG(D_DLMTRACE, "(name: %.*s," DFID ") in obj " DFID
 		", intent: %s flags %#Lo\n", (int)op_data->op_namelen,
 		op_data->op_name, PFID(&op_data->op_fid2),
@@ -1309,7 +1307,7 @@ int mdc_intent_lock(struct obd_export *exp, struct md_op_data *op_data,
 		it->it_lock_handle = 0;
 		rc = mdc_revalidate_lock(exp, it, &op_data->op_fid2, NULL);
 		/* Only return failure if it was not GETATTR by cfid
-		 * (from inode_revalidate)
+		 * (from inode_revalidate()).
 		 */
 		if (rc || op_data->op_namelen != 0)
 			return rc;
@@ -1319,7 +1317,8 @@ int mdc_intent_lock(struct obd_export *exp, struct md_op_data *op_data,
 	if (!fid_is_sane(&op_data->op_fid2) && it->it_op & IT_CREAT) {
 		rc = mdc_fid_alloc(NULL, exp, &op_data->op_fid2, op_data);
 		if (rc < 0) {
-			CERROR("Can't alloc new fid, rc %d\n", rc);
+			CERROR("%s: cannot allocate new FID: rc=%d\n",
+			       exp->exp_obd->obd_name, rc);
 			return rc;
 		}
 	}
@@ -1338,17 +1337,14 @@ static int mdc_intent_getattr_async_interpret(const struct lu_env *env,
 					      struct ptlrpc_request *req,
 					      void *args, int rc)
 {
-	struct mdc_getattr_args  *ga = args;
+	struct mdc_getattr_args *ga = args;
 	struct obd_export *exp = ga->ga_exp;
 	struct md_enqueue_info *minfo = ga->ga_minfo;
 	struct ldlm_enqueue_info *einfo = &minfo->mi_einfo;
-	struct lookup_intent *it;
-	struct lustre_handle *lockh;
+	struct lookup_intent *it = &minfo->mi_it;
+	struct lustre_handle *lockh = &minfo->mi_lockh;
 	struct ldlm_reply *lockrep;
 	u64 flags = LDLM_FL_HAS_INTENT;
-
-	it = &minfo->mi_it;
-	lockh = &minfo->mi_lockh;
 
 	if (OBD_FAIL_CHECK(OBD_FAIL_MDC_GETATTR_ENQUEUE))
 		rc = -ETIMEDOUT;
@@ -1356,7 +1352,8 @@ static int mdc_intent_getattr_async_interpret(const struct lu_env *env,
 	rc = ldlm_cli_enqueue_fini(exp, req, einfo->ei_type, 1, einfo->ei_mode,
 				   &flags, NULL, 0, lockh, rc);
 	if (rc < 0) {
-		CERROR("ldlm_cli_enqueue_fini: %d\n", rc);
+		CERROR("%s: ldlm_cli_enqueue_fini() failed: rc = %d\n",
+		       exp->exp_obd->obd_name, rc);
 		mdc_clear_replay_flag(req, rc);
 		goto out;
 	}
@@ -1388,8 +1385,8 @@ int mdc_intent_getattr_async(struct obd_export *exp,
 	union ldlm_policy_data policy = {
 		.l_inodebits = { MDS_INODELOCK_LOOKUP | MDS_INODELOCK_UPDATE }
 	};
-	int rc = 0;
 	u64 flags = LDLM_FL_HAS_INTENT;
+	int rc = 0;
 
 	CDEBUG(D_DLMTRACE,
 	       "name: %.*s in inode " DFID ", intent: %s flags %#Lo\n",
