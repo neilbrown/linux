@@ -226,7 +226,8 @@ struct lu_object_operations {
 				  struct lu_object *o);
 	/**
 	 * Dual to lu_device_operations::ldo_object_alloc(). Called when
-	 * object is removed from memory.
+	 * object is removed from memory.  Must use call_rcu or kfree_rcu
+	 * if the object contains an lu_object_header.
 	 */
 	void (*loo_object_free)(const struct lu_env *env,
 				struct lu_object *o);
@@ -529,6 +530,10 @@ struct lu_object_header {
 	 * A list of references to this object, for debugging.
 	 */
 	struct lu_ref		loh_reference;
+	/*
+	 * Handle used for kfree_rcu() or similar.
+	 */
+	struct rcu_head		loh_rcu;
 };
 
 struct fld;
