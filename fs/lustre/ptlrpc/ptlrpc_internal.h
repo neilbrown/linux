@@ -58,7 +58,7 @@ int ptlrpcd_start(struct ptlrpcd_ctl *pc);
 
 /* client.c */
 void ptlrpc_at_adj_net_latency(struct ptlrpc_request *req,
-			       unsigned int service_time);
+			       timeout_t service_timeout);
 struct ptlrpc_bulk_desc *ptlrpc_new_bulk(unsigned int nfrags,
 					 unsigned int max_brw,
 					 enum ptlrpc_bulk_op_type type,

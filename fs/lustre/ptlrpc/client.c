@@ -338,7 +338,7 @@ int ptlrpc_at_get_net_latency(struct ptlrpc_request *req)
 
 /* Adjust expected network latency */
 void ptlrpc_at_adj_net_latency(struct ptlrpc_request *req,
-			       unsigned int service_time)
+			       timeout_t service_timeout)
 {
 	unsigned int nl, oldnl;
 	struct imp_at *at;
@@ -346,7 +346,7 @@ void ptlrpc_at_adj_net_latency(struct ptlrpc_request *req,
 
 	LASSERT(req->rq_import);
 
-	if (service_time > now - req->rq_sent + 3) {
+	if (service_timeout > now - req->rq_sent + 3) {
 		/*
 		 * bz16408, however, this can also happen if early reply
 		 * is lost and client RPC is expired and resent, early reply
@@ -358,13 +358,13 @@ void ptlrpc_at_adj_net_latency(struct ptlrpc_request *req,
 		CDEBUG((lustre_msg_get_flags(req->rq_reqmsg) & MSG_RESENT) ?
 		       D_ADAPTTO : D_WARNING,
 		       "Reported service time %u > total measured time %lld\n",
-		       service_time, now - req->rq_sent);
+		       service_timeout, now - req->rq_sent);
 		return;
 	}
 
 	/* Network latency is total time less server processing time */
 	nl = max_t(int, now - req->rq_sent -
-			service_time, 0) + 1; /* st rounding */
+			service_timeout, 0) + 1; /* st rounding */
 	at = &req->rq_import->imp_at;
 
 	oldnl = at_measured(&at->iat_net_latency, nl);
@@ -406,6 +406,7 @@ static int ptlrpc_at_recv_early_reply(struct ptlrpc_request *req)
 	__must_hold(&req->rq_lock)
 {
 	struct ptlrpc_request *early_req;
+	timeout_t service_timeout;
 	time64_t olddl;
 	int rc;
 
@@ -436,8 +437,8 @@ static int ptlrpc_at_recv_early_reply(struct ptlrpc_request *req)
 	lustre_msg_set_timeout(req->rq_reqmsg, req->rq_timeout);
 
 	/* Network latency can be adjusted, it is pure network delays */
-	ptlrpc_at_adj_net_latency(req,
-				  lustre_msg_get_service_time(early_req->rq_repmsg));
+	service_timeout = lustre_msg_get_service_timeout(early_req->rq_repmsg);
+	ptlrpc_at_adj_net_latency(req, service_timeout);
 
 	sptlrpc_cli_finish_early_reply(early_req);
 
@@ -1430,8 +1431,8 @@ static int after_reply(struct ptlrpc_request *req)
 	if (lustre_msg_get_opc(req->rq_reqmsg) != OBD_PING)
 		CFS_FAIL_TIMEOUT(OBD_FAIL_PTLRPC_PAUSE_REP, cfs_fail_val);
 	ptlrpc_at_adj_service(req, lustre_msg_get_timeout(req->rq_repmsg));
-	ptlrpc_at_adj_net_latency(req,
-				  lustre_msg_get_service_time(req->rq_repmsg));
+	ptlrpc_at_adj_net_latency(
+		req, lustre_msg_get_service_timeout(req->rq_repmsg));
 
 	rc = ptlrpc_check_status(req);
 
@@ -2966,8 +2967,8 @@ int ptlrpc_replay_req(struct ptlrpc_request *req)
 	ptlrpc_at_set_req_timeout(req);
 
 	/* Tell server net_latency to calculate how long to wait for reply. */
-	lustre_msg_set_service_time(req->rq_reqmsg,
-				    ptlrpc_at_get_net_latency(req));
+	lustre_msg_set_service_timeout(req->rq_reqmsg,
+				       ptlrpc_at_get_net_latency(req));
 	DEBUG_REQ(D_HA, req, "REPLAY");
 
 	atomic_inc(&req->rq_import->imp_replay_inflight);

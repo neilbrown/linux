@@ -70,6 +70,8 @@ void lnet_remove_debugfs(struct ctl_table *table);
 #define NUM_CACHEPAGES totalram_pages()
 #endif
 
+typedef s32 timeout_t;
+
 #define wait_var_event_warning(var, condition, format, ...)		\
 do {									\
 	int counter = 4;						\

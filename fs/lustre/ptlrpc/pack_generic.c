@@ -1157,7 +1157,7 @@ u32 lustre_msg_get_magic(struct lustre_msg *msg)
 	}
 }
 
-u32 lustre_msg_get_timeout(struct lustre_msg *msg)
+timeout_t lustre_msg_get_timeout(struct lustre_msg *msg)
 {
 	switch (msg->lm_magic) {
 	case LUSTRE_MSG_MAGIC_V2: {
@@ -1175,7 +1175,7 @@ u32 lustre_msg_get_timeout(struct lustre_msg *msg)
 	}
 }
 
-u32 lustre_msg_get_service_time(struct lustre_msg *msg)
+timeout_t lustre_msg_get_service_timeout(struct lustre_msg *msg)
 {
 	switch (msg->lm_magic) {
 	case LUSTRE_MSG_MAGIC_V2: {
@@ -1391,12 +1391,13 @@ void lustre_msg_set_conn_cnt(struct lustre_msg *msg, u32 conn_cnt)
 	}
 }
 
-void lustre_msg_set_timeout(struct lustre_msg *msg, u32 timeout)
+void lustre_msg_set_timeout(struct lustre_msg *msg, timeout_t timeout)
 {
 	switch (msg->lm_magic) {
 	case LUSTRE_MSG_MAGIC_V2: {
 		struct ptlrpc_body *pb = lustre_msg_ptlrpc_body(msg);
 
+		LASSERT(timeout >= 0);
 		LASSERTF(pb, "invalid msg %p: no ptlrpc body!\n", msg);
 		pb->pb_timeout = timeout;
 		return;
@@ -1406,14 +1407,16 @@ void lustre_msg_set_timeout(struct lustre_msg *msg, u32 timeout)
 	}
 }
 
-void lustre_msg_set_service_time(struct lustre_msg *msg, u32 service_time)
+void lustre_msg_set_service_timeout(struct lustre_msg *msg,
+				    timeout_t service_timeout)
 {
 	switch (msg->lm_magic) {
 	case LUSTRE_MSG_MAGIC_V2: {
 		struct ptlrpc_body *pb = lustre_msg_ptlrpc_body(msg);
 
+		LASSERT(service_timeout >= 0);
 		LASSERTF(pb, "invalid msg %p: no ptlrpc body!\n", msg);
-		pb->pb_service_time = service_time;
+		pb->pb_service_time = service_timeout;
 		return;
 	}
 	default:
