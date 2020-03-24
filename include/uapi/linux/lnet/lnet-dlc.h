@@ -42,6 +42,13 @@
 #define LNET_RT_MULTI_HOP	BIT(1)
 
 /*
+ * sparse kernel source annotations
+ */
+#ifndef __user
+#define __user
+#endif
+
+/*
  * To allow for future enhancements to extend the tunables
  * add a hdr to this structure, so that the version can be set
  * and checked for backwards compatibility. Newer versions of LNet
@@ -114,7 +121,7 @@ struct lnet_ioctl_ping_data {
 	__u32 op_param;
 	__u32 ping_count;
 	__u32 ping_flags;
-	bool mr_info;
+	__u32 mr_info;
 	struct lnet_process_id ping_id;
 	struct lnet_process_id __user *ping_buf;
 };
@@ -254,7 +261,7 @@ struct lnet_ioctl_peer_cfg {
 	lnet_nid_t prcfg_prim_nid;
 	lnet_nid_t prcfg_cfg_nid;
 	__u32 prcfg_count;
-	bool prcfg_mr;
+	__u32 prcfg_mr;
 	__u32 prcfg_state;
 	__u32 prcfg_size;
 	void __user *prcfg_bulk;
@@ -262,16 +269,16 @@ struct lnet_ioctl_peer_cfg {
 
 struct lnet_ioctl_reset_health_cfg {
 	struct libcfs_ioctl_hdr rh_hdr;
-	enum lnet_health_type rh_type;
-	bool rh_all;
-	int rh_value;
+	enum lnet_health_type rh_type:32;
+	__u16 rh_all:1;
+	__s16 rh_value;
 	lnet_nid_t rh_nid;
 };
 
 struct lnet_ioctl_recovery_list {
 	struct libcfs_ioctl_hdr rlst_hdr;
-	enum lnet_health_type rlst_type;
-	int rlst_num_nids;
+	enum lnet_health_type rlst_type:32;
+	__u32 rlst_num_nids;
 	lnet_nid_t rlst_nid_array[LNET_MAX_SHOW_NUM_NID];
 };
 

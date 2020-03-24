@@ -98,9 +98,9 @@ struct lnet_fault_attr {
 			/** error type mask */
 			__u32			da_health_error_mask;
 			/** randomize error generation */
-			bool			da_random;
+			__u32			da_random:1,
 			/** drop all messages if flag is set */
-			bool			da_drop_all;
+						da_drop_all:1;
 		} drop;
 		/** message latency simulation */
 		struct {
