@@ -1675,6 +1675,7 @@ srpc_shutdown(void)
 		rc = LNetClearLazyPortal(SRPC_FRAMEWORK_REQUEST_PORTAL);
 		rc = LNetClearLazyPortal(SRPC_REQUEST_PORTAL);
 		LASSERT(!rc);
+		lnet_assert_handler_unused(srpc_data.rpc_lnet_handler);
 		/* fall through */
 	case SRPC_STATE_NI_INIT:
 		LNetNIFini();
