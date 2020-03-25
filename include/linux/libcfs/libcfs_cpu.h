@@ -69,6 +69,8 @@
  * Author: liang@whamcloud.com
  */
 
+#include <linux/cpu.h>
+
 #ifndef __LIBCFS_CPU_H__
 #define __LIBCFS_CPU_H__
 
