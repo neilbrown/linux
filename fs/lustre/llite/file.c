@@ -3100,6 +3100,11 @@ int ll_ioctl_fssetxattr(struct inode *inode, unsigned int cmd,
 	if (!obj)
 		goto out_fsxattr;
 
+	/* Avoiding OST RPC if this is only project ioctl */
+	if (fsxattr.fsx_xflags == 0 ||
+	    fsxattr.fsx_xflags == FS_XFLAG_PROJINHERIT)
+		goto out_fsxattr;
+
 	attr = kzalloc(sizeof(*attr), GFP_KERNEL);
 	if (!attr) {
 		rc = -ENOMEM;
