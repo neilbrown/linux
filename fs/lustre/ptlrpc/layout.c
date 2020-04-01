@@ -73,11 +73,6 @@ static const struct req_msg_field *mgs_target_info_only[] = {
 	&RMF_MGS_TARGET_INFO
 };
 
-static const struct req_msg_field *mgs_set_info[] = {
-	&RMF_PTLRPC_BODY,
-	&RMF_MGS_SEND_PARAM
-};
-
 static const struct req_msg_field *mgs_config_read_client[] = {
 	&RMF_PTLRPC_BODY,
 	&RMF_MGS_CONFIG_BODY
@@ -705,7 +700,6 @@ static struct req_format *req_formats[] = {
 	&RQF_OBD_SET_INFO,
 	&RQF_SEC_CTX,
 	&RQF_MGS_TARGET_REG,
-	&RQF_MGS_SET_INFO,
 	&RQF_MGS_CONFIG_READ,
 	&RQF_SEQ_QUERY,
 	&RQF_FLD_QUERY,
@@ -857,12 +851,6 @@ struct req_msg_field RMF_MGS_TARGET_INFO =
 		    sizeof(struct mgs_target_info),
 		    lustre_swab_mgs_target_info, NULL);
 EXPORT_SYMBOL(RMF_MGS_TARGET_INFO);
-
-struct req_msg_field RMF_MGS_SEND_PARAM =
-	DEFINE_MSGF("mgs_send_param", 0,
-		    sizeof(struct mgs_send_param),
-		    NULL, NULL);
-EXPORT_SYMBOL(RMF_MGS_SEND_PARAM);
 
 struct req_msg_field RMF_MGS_CONFIG_BODY =
 	DEFINE_MSGF("mgs_config_read request", 0,
@@ -1258,11 +1246,6 @@ struct req_format RQF_MGS_TARGET_REG =
 	DEFINE_REQ_FMT0("MGS_TARGET_REG", mgs_target_info_only,
 			mgs_target_info_only);
 EXPORT_SYMBOL(RQF_MGS_TARGET_REG);
-
-struct req_format RQF_MGS_SET_INFO =
-	DEFINE_REQ_FMT0("MGS_SET_INFO", mgs_set_info,
-			mgs_set_info);
-EXPORT_SYMBOL(RQF_MGS_SET_INFO);
 
 struct req_format RQF_MGS_CONFIG_READ =
 	DEFINE_REQ_FMT0("MGS_CONFIG_READ", mgs_config_read_client,
