@@ -108,7 +108,8 @@ static int llog_cat_id2handle(const struct lu_env *env,
 		return rc;
 	}
 
-	rc = llog_init_handle(env, loghandle, fmt | LLOG_F_IS_PLAIN, NULL);
+	rc = llog_init_handle(env, loghandle, fmt |
+			      LLOG_F_ZAP_WHEN_EMPTY | LLOG_F_IS_PLAIN, NULL);
 	if (rc < 0) {
 		llog_close(env, loghandle);
 		*res = NULL;
