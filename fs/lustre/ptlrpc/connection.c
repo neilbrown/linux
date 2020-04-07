@@ -32,6 +32,8 @@
  */
 
 #define DEBUG_SUBSYSTEM S_RPC
+
+#include <linux/delay.h>
 #include <obd_support.h>
 #include <obd_class.h>
 #include <lustre_net.h>
@@ -103,13 +105,21 @@ ptlrpc_connection_get(struct lnet_process_id peer, lnet_nid_t self,
 	 * connection.  The object which exists in the hash will be
 	 * returned, otherwise NULL is returned on success.
 	 */
+try_again:
 	conn2 = rhashtable_lookup_get_insert_fast(&conn_hash, &conn->c_hash,
 						  conn_hash_params);
 	if (conn2) {
 		/* insertion failed */
 		kfree(conn);
-		if (IS_ERR(conn2))
+		if (IS_ERR(conn2)) {
+			/* hash table could be resizing. */
+			if (PTR_ERR(conn2) == -ENOMEM ||
+			    PTR_ERR(conn2) == -EBUSY) {
+				msleep(5);
+				goto try_again;
+			}
 			return NULL;
+		}
 		conn = conn2;
 		ptlrpc_connection_addref(conn);
 	}
