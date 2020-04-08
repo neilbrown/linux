@@ -820,7 +820,10 @@ static int lmv_iocontrol(unsigned int cmd, struct obd_export *exp,
 			return -ENODEV;
 
 		tgt = lmv_tgt(lmv, index);
-		if (!tgt || !tgt->ltd_active)
+		if (!tgt)
+			return -EAGAIN;
+
+		if (!tgt->ltd_active)
 			return -ENODATA;
 
 		mdc_obd = class_exp2obd(tgt->ltd_exp);
