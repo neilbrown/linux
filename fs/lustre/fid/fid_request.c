@@ -88,7 +88,8 @@ static int seq_client_rpc(struct lu_client_seq *seq,
 	if (opc == SEQ_ALLOC_SUPER) {
 		req->rq_request_portal = SEQ_CONTROLLER_PORTAL;
 		req->rq_reply_portal = MDC_REPLY_PORTAL;
-		/* During allocating super sequence for data object,
+		/*
+		 * During allocating super sequence for data object,
 		 * the current thread might hold the export of MDT0(MDT0
 		 * precreating objects on this OST), and it will send the
 		 * request to MDT0 here, so we can not keep resending the
@@ -96,8 +97,8 @@ static int seq_client_rpc(struct lu_client_seq *seq,
 		 * it can not release the export of MDT0
 		 */
 		if (seq->lcs_type == LUSTRE_SEQ_DATA) {
-			req->rq_no_delay = 1;
 			req->rq_no_resend = 1;
+			req->rq_no_delay = 1;
 		}
 		debug_mask = D_CONSOLE;
 	} else {
@@ -149,7 +150,8 @@ static int seq_client_alloc_meta(const struct lu_env *env,
 	int rc;
 
 	do {
-		/* If meta server return -EINPROGRESS or EAGAIN,
+		/*
+		 * If meta server return -EINPROGRESS or EAGAIN,
 		 * it means meta server might not be ready to
 		 * allocate super sequence from sequence controller
 		 * (MDT0)yet
@@ -157,7 +159,8 @@ static int seq_client_alloc_meta(const struct lu_env *env,
 		rc = seq_client_rpc(seq, &seq->lcs_space,
 				    SEQ_ALLOC_META, "meta");
 		if (rc == -EINPROGRESS || rc == -EAGAIN)
-			/* MDT0 is not ready, let's wait for 2
+			/*
+			 * MDT0 is not ready, let's wait for 2
 			 * seconds and retry.
 			 */
 			ssleep(2);
@@ -285,7 +288,7 @@ void seq_client_flush(struct lu_client_seq *seq)
 		       spin_lock(&seq->lcs_lock));
 
 	fid_zero(&seq->lcs_fid);
-	/**
+	/*
 	 * this id shld not be used for seq range allocation.
 	 * set to -1 for dgb check.
 	 */
