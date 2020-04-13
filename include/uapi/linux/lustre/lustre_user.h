@@ -54,6 +54,7 @@
 #else /* !__KERNEL__ */
 # define NEED_QUOTA_DEFS
 # include <limits.h>
+# define __USE_ISOC99	1
 # include <stdbool.h>
 # include <stdio.h> /* snprintf() */
 # include <stdint.h>

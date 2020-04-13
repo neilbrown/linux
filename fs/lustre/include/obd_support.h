@@ -543,6 +543,31 @@ extern char obd_jobid_var[];
 	(keylen >= (sizeof(str) - 1) &&			\
 	memcmp(key, str, (sizeof(str) - 1)) == 0)
 
+/* Convert wire LUSTRE_*_FL to corresponding client local VFS S_* values
+ * for the client inode i_flags.  The LUSTRE_*_FL are the Lustre wire
+ * protocol equivalents of LDISKFS_*_FL values stored on disk, while
+ * the S_* flags are kernel-internal values that change between kernel
+ * versions. These flags are set/cleared via FSFILT_IOC_{GET,SET}_FLAGS.
+ * See b=16526 for a full history.
+ */
+static inline int ll_ext_to_inode_flags(int flags)
+{
+	return (((flags & LUSTRE_SYNC_FL)      ? S_SYNC      : 0) |
+		((flags & LUSTRE_NOATIME_FL)   ? S_NOATIME   : 0) |
+		((flags & LUSTRE_APPEND_FL)    ? S_APPEND    : 0) |
+		((flags & LUSTRE_DIRSYNC_FL)   ? S_DIRSYNC   : 0) |
+		((flags & LUSTRE_IMMUTABLE_FL) ? S_IMMUTABLE : 0));
+}
+
+static inline int ll_inode_to_ext_flags(int iflags)
+{
+	return (((iflags & S_SYNC)      ? LUSTRE_SYNC_FL      : 0) |
+		((iflags & S_NOATIME)   ? LUSTRE_NOATIME_FL   : 0) |
+		((iflags & S_APPEND)    ? LUSTRE_APPEND_FL    : 0) |
+		((iflags & S_DIRSYNC)   ? LUSTRE_DIRSYNC_FL   : 0) |
+		((iflags & S_IMMUTABLE) ? LUSTRE_IMMUTABLE_FL : 0));
+}
+
 struct obd_heat_instance {
 	u64 ohi_heat;
 	u64 ohi_time_second;
