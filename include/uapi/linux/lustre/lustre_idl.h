@@ -816,6 +816,7 @@ struct ptlrpc_body_v2 {
 						  * discard
 						  */
 #define OBD_CONNECT2_ENCRYPT	       0x8000ULL /* client-to-disk encrypt */
+#define OBD_CONNECT2_FIDMAP	       0x10000ULL /* FID map */
 /* XXX README XXX:
  * Please DO NOT add flag values here before first ensuring that this same
  * flag value is not in use on some other branch.  Please clear any such
