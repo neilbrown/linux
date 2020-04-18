@@ -7,5 +7,6 @@ dtb-$(CONFIG_DTB_OMEGA2P)	+= omega2p.dtb
 dtb-$(CONFIG_DTB_VOCORE2)	+= vocore2.dtb
 dtb-$(CONFIG_DTB_GNUBEE1)	+= mt7621-gnubee-gb-pc1.dtb
 dtb-$(CONFIG_DTB_GNUBEE2)	+= mt7621-gnubee-gb-pc2.dtb
+dtb-$(CONFIG_DTB_GNUBEE1_UBOOT)	+= mt7621-gnubee-gb-pc1-uboot.dtb
 
 obj-$(CONFIG_BUILTIN_DTB)	+= $(addsuffix .o, $(dtb-y))
