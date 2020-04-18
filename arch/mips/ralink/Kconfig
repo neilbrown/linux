@@ -109,6 +109,11 @@ choice
 		depends on SOC_MT7621
 		select BUILTIN_DTB
 
+	config DTB_GNUBEE1_UBOOT
+		bool "GnuBee1 2.5inch NAS - with u-boot hacking support"
+		depends on SOC_MT7621
+		select BUILTIN_DTB
+
 endchoice
 
 endif
