@@ -238,7 +238,7 @@ enum spi_nor_option_flags {
 	SNOR_F_HAS_16BIT_SR	= BIT(9),
 	SNOR_F_NO_READ_CR	= BIT(10),
 	SNOR_F_HAS_SR_TB_BIT6	= BIT(11),
-
+	SNOR_F_INVERTED_RESET	= BIT(12),
 };
 
 /**

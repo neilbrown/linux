@@ -693,7 +693,10 @@ static int winbond_set_4byte(struct spi_nor *nor, bool enable)
 	if (ret)
 		return ret;
 
-	ret = spi_nor_write_ear(nor, 0);
+	if (nor->flags & SNOR_F_INVERTED_RESET)
+		ret = spi_nor_write_ear(nor, 1);
+	else
+		ret = spi_nor_write_ear(nor, 0);
 	if (ret)
 		return ret;
 
@@ -5212,6 +5215,8 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 
 	if (of_property_read_bool(np, "broken-flash-reset"))
 		nor->flags |= SNOR_F_BROKEN_RESET;
+	if (of_property_read_bool(np, "inverted-flash-reset"))
+		nor->flags |= SNOR_F_INVERTED_RESET;
 
 	/*
 	 * Configure the SPI memory:
