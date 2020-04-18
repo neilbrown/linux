@@ -88,7 +88,10 @@ static int winbond_set_4byte_addr_mode(struct spi_nor *nor, bool enable)
 	if (ret)
 		return ret;
 
-	ret = spi_nor_write_ear(nor, 0);
+	if (nor->flags & SNOR_F_INVERTED_RESET)
+		ret = spi_nor_write_ear(nor, 1);
+	else
+		ret = spi_nor_write_ear(nor, 0);
 	if (ret)
 		return ret;
 

@@ -3186,6 +3186,8 @@ int spi_nor_scan(struct spi_nor *nor, const char *name,
 
 	if (of_property_read_bool(np, "broken-flash-reset"))
 		nor->flags |= SNOR_F_BROKEN_RESET;
+	if (of_property_read_bool(np, "inverted-flash-reset"))
+		nor->flags |= SNOR_F_INVERTED_RESET;
 
 	/*
 	 * Configure the SPI memory:

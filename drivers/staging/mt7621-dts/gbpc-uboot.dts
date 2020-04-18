@@ -1,0 +1,51 @@
+/dts-v1/;
+
+#include "gbpc1.dts"
+
+&spi0 {
+	m25p80@0 {
+		inverted-flash-reset;
+		partition@0 {
+			label = "u-boot";
+			reg = <0x0 0x30000>;
+			read-only;
+		};
+
+		partition@30000 {
+			label = "u-boot-env";
+			reg = <0x30000 0x10000>;
+			read-only;
+		};
+
+		factory: partition@40000 {
+			label = "factory";
+			reg = <0x40000 0x10000>;
+			read-only;
+		};
+
+		partition@50000 {
+			label = "firmware";
+			reg = <0x50000 0xFB0000>;
+		};
+
+		partition@1000000 {
+			label = "u-boot-2";
+			reg = <0x1000000 0x30000>;
+		};
+
+		partition@1030000 {
+			label = "u-boot-env-2";
+			reg = <0x1030000 0x10000>;
+		};
+
+		partition@1040000 {
+			label = "factory-2";
+			reg = <0x1040000 0x10000>;
+		};
+
+		partition@1050000 {
+			label = "firmware-2";
+			reg = <0x1050000 0xFB0000>;
+		};
+	};
+};
