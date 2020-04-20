@@ -1320,6 +1320,8 @@ int ldlm_inodebits_drop(struct ldlm_lock *lock, u64 to_drop);
 int ldlm_cli_inodebits_convert(struct ldlm_lock *lock,
 			       enum ldlm_cancel_flags cancel_flags);
 
+extern unsigned int ldlm_enqueue_min;
+
 /* mds/handler.c */
 /* This has to be here because recursive inclusion sucks. */
 int intent_disposition(struct ldlm_reply *rep, int flag);
