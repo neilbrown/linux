@@ -875,6 +875,9 @@ static int mgc_enqueue(struct obd_export *exp, u32 type,
 	int short_limit = cld_is_sptlrpc(cld);
 	int rc;
 
+	if (!exp)
+		return -EBADR;
+
 	CDEBUG(D_MGC, "Enqueue for %s (res %#llx)\n", cld->cld_logname,
 	       cld->cld_resid.name[0]);
 
