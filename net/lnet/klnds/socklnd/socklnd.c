@@ -39,8 +39,8 @@
  */
 
 #include <linux/pci.h>
-#include "socklnd.h"
 #include <linux/inetdevice.h>
+#include "socklnd.h"
 
 static const struct lnet_lnd the_ksocklnd;
 struct ksock_nal_data ksocknal_data;
