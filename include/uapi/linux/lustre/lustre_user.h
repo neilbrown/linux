@@ -1532,27 +1532,6 @@ enum hsm_states {
  */
 #define HSM_FLAGS_MASK  (HSM_USER_MASK | HSM_STATUS_MASK)
 
-/**
- * HSM request progress state
- */
-enum hsm_progress_states {
-	HPS_WAITING	= 1,
-	HPS_RUNNING	= 2,
-	HPS_DONE	= 3,
-};
-
-#define HPS_NONE	0
-
-static inline const char *hsm_progress_state2name(enum hsm_progress_states s)
-{
-	switch  (s) {
-	case HPS_WAITING:	return "waiting";
-	case HPS_RUNNING:	return "running";
-	case HPS_DONE:		return "done";
-	default:		return "unknown";
-	}
-}
-
 struct hsm_extent {
 	__u64 offset;
 	__u64 length;
