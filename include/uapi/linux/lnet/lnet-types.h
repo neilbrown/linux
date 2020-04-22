@@ -109,6 +109,9 @@ static inline __u32 LNET_MKNET(__u32 type, __u32 num)
 	return (type << 16) | num;
 }
 
+/** The lolnd NID (i.e. myself) */
+#define LNET_NID_LO_0 LNET_MKNID(LNET_MKNET(LOLND, 0), 0)
+
 /* Packed version of lnet_process_id to transfer via network */
 struct lnet_process_id_packed {
 	/* node id / process id */
@@ -480,6 +483,10 @@ struct lnet_md {
 	 *   struct bio_vec.
 	 * - LNET_MD_MAX_SIZE: The max_size field is valid.
 	 * - LNET_MD_BULK_HANDLE: The bulk_handle field is valid.
+	 * - LNET_MD_TRACK_RESPONSE: Enable response tracking on this MD
+	 *   regardless of the value of the lnet_response_tracking param.
+	 * - LNET_MD_NO_TRACK_RESPONSE: Disable response tracking on this MD
+	 *   regardless of the value of the lnet_response_tracking param.
 	 *
 	 * Note:
 	 * - LNET_MD_KIOV allows for a scatter/gather
@@ -540,6 +547,10 @@ struct lnet_md {
 #define LNET_MD_KIOV		(1 << 8)
 /** See lnet_md::options. */
 #define LNET_MD_BULK_HANDLE	(1 << 9)
+/** See struct lnet_md::options. */
+#define LNET_MD_TRACK_RESPONSE	(1 << 10)
+/** See struct lnet_md::options. */
+#define LNET_MD_NO_TRACK_RESPONSE (1 << 11)
 
 /** Infinite threshold on MD operations. See lnet_md::threshold */
 #define LNET_MD_THRESH_INF	(-1)

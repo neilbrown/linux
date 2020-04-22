@@ -471,7 +471,7 @@ lnet_ni_send(struct lnet_ni *ni, struct lnet_msg *msg)
 	int rc;
 
 	LASSERT(!in_interrupt());
-	LASSERT(LNET_NETTYP(LNET_NIDNET(ni->ni_nid)) == LOLND ||
+	LASSERT(ni->ni_nid == LNET_NID_LO_0 ||
 		(msg->msg_txcredit && msg->msg_peertxcredit));
 
 	rc = ni->ni_net->net_lnd->lnd_send(ni, priv, msg);
@@ -2320,7 +2320,7 @@ again:
 	 */
 	send_data.sd_msg = msg;
 	send_data.sd_cpt = cpt;
-	if (LNET_NETTYP(LNET_NIDNET(dst_nid)) == LOLND) {
+	if (dst_nid == LNET_NID_LO_0) {
 		rc = lnet_handle_lo_send(&send_data);
 		lnet_net_unlock(cpt);
 		return rc;
@@ -4708,7 +4708,7 @@ LNetDist(lnet_nid_t dstnid, lnet_nid_t *srcnidp, u32 *orderp)
 			if (srcnidp)
 				*srcnidp = dstnid;
 			if (orderp) {
-				if (LNET_NETTYP(LNET_NIDNET(dstnid)) == LOLND)
+				if (dstnid == LNET_NID_LO_0)
 					*orderp = 0;
 				else
 					*orderp = 1;

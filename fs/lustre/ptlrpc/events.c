@@ -478,7 +478,7 @@ int ptlrpc_uuid_to_peer(struct obd_uuid *uuid,
 			continue;
 
 		if (dist == 0) {		/* local! use loopback LND */
-			peer->nid = *self = LNET_MKNID(LNET_MKNET(LOLND, 0), 0);
+			peer->nid = *self = LNET_NID_LO_0;
 			rc = 0;
 			break;
 		}

@@ -1179,8 +1179,7 @@ lnet_parse_route(char *str, int *im_a_router)
 					goto token_error;
 
 				nid = libcfs_str2nid(ltb->ltb_text);
-				if (nid == LNET_NID_ANY ||
-				    LNET_NETTYP(LNET_NIDNET(nid)) == LOLND)
+				if (nid == LNET_NID_ANY || nid == LNET_NID_LO_0)
 					goto token_error;
 			}
 		}
