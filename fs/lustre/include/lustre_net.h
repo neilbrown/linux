@@ -606,8 +606,10 @@ struct ptlrpc_hpreq_ops {
 struct ptlrpc_cli_req {
 	/** For bulk requests on client only: bulk descriptor */
 	struct ptlrpc_bulk_desc		*cr_bulk;
-	/** optional time limit for send attempts */
-	time64_t			 cr_delay_limit;
+	/** optional time limit for send attempts. This is a timeout
+	 *  not a timestamp so timeout_t (s32) is used instead of time64_t
+	 */
+	timeout_t			 cr_delay_limit;
 	/** time request was first queued */
 	time64_t			 cr_queued_time;
 	/** request sent in nanosseconds */

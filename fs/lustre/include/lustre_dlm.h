@@ -755,7 +755,7 @@ struct ldlm_lock {
 	 * under this lock.
 	 * \see ost_rw_prolong_locks
 	 */
-	time64_t			l_callback_timeout;
+	time64_t			l_callback_timestamp;
 
 	/** Local PID of process which created this lock. */
 	u32				l_pid;

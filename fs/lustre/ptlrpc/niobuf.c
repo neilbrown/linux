@@ -321,8 +321,8 @@ static void ptlrpc_at_set_reply(struct ptlrpc_request *req, int flags)
 		/* early replies, errors and recovery requests don't count
 		 * toward our service time estimate
 		 */
-		int oldse = at_measured(&svcpt->scp_at_estimate,
-					service_timeout);
+		timeout_t oldse = at_measured(&svcpt->scp_at_estimate,
+					      service_timeout);
 
 		if (oldse != 0) {
 			DEBUG_REQ(D_ADAPTTO, req,

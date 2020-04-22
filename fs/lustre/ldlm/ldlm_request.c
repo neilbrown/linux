@@ -114,9 +114,8 @@ static void ldlm_expired_completion_wait(struct ldlm_lock *lock, u32 conn_cnt)
 
 		LDLM_ERROR(lock,
 			   "lock timed out (enqueued at %lld, %llds ago); not entering recovery in server code, just going back to sleep",
-			   (s64)lock->l_activity,
-			   (s64)(ktime_get_real_seconds() -
-				 lock->l_activity));
+			   lock->l_activity,
+			   ktime_get_real_seconds() - lock->l_activity);
 		if (ktime_get_seconds() > next_dump) {
 			last_dump = next_dump;
 			next_dump = ktime_get_seconds() + 300;
@@ -133,8 +132,8 @@ static void ldlm_expired_completion_wait(struct ldlm_lock *lock, u32 conn_cnt)
 	ptlrpc_fail_import(imp, conn_cnt);
 	LDLM_ERROR(lock,
 		   "lock timed out (enqueued at %lld, %llds ago), entering recovery for %s@%s",
-		   (s64)lock->l_activity,
-		   (s64)(ktime_get_real_seconds() - lock->l_activity),
+		   lock->l_activity,
+		   ktime_get_real_seconds() - lock->l_activity,
 		   obd2cli_tgt(obd), imp->imp_connection->c_remote_uuid.uuid);
 }
 
@@ -164,9 +163,9 @@ EXPORT_SYMBOL(is_granted_or_cancelled_nolock);
  * We use the same basis for both server side and client side functions
  * from a single node.
  */
-static time64_t ldlm_cp_timeout(struct ldlm_lock *lock)
+static timeout_t ldlm_cp_timeout(struct ldlm_lock *lock)
 {
-	time64_t timeout;
+	timeout_t timeout;
 
 	if (AT_OFF)
 		return obd_timeout;
@@ -177,7 +176,7 @@ static time64_t ldlm_cp_timeout(struct ldlm_lock *lock)
 	 * doesn't respond reasonably, and then give us the lock.
 	 */
 	timeout = at_get(ldlm_lock_to_ns_at(lock));
-	return max(3 * timeout, (time64_t) ldlm_enqueue_min);
+	return max(3 * timeout, (timeout_t)ldlm_enqueue_min);
 }
 
 /**
@@ -186,7 +185,6 @@ static time64_t ldlm_cp_timeout(struct ldlm_lock *lock)
  */
 static int ldlm_completion_tail(struct ldlm_lock *lock, void *data)
 {
-	long delay;
 	int result = 0;
 
 	if (ldlm_is_destroyed(lock) || ldlm_is_failed(lock)) {
@@ -196,10 +194,16 @@ static int ldlm_completion_tail(struct ldlm_lock *lock, void *data)
 		LDLM_DEBUG(lock, "client-side enqueue: granted");
 	} else {
 		/* Take into AT only CP RPC, not immediately granted locks */
-		delay = ktime_get_real_seconds() - lock->l_activity;
-		LDLM_DEBUG(lock, "client-side enqueue: granted after %lds",
-			   delay);
+		timeout_t delay = 0;
 
+		/* Discard negative timeouts. We should also limit the
+		 * maximum value of the timeout
+		 */
+		if (ktime_get_real_seconds() > lock->l_activity)
+			delay = ktime_get_real_seconds() - lock->l_activity;
+
+		LDLM_DEBUG(lock, "client-side enqueue: granted after %ds",
+			   delay);
 		/* Update our time estimate */
 		at_measured(ldlm_lock_to_ns_at(lock), delay);
 	}
@@ -232,7 +236,7 @@ int ldlm_completion_ast(struct ldlm_lock *lock, u64 flags, void *data)
 	/* XXX ALLOCATE - 160 bytes */
 	struct obd_device *obd;
 	struct obd_import *imp = NULL;
-	time64_t timeout;
+	timeout_t timeout;
 	u32 conn_cnt = 0;
 	int rc = 0;
 
