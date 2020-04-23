@@ -2318,8 +2318,6 @@ void ll_umount_begin(struct super_block *sb)
 		ssleep(1);
 		cnt++;
 	}
-
-	schedule();
 }
 
 int ll_remount_fs(struct super_block *sb, int *flags, char *data)
