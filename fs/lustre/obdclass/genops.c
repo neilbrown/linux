@@ -865,6 +865,7 @@ static struct obd_export *__class_new_export(struct obd_device *obd,
 
 exit_unlock:
 	spin_unlock(&obd->obd_dev_lock);
+	class_handle_unhash(&export->exp_handle);
 	obd_destroy_export(export);
 	kfree(export);
 	return ERR_PTR(rc);
