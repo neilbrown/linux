@@ -3124,6 +3124,8 @@ lnet_monitor_thread(void *arg)
 	int interval;
 	time64_t now;
 
+	wait_for_completion(&the_lnet.ln_started);
+
 	/* The monitor thread takes care of the following:
 	 *  1. Checks the aliveness of routers
 	 *  2. Checks if there are messages on the resend queue to resend
@@ -3471,7 +3473,6 @@ lnet_recv_put(struct lnet_ni *ni, struct lnet_msg *msg)
 
 	lnet_build_msg_event(msg, LNET_EVENT_PUT);
 
-	wait_for_completion(&the_lnet.ln_started);
 	/*
 	 * Must I ACK?  If so I'll grab the ack_wmd out of the header and put
 	 * it back into the ACK during lnet_finalize()
