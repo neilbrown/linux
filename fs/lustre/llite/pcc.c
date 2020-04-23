@@ -1660,7 +1660,7 @@ int pcc_inode_setattr(struct inode *inode, struct iattr *attr,
 		return 0;
 	}
 
-	pcc_io_init(inode, PIT_GETATTR, cached);
+	pcc_io_init(inode, PIT_SETATTR, cached);
 	if (!*cached)
 		return 0;
 
@@ -1694,7 +1694,7 @@ int pcc_inode_getattr(struct inode *inode, bool *cached)
 		return 0;
 	}
 
-	pcc_io_init(inode, PIT_SETATTR, cached);
+	pcc_io_init(inode, PIT_GETATTR, cached);
 	if (!*cached)
 		return 0;
 
