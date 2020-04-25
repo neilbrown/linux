@@ -332,7 +332,8 @@ static ssize_t dirty_age_limit_show(struct kobject *kobj,
 	struct ldlm_namespace *ns = container_of(kobj, struct ldlm_namespace,
 						 ns_kobj);
 
-	return sprintf(buf, "%llu\n", ns->ns_dirty_age_limit);
+	return snprintf(buf, PAGE_SIZE, "%llu\n",
+			ktime_divns(ns->ns_dirty_age_limit, NSEC_PER_SEC));
 }
 
 static ssize_t dirty_age_limit_store(struct kobject *kobj,
@@ -346,7 +347,7 @@ static ssize_t dirty_age_limit_store(struct kobject *kobj,
 	if (kstrtouint(buffer, 10, &tmp))
 		return -EINVAL;
 
-	ns->ns_dirty_age_limit = tmp;
+	ns->ns_dirty_age_limit = ktime_set(tmp, 0);
 
 	return count;
 }
@@ -646,7 +647,7 @@ struct ldlm_namespace *ldlm_namespace_new(struct obd_device *obd, char *name,
 	ns->ns_max_age = ktime_set(LDLM_DEFAULT_MAX_ALIVE, 0);
 	ns->ns_orig_connect_flags = 0;
 	ns->ns_connect_flags = 0;
-	ns->ns_dirty_age_limit = LDLM_DIRTY_AGE_LIMIT;
+	ns->ns_dirty_age_limit = ktime_set(LDLM_DIRTY_AGE_LIMIT, 0);
 	ns->ns_stopping = 0;
 	ns->ns_last_pos = &ns->ns_unused_list;
 
