@@ -613,9 +613,9 @@ struct ldlm_namespace *ldlm_namespace_new(struct obd_device *obd, char *name,
 	ns->ns_bucket_bits = ldlm_ns_hash_defs[ns_type].nsd_all_bits -
 			     ldlm_ns_hash_defs[ns_type].nsd_bkt_bits;
 
-	ns->ns_rs_buckets = kvmalloc(BIT(ns->ns_bucket_bits) *
-				     sizeof(ns->ns_rs_buckets[0]),
-				     GFP_KERNEL);
+	ns->ns_rs_buckets = kvmalloc_array((1 << ns->ns_bucket_bits),
+					   sizeof(ns->ns_rs_buckets[0]),
+					   GFP_KERNEL);
 	if (!ns->ns_rs_buckets)
 		goto out_hash;
 

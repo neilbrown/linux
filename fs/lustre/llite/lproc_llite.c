@@ -1783,7 +1783,7 @@ static void ll_display_extents_info(struct ll_rw_extents_info *io_extents,
 		w = pp_info->pp_w_hist.oh_buckets[i];
 		read_cum += r;
 		write_cum += w;
-		end = BIT(i + LL_HIST_START - units);
+		end = 1 << (i + LL_HIST_START - units);
 		seq_printf(seq,
 			   "%4lu%c - %4lu%c%c: %14lu %4u %4u  | %14lu %4u %4u\n",
 			   start, *unitp, end, *unitp,
@@ -1961,7 +1961,7 @@ void ll_rw_stats_tally(struct ll_sb_info *sbi, pid_t pid,
 		lprocfs_oh_clear(&io_extents->pp_extents[cur].pp_w_hist);
 	}
 
-	for (i = 0; (count >= BIT(LL_HIST_START + i)) &&
+	for (i = 0; (count >= 1 << (LL_HIST_START + i)) &&
 	     (i < (LL_HIST_MAX - 1)); i++)
 		;
 	if (rw == 0) {
