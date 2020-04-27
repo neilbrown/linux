@@ -1025,7 +1025,7 @@ static struct ldlm_resource *ldlm_resource_new(enum ldlm_type ldlm_type)
 		/* Initialize interval trees for each lock mode. */
 		for (idx = 0; idx < LCK_MODE_NUM; idx++) {
 			res->lr_itree[idx].lit_size = 0;
-			res->lr_itree[idx].lit_mode = 1 << idx;
+			res->lr_itree[idx].lit_mode = BIT(idx);
 			res->lr_itree[idx].lit_root = RB_ROOT_CACHED;
 		}
 	} else
