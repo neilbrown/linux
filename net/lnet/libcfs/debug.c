@@ -273,7 +273,7 @@ libcfs_debug_mask2str(char *str, int size, int mask, int is_subsys)
 		len = 1;
 	} else {				/* space-separated tokens */
 		for (i = 0; i < 32; i++) {
-			if (!(mask & (1 << i)))
+			if (!(mask & BIT(i)))
 				continue;
 
 			token = fn(i);

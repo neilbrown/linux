@@ -88,9 +88,9 @@ int cfs_str2mask(const char *str, const char *(*bit2str)(int bit),
 			if (debugstr && strlen(debugstr) == len &&
 			    !strncasecmp(str, debugstr, len)) {
 				if (op == '-')
-					newmask &= ~(1 << i);
+					newmask &= ~BIT(i);
 				else
-					newmask |= (1 << i);
+					newmask |= BIT(i);
 				found = 1;
 				break;
 			}
