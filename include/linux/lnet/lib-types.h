@@ -671,9 +671,9 @@ struct lnet_peer {
  *
  * A peer is marked ROUTER if it indicates so in the feature bit.
  */
-#define LNET_PEER_MULTI_RAIL	BIT(0)	/* Multi-rail aware */
-#define LNET_PEER_NO_DISCOVERY	BIT(1)	/* Peer disabled discovery */
-#define LNET_PEER_ROUTER_ENABLED BIT(2)	/* router feature enabled */
+#define LNET_PEER_MULTI_RAIL		BIT(0)	/* Multi-rail aware */
+#define LNET_PEER_NO_DISCOVERY		BIT(1)	/* Peer disabled discovery */
+#define LNET_PEER_ROUTER_ENABLED	BIT(2)	/* router feature enabled */
 
 /*
  * A peer is marked CONFIGURED if it was configured by DLC.
@@ -688,39 +688,39 @@ struct lnet_peer {
  * A peer that was created as the result of inbound traffic will not
  * be marked at all.
  */
-#define LNET_PEER_CONFIGURED	BIT(3)	/* Configured via DLC */
-#define LNET_PEER_DISCOVERED	BIT(4)	/* Peer was discovered */
-#define LNET_PEER_REDISCOVER	BIT(5)	/* Discovery was disabled */
+#define LNET_PEER_CONFIGURED		BIT(3)	/* Configured via DLC */
+#define LNET_PEER_DISCOVERED		BIT(4)	/* Peer was discovered */
+#define LNET_PEER_REDISCOVER		BIT(5)	/* Discovery was disabled */
 /*
  * A peer is marked DISCOVERING when discovery is in progress.
  * The other flags below correspond to stages of discovery.
  */
-#define LNET_PEER_DISCOVERING	BIT(6)	/* Discovering */
-#define LNET_PEER_DATA_PRESENT	BIT(7)	/* Remote peer data present */
-#define LNET_PEER_NIDS_UPTODATE	BIT(8)	/* Remote peer info uptodate */
-#define LNET_PEER_PING_SENT	BIT(9)	/* Waiting for REPLY to Ping */
-#define LNET_PEER_PUSH_SENT	BIT(10)	/* Waiting for ACK of Push */
-#define LNET_PEER_PING_FAILED	BIT(11)	/* Ping send failure */
-#define LNET_PEER_PUSH_FAILED	BIT(12)	/* Push send failure */
+#define LNET_PEER_DISCOVERING		BIT(6)	/* Discovering */
+#define LNET_PEER_DATA_PRESENT		BIT(7)	/* Remote peer data present */
+#define LNET_PEER_NIDS_UPTODATE		BIT(8)	/* Remote peer info uptodate */
+#define LNET_PEER_PING_SENT		BIT(9)	/* Waiting for REPLY to Ping */
+#define LNET_PEER_PUSH_SENT		BIT(10)	/* Waiting for ACK of Push */
+#define LNET_PEER_PING_FAILED		BIT(11)	/* Ping send failure */
+#define LNET_PEER_PUSH_FAILED		BIT(12)	/* Push send failure */
 /*
  * A ping can be forced as a way to fix up state, or as a manual
  * intervention by an admin.
  * A push can be forced in circumstances that would normally not
  * allow for one to happen.
  */
-#define LNET_PEER_FORCE_PING	BIT(13)	/* Forced Ping */
-#define LNET_PEER_FORCE_PUSH	BIT(14)	/* Forced Push */
+#define LNET_PEER_FORCE_PING		BIT(13)	/* Forced Ping */
+#define LNET_PEER_FORCE_PUSH		BIT(14)	/* Forced Push */
 
 /* force delete even if router */
-#define LNET_PEER_RTR_NI_FORCE_DEL BIT(15)
+#define LNET_PEER_RTR_NI_FORCE_DEL	BIT(15)
 
 /* gw undergoing alive discovery */
-#define LNET_PEER_RTR_DISCOVERY	BIT(16)
+#define LNET_PEER_RTR_DISCOVERY		BIT(16)
 /* gw has undergone discovery (does not indicate success or failure) */
-#define LNET_PEER_RTR_DISCOVERED BIT(17)
+#define LNET_PEER_RTR_DISCOVERED	BIT(17)
 
 /* peer is marked for deletion */
-#define LNET_PEER_MARK_DELETION BIT(18)
+#define LNET_PEER_MARK_DELETION		BIT(18)
 
 struct lnet_peer_net {
 	/* chain on lp_peer_nets */

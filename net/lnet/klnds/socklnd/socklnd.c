@@ -1469,14 +1469,14 @@ ksocknal_close_conn_locked(struct ksock_conn *conn, int error)
 	if (route) {
 		/* dissociate conn from route... */
 		LASSERT(!route->ksnr_deleted);
-		LASSERT(route->ksnr_connected & (1 << conn->ksnc_type));
+		LASSERT(route->ksnr_connected & BIT(conn->ksnc_type));
 
 		list_for_each_entry(conn2, &peer_ni->ksnp_conns, ksnc_list) {
 			if (conn2->ksnc_route == route &&
 			    conn2->ksnc_type == conn->ksnc_type)
 				goto conn2_found;
 		}
-		route->ksnr_connected &= ~(1 << conn->ksnc_type);
+		route->ksnr_connected &= ~BIT(conn->ksnc_type);
 conn2_found:
 		conn->ksnc_route = NULL;
 
