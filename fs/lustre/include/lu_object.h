@@ -299,11 +299,11 @@ struct lu_device_type_operations;
  */
 enum lu_device_tag {
 	/** this is meta-data device */
-	LU_DEVICE_MD = (1 << 0),
+	LU_DEVICE_MD = BIT(0),
 	/** this is data device */
-	LU_DEVICE_DT = (1 << 1),
+	LU_DEVICE_DT = BIT(1),
 	/** data device in the client stack */
-	LU_DEVICE_CL = (1 << 2)
+	LU_DEVICE_CL = BIT(2)
 };
 
 /**
@@ -478,8 +478,8 @@ enum lu_object_header_flags {
 };
 
 enum lu_object_header_attr {
-	LOHA_EXISTS	= 1 << 0,
-	LOHA_REMOTE	= 1 << 1,
+	LOHA_EXISTS		= BIT(0),
+	LOHA_REMOTE		= BIT(1),
 	/**
 	 * UNIX file type is stored in S_IFMT bits.
 	 */
@@ -875,7 +875,7 @@ struct lu_rdpg {
 };
 
 enum lu_xattr_flags {
-	LU_XATTR_REPLACE = (1 << 0),
+	LU_XATTR_REPLACE = BIT(0),
 	LU_XATTR_CREATE	 = BIT(1),
 	LU_XATTR_MERGE   = BIT(2),
 	LU_XATTR_SPLIT	 = BIT(3),
@@ -965,36 +965,36 @@ enum lu_context_tag {
 	/**
 	 * Thread on md server
 	 */
-	LCT_MD_THREAD		= 1 << 0,
+	LCT_MD_THREAD		= BIT(0),
 	/**
 	 * Thread on dt server
 	 */
-	LCT_DT_THREAD		= 1 << 1,
+	LCT_DT_THREAD		= BIT(1),
 	/**
 	 * Context for transaction handle
 	 */
-	LCT_TX_HANDLE		= 1 << 2,
+	LCT_TX_HANDLE		= BIT(2),
 	/**
 	 * Thread on client
 	 */
-	LCT_CL_THREAD		= 1 << 3,
+	LCT_CL_THREAD		= BIT(3),
 	/**
 	 * A per-request session on a server, and a per-system-call session on
 	 * a client.
 	 */
-	LCT_SESSION		= 1 << 4,
+	LCT_SESSION		= BIT(4),
 	/**
 	 * A per-request data on OSP device
 	 */
-	LCT_OSP_THREAD		= 1 << 5,
+	LCT_OSP_THREAD		= BIT(5),
 	/**
 	 * MGS device thread
 	 */
-	LCT_MG_THREAD		= 1 << 6,
+	LCT_MG_THREAD		= BIT(6),
 	/**
 	 * Context for local operations
 	 */
-	LCT_LOCAL		= 1 << 7,
+	LCT_LOCAL		= BIT(7),
 	/**
 	 * session for server thread
 	 **/
@@ -1004,25 +1004,25 @@ enum lu_context_tag {
 	 * non-NULL lu_context_key::lct_exit() method. This is used to
 	 * optimize lu_context_exit() call.
 	 */
-	LCT_HAS_EXIT		= 1 << 28,
+	LCT_HAS_EXIT		= BIT(28),
 	/**
 	 * Don't add references for modules creating key values in that context.
 	 * This is only for contexts used internally by lu_object framework.
 	 */
-	LCT_NOREF		= 1 << 29,
+	LCT_NOREF		= BIT(29),
 	/**
 	 * Key is being prepared for retiring, don't create new values for it.
 	 */
-	LCT_QUIESCENT		= 1 << 30,
+	LCT_QUIESCENT		= BIT(30),
 	/**
 	 * Context should be remembered.
 	 */
-	LCT_REMEMBER		= 1 << 31,
+	LCT_REMEMBER		= BIT(31),
 	/**
 	 * Contexts usable in cache shrinker thread.
 	 */
-	LCT_SHRINKER  = LCT_MD_THREAD | LCT_DT_THREAD | LCT_CL_THREAD |
-			LCT_NOREF
+	LCT_SHRINKER	= LCT_MD_THREAD | LCT_DT_THREAD | LCT_CL_THREAD |
+			LCT_NOREF,
 };
 
 /**
