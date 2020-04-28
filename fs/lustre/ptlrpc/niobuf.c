@@ -253,7 +253,8 @@ int ptlrpc_unregister_bulk(struct ptlrpc_request *req, int async)
 	/* Let's setup deadline for reply unlink. */
 	if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_BULK_UNLINK) &&
 	    async && req->rq_bulk_deadline == 0 && cfs_fail_val == 0)
-		req->rq_bulk_deadline = ktime_get_real_seconds() + LONG_UNLINK;
+		req->rq_bulk_deadline = ktime_get_real_seconds() +
+					PTLRPC_REQ_LONG_UNLINK;
 
 	if (ptlrpc_client_bulk_active(req) == 0)	/* completed or */
 		return 1;				/* never registered */
@@ -286,9 +287,9 @@ int ptlrpc_unregister_bulk(struct ptlrpc_request *req, int async)
 		 * Network access will complete in finite time but the HUGE
 		 * timeout lets us CWARN for visibility of sluggish LNDs
 		 */
-		int seconds = LONG_UNLINK;
+		int seconds = PTLRPC_REQ_LONG_UNLINK;
 
-		while (seconds > LONG_UNLINK &&
+		while (seconds > 0 &&
 		       wait_event_idle_timeout(*wq,
 					       !ptlrpc_client_bulk_active(req),
 					       HZ) == 0)

@@ -2855,7 +2855,7 @@ ptlrpc_service_unlink_rqbd(struct ptlrpc_service *svc)
 			 * of sluggish LNDs
 			 */
 			cnt = 0;
-			while (cnt < LONG_UNLINK &&
+			while (cnt < PTLRPC_REQ_LONG_UNLINK &&
 			       (rc = wait_event_idle_timeout(svcpt->scp_waitq,
 							     svcpt->scp_nrqbds_posted == 0,
 							     HZ)) == 0)

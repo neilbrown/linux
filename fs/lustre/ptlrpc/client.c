@@ -789,11 +789,12 @@ int ptlrpc_request_bufs_pack(struct ptlrpc_request *request,
 		}
 
 		if (fail_t) {
-			*fail_t = ktime_get_real_seconds() + LONG_UNLINK;
+			*fail_t = ktime_get_real_seconds() +
+				  PTLRPC_REQ_LONG_UNLINK;
 
 			if (fail2_t)
 				*fail2_t = ktime_get_real_seconds() +
-						 LONG_UNLINK;
+						 PTLRPC_REQ_LONG_UNLINK;
 
 			/* The RPC is infected, let the test change the
 			 * fail_loc
@@ -2558,7 +2559,7 @@ static int ptlrpc_unregister_reply(struct ptlrpc_request *request, int async)
 	if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_REPL_UNLINK) &&
 	    async && request->rq_reply_deadline == 0 && cfs_fail_val == 0)
 		request->rq_reply_deadline =
-			ktime_get_real_seconds() + LONG_UNLINK;
+			ktime_get_real_seconds() + PTLRPC_REQ_LONG_UNLINK;
 
 	/* Nothing left to do. */
 	if (!ptlrpc_client_recv_or_unlink(request))
@@ -2581,12 +2582,12 @@ static int ptlrpc_unregister_reply(struct ptlrpc_request *request, int async)
 		wait_queue_head_t *wq = (request->rq_set) ?
 					&request->rq_set->set_waitq :
 					&request->rq_reply_waitq;
-		int seconds = LONG_UNLINK;
+		int seconds = PTLRPC_REQ_LONG_UNLINK;
 		/*
 		 * Network access will complete in finite time but the HUGE
 		 * timeout lets us CWARN for visibility of sluggish NALs
 		 */
-		while (seconds > LONG_UNLINK &&
+		while (seconds > 0 &&
 		       (wait_event_idle_timeout(*wq,
 						!ptlrpc_client_recv_or_unlink(request),
 						HZ)) == 0)
