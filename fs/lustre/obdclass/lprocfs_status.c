@@ -694,7 +694,7 @@ int lprocfs_rd_server_uuid(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = data;
 	struct obd_import *imp;
-	char *imp_state_name = NULL;
+	const char *imp_state_name = NULL;
 	int rc;
 
 	LASSERT(obd);
