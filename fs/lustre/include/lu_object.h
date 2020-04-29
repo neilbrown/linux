@@ -1152,7 +1152,8 @@ int lu_context_key_register(struct lu_context_key *key);
 void lu_context_key_degister(struct lu_context_key *key);
 void *lu_context_key_get(const struct lu_context *ctx,
 			 const struct lu_context_key *key);
-void lu_context_key_quiesce(struct lu_context_key *key);
+void lu_context_key_quiesce(struct lu_device_type *t,
+			    struct lu_context_key *key);
 void lu_context_key_revive(struct lu_context_key *key);
 
 /*
@@ -1200,9 +1201,9 @@ void lu_context_key_revive(struct lu_context_key *key);
 #define LU_TYPE_STOP(mod, ...)						\
 	static void mod##_type_stop(struct lu_device_type *t)		\
 	{								\
-		lu_context_key_quiesce_many(__VA_ARGS__, NULL);		\
+		lu_context_key_quiesce_many(t, __VA_ARGS__, NULL);	\
 	}								\
-	struct __##mod##_dummy_type_stop {; }
+	struct __##mod##_dummy_type_stop { }
 
 #define LU_TYPE_INIT_FINI(mod, ...)		\
 	LU_TYPE_INIT(mod, __VA_ARGS__);		\
@@ -1224,7 +1225,8 @@ int lu_context_refill(struct lu_context *ctx);
 int lu_context_key_register_many(struct lu_context_key *k, ...);
 void lu_context_key_degister_many(struct lu_context_key *k, ...);
 void lu_context_key_revive_many(struct lu_context_key *k, ...);
-void lu_context_key_quiesce_many(struct lu_context_key *k, ...);
+void lu_context_key_quiesce_many(struct lu_device_type *t,
+				 struct lu_context_key *k, ...);
 
 /*
  * update/clear ctx/ses tags.
