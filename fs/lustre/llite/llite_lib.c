@@ -2863,6 +2863,7 @@ void ll_finish_md_op_data(struct md_op_data *op_data)
 	ll_unlock_md_op_lsm(op_data);
 	security_release_secctx(op_data->op_file_secctx,
 				op_data->op_file_secctx_size);
+	kfree(op_data->op_file_encctx);
 	kfree(op_data);
 }
 

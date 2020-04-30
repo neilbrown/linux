@@ -138,6 +138,23 @@ void mdc_file_secctx_pack(struct ptlrpc_request *req, const char *secctx_name,
 	memcpy(buf, secctx, buf_size);
 }
 
+void mdc_file_encctx_pack(struct ptlrpc_request *req,
+			  const void *encctx, size_t encctx_size)
+{
+	void *buf;
+	size_t buf_size;
+
+	if (!encctx)
+		return;
+
+	buf = req_capsule_client_get(&req->rq_pill, &RMF_FILE_ENCCTX);
+	buf_size = req_capsule_get_size(&req->rq_pill, &RMF_FILE_ENCCTX,
+					RCL_CLIENT);
+
+	LASSERT(buf_size == encctx_size);
+	memcpy(buf, encctx, buf_size);
+}
+
 void mdc_file_sepol_pack(struct ptlrpc_request *req)
 {
 	void *buf;
@@ -208,6 +225,9 @@ void mdc_create_pack(struct ptlrpc_request *req, struct md_op_data *op_data,
 	mdc_file_secctx_pack(req, op_data->op_file_secctx_name,
 			     op_data->op_file_secctx,
 			     op_data->op_file_secctx_size);
+
+	mdc_file_encctx_pack(req, op_data->op_file_encctx,
+			     op_data->op_file_encctx_size);
 
 	/* pack SELinux policy info if any */
 	mdc_file_sepol_pack(req);
@@ -285,6 +305,9 @@ void mdc_open_pack(struct ptlrpc_request *req, struct md_op_data *op_data,
 		mdc_file_secctx_pack(req, op_data->op_file_secctx_name,
 				     op_data->op_file_secctx,
 				     op_data->op_file_secctx_size);
+
+		mdc_file_encctx_pack(req, op_data->op_file_encctx,
+				     op_data->op_file_encctx_size);
 
 		/* pack SELinux policy info if any */
 		mdc_file_sepol_pack(req);

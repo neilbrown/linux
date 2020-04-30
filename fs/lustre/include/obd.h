@@ -777,6 +777,10 @@ struct md_op_data {
 	void		       *op_file_secctx;
 	u32			op_file_secctx_size;
 
+	/* File encryption context, for creates/metadata ops */
+	void		       *op_file_encctx;
+	u32			op_file_encctx_size;
+
 	u32			op_projid;
 
 	u16			op_mirror_id;

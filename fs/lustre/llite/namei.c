@@ -48,7 +48,8 @@
 
 static int ll_create_it(struct inode *dir, struct dentry *dentry,
 			struct lookup_intent *it, void *secctx, u32 secctxlen,
-			bool encrypt);
+			bool encrypt,
+			void *encctx, u32 encctxlen);
 
 /* called from iget5_locked->find_inode() under inode_hash_lock spinlock */
 static int ll_test_inode(struct inode *inode, void *opaque)
@@ -606,6 +607,7 @@ static int ll_lookup_it_finish(struct ptlrpc_request *request,
 			       struct lookup_intent *it,
 			       struct inode *parent, struct dentry **de,
 			       void *secctx, u32 secctxlen,
+			       void *encctx, u32 encctxlen,
 			       ktime_t kstart, bool encrypt)
 {
 	struct inode *inode = NULL;
@@ -666,8 +668,33 @@ static int ll_lookup_it_finish(struct ptlrpc_request *request,
 			rc = security_inode_notifysecctx(inode, secctx,
 							 secctxlen);
 			if (rc)
-				CWARN("cannot set security context for " DFID ": rc = %d\n",
-				      PFID(ll_inode2fid(inode)), rc);
+				CWARN("%s: cannot set security context for "DFID": rc = %d\n",
+				      ll_i2sbi(inode)->ll_fsname,
+				      PFID(ll_inode2fid(inode)),
+				      rc);
+		}
+
+		/* If encryption context was returned by MDT, put it in
+		 * inode now to save an extra getxattr and avoid deadlock.
+		 */
+		if (body->mbo_valid & OBD_MD_ENCCTX) {
+			encctx = req_capsule_server_get(pill, &RMF_FILE_ENCCTX);
+			encctxlen = req_capsule_get_size(pill,
+							 &RMF_FILE_ENCCTX,
+							 RCL_SERVER);
+
+			if (encctxlen) {
+				CDEBUG(D_SEC,
+				       "server returned encryption ctx for "DFID"\n",
+				       PFID(ll_inode2fid(inode)));
+				rc = ll_xattr_cache_insert(inode,
+					       LL_XATTR_NAME_ENCRYPTION_CONTEXT,
+					       encctx, encctxlen);
+				if (rc)
+					CWARN("%s: cannot set enc ctx for "DFID": rc = %d\n",
+					      ll_i2sbi(inode)->ll_fsname,
+					      PFID(ll_inode2fid(inode)), rc);
+			}
 		}
 	}
 
@@ -739,7 +766,8 @@ static struct dentry *ll_lookup_it(struct inode *parent, struct dentry *dentry,
 				   struct lookup_intent *it, void **secctx,
 				   u32 *secctxlen,
 				   struct pcc_create_attach *pca,
-				   bool encrypt)
+				   bool encrypt,
+				   void **encctx, u32 *encctxlen)
 {
 	ktime_t kstart = ktime_get();
 	struct lookup_intent lookup_it = { .it_op = IT_LOOKUP };
@@ -815,6 +843,22 @@ static struct dentry *ll_lookup_it(struct inode *parent, struct dentry *dentry,
 			*secctx = NULL;
 		if (secctxlen)
 			*secctxlen = 0;
+	}
+	if (it->it_op & IT_CREAT && encrypt) {
+		rc = fscrypt_inherit_context(parent, NULL, op_data, false);
+		if (rc) {
+			retval = ERR_PTR(rc);
+			goto out;
+		}
+		if (encctx)
+			*encctx = op_data->op_file_encctx;
+		if (encctxlen)
+			*encctxlen = op_data->op_file_encctx_size;
+	} else {
+		if (encctx)
+			*encctx = NULL;
+		if (encctxlen)
+			*encctxlen = 0;
 	}
 
 	/* ask for security context upon intent */
@@ -908,6 +952,8 @@ static struct dentry *ll_lookup_it(struct inode *parent, struct dentry *dentry,
 	rc = ll_lookup_it_finish(req, it, parent, &dentry,
 				 secctx ? *secctx : NULL,
 				 secctxlen ? *secctxlen : 0,
+				 encctx ? *encctx : NULL,
+				 encctxlen ? *encctxlen : 0,
 				 kstart, encrypt);
 	if (rc != 0) {
 		ll_intent_release(it);
@@ -935,6 +981,14 @@ out:
 			 */
 			op_data->op_file_secctx = NULL;
 			op_data->op_file_secctx_size = 0;
+		}
+		if (encctx && encctxlen &&
+		    it->it_op & IT_CREAT && encrypt) {
+			/* caller needs enc ctx info, so reset it in op_data to
+			 * prevent it from being freed
+			 */
+			op_data->op_file_encctx = NULL;
+			op_data->op_file_encctx_size = 0;
 		}
 		ll_finish_md_op_data(op_data);
 	}
@@ -966,7 +1020,8 @@ static struct dentry *ll_lookup_nd(struct inode *parent, struct dentry *dentry,
 		itp = NULL;
 	else
 		itp = &it;
-	de = ll_lookup_it(parent, dentry, itp, NULL, NULL, NULL, false);
+	de = ll_lookup_it(parent, dentry, itp, NULL, NULL, NULL, false,
+			  NULL, NULL);
 
 	if (itp)
 		ll_intent_release(itp);
@@ -985,6 +1040,8 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 	struct lookup_intent *it;
 	void *secctx = NULL;
 	u32 secctxlen = 0;
+	void *encctx = NULL;
+	u32 encctxlen = 0;
 	struct dentry *de;
 	struct ll_sb_info *sbi = NULL;
 	struct pcc_create_attach pca = { NULL, NULL };
@@ -1040,7 +1097,7 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 	it->it_flags = (open_flags & ~O_ACCMODE) | OPEN_FMODE(open_flags);
 	it->it_flags &= ~MDS_OPEN_FL_INTERNAL;
 
-	if (IS_ENCRYPTED(dir)) {
+	if (ll_sbi_has_encrypt(ll_i2sbi(dir)) && IS_ENCRYPTED(dir)) {
 		/* we know that we are going to create a regular file because
 		 * we set S_IFREG bit on it->it_create_mode above
 		 */
@@ -1056,7 +1113,8 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 	}
 
 	/* Dentry added to dcache tree in ll_lookup_it */
-	de = ll_lookup_it(dir, dentry, it, &secctx, &secctxlen, &pca, encrypt);
+	de = ll_lookup_it(dir, dentry, it, &secctx, &secctxlen, &pca, encrypt,
+			  &encctx, &encctxlen);
 	if (IS_ERR(de))
 		rc = PTR_ERR(de);
 	else if (de)
@@ -1066,8 +1124,9 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 		if (it_disposition(it, DISP_OPEN_CREATE)) {
 			/* Dentry instantiated in ll_create_it. */
 			rc = ll_create_it(dir, dentry, it, secctx, secctxlen,
-					  encrypt);
+					  encrypt, encctx, encctxlen);
 			security_release_secctx(secctx, secctxlen);
+			llcrypt_free_ctx(encctx);
 			if (rc) {
 				/* We dget in ll_splice_alias. */
 				if (de)
@@ -1098,6 +1157,15 @@ static int ll_atomic_open(struct inode *dir, struct dentry *dentry,
 			 * already created PCC copy.
 			 */
 			pcc_create_attach_cleanup(dir->i_sb, &pca);
+
+			if (open_flags & O_CREAT && encrypt &&
+			    dentry->d_inode) {
+				rc = ll_set_encflags(dentry->d_inode, encctx,
+						     encctxlen, true);
+				llcrypt_free_ctx(encctx);
+				if (rc)
+					goto out_release;
+			}
 		}
 
 		if (d_really_is_positive(dentry) &&
@@ -1182,7 +1250,8 @@ static struct inode *ll_create_node(struct inode *dir, struct lookup_intent *it)
  */
 static int ll_create_it(struct inode *dir, struct dentry *dentry,
 			struct lookup_intent *it, void *secctx, u32 secctxlen,
-			bool encrypt)
+			bool encrypt,
+			void *encctx, u32 encctxlen)
 {
 	struct inode *inode;
 	u64 bits = 0;
@@ -1220,7 +1289,7 @@ static int ll_create_it(struct inode *dir, struct dentry *dentry,
 	d_instantiate(dentry, inode);
 
 	if (encrypt) {
-		rc = fscrypt_inherit_context(dir, inode, dentry, true);
+		rc = ll_set_encflags(inode, encctx, encctxlen, true);
 		if (rc)
 			return rc;
 	}
@@ -1258,7 +1327,7 @@ static int ll_new_node(struct inode *dir, struct dentry *dentry,
 	struct inode *inode = NULL;
 	struct ll_sb_info *sbi = ll_i2sbi(dir);
 	int tgt_len = 0;
-	int encrypt = 0;
+	bool encrypt = false;
 	int err;
 
 	if (unlikely(tgt))
@@ -1282,9 +1351,10 @@ again:
 			goto err_exit;
 	}
 
-	if ((IS_ENCRYPTED(dir) &&
+	if (ll_sbi_has_encrypt(sbi) &&
+	    ((IS_ENCRYPTED(dir) &&
 	    (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode))) ||
-	    (unlikely(fscrypt_dummy_context_enabled(dir)) && S_ISDIR(mode))) {
+	    (unlikely(fscrypt_dummy_context_enabled(dir)) && S_ISDIR(mode)))) {
 		err = fscrypt_get_encryption_info(dir);
 		if (err)
 			goto err_exit;
@@ -1292,7 +1362,13 @@ again:
 			err = -ENOKEY;
 			goto err_exit;
 		}
-		encrypt = 1;
+		encrypt = true;
+	}
+
+	if (encrypt) {
+		err = fscrypt_inherit_context(dir, NULL, op_data, false);
+		if (err)
+			goto err_exit;
 	}
 
 	err = md_create(sbi->ll_md_exp, op_data, tgt, tgt_len, mode,
@@ -1392,7 +1468,8 @@ again:
 	d_instantiate(dentry, inode);
 
 	if (encrypt) {
-		err = fscrypt_inherit_context(dir, inode, NULL, true);
+		err = ll_set_encflags(inode, op_data->op_file_encctx,
+				      op_data->op_file_encctx_size, true);
 		if (err)
 			goto err_exit;
 	}
