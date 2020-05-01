@@ -1466,7 +1466,6 @@ int pcc_file_open(struct inode *inode, struct file *file)
 	struct pcc_file *pccf = &fd->fd_pcc_file;
 	struct file *pcc_file;
 	struct path *path;
-	struct qstr *dname;
 	bool cached = false;
 	int rc = 0;
 
@@ -1494,9 +1493,7 @@ int pcc_file_open(struct inode *inode, struct file *file)
 	WARN_ON(pccf->pccf_file);
 
 	path = &pcci->pcci_path;
-	dname = &path->dentry->d_name;
-	CDEBUG(D_CACHE, "opening pcc file '%.*s'\n", dname->len,
-	       dname->name);
+	CDEBUG(D_CACHE, "opening pcc file '%pd'\n", path->dentry);
 
 	pcc_file = dentry_open(path, file->f_flags,
 			       pcc_super_cred(inode->i_sb));
@@ -1519,7 +1516,6 @@ void pcc_file_release(struct inode *inode, struct file *file)
 	struct ll_file_data *fd = file->private_data;
 	struct pcc_file *pccf;
 	struct path *path;
-	struct qstr *dname;
 
 	if (!S_ISREG(inode->i_mode) || !fd)
 		return;
@@ -1532,9 +1528,7 @@ void pcc_file_release(struct inode *inode, struct file *file)
 	pcci = ll_i2pcci(inode);
 	LASSERT(pcci);
 	path = &pcci->pcci_path;
-	dname = &path->dentry->d_name;
-	CDEBUG(D_CACHE, "releasing pcc file \"%.*s\"\n", dname->len,
-	       dname->name);
+	CDEBUG(D_CACHE, "releasing pcc file \"%pd\"\n", path->dentry);
 	pcc_inode_put(pcci);
 	fput(pccf->pccf_file);
 	pccf->pccf_file = NULL;
@@ -2005,9 +1999,8 @@ static int pcc_inode_remove(struct inode *inode, struct dentry *pcc_dentry)
 
 	rc = vfs_unlink(pcc_dentry->d_parent->d_inode, pcc_dentry, NULL);
 	if (rc)
-		CWARN("%s: failed to unlink PCC file %.*s, rc = %d\n",
-		      ll_i2sbi(inode)->ll_fsname, pcc_dentry->d_name.len,
-		      pcc_dentry->d_name.name, rc);
+		CWARN("%s: failed to unlink PCC file %pd, rc = %d\n",
+		      ll_i2sbi(inode)->ll_fsname, pcc_dentry, rc);
 
 	return rc;
 }
@@ -2239,9 +2232,8 @@ void pcc_create_attach_cleanup(struct super_block *sb,
 		rc = vfs_unlink(pca->pca_dentry->d_parent->d_inode,
 				pca->pca_dentry, NULL);
 		if (rc)
-			CWARN("failed to unlink PCC file %.*s, rc = %d\n",
-			      pca->pca_dentry->d_name.len,
-			      pca->pca_dentry->d_name.name, rc);
+			CWARN("%s: failed to unlink PCC file %pd: rc = %d\n",
+			      ll_s2sbi(sb)->ll_fsname, pca->pca_dentry, rc);
 		/* ignore the unlink failure */
 		revert_creds(old_cred);
 		dput(pca->pca_dentry);

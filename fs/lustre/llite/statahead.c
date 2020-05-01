@@ -1486,8 +1486,7 @@ static int revalidate_statahead_dentry(struct inode *dir,
 				/* revalidate, but inode is recreated */
 				CDEBUG(D_READA,
 				       "%s: stale dentry %pd inode " DFID", statahead inode "DFID "\n",
-				       ll_i2sbi(inode)->ll_fsname,
-				       *dentryp,
+				       ll_i2sbi(inode)->ll_fsname, *dentryp,
 				       PFID(ll_inode2fid((*dentryp)->d_inode)),
 				       PFID(ll_inode2fid(inode)));
 				ll_intent_release(&it);
@@ -1647,7 +1646,7 @@ int ll_statahead(struct inode *dir, struct dentry **dentryp, bool unplug)
 		int rc;
 
 		rc = revalidate_statahead_dentry(dir, sai, dentryp, unplug);
-		CDEBUG(D_READA, "revalidate statahead %pd: %d.\n",
+		CDEBUG(D_READA, "revalidate statahead %pd: rc = %d.\n",
 		       *dentryp, rc);
 		ll_sai_put(sai);
 		return rc;

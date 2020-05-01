@@ -2810,9 +2810,9 @@ int ll_file_lock_ahead(struct file *file, struct llapi_lu_ladvise *ladvise)
 	int result;
 
 	CDEBUG(D_VFSTRACE,
-	       "Lock request: file=%.*s, inode=%p, mode=%s start=%llu, end=%llu\n",
-	       dentry->d_name.len, dentry->d_name.name, dentry->d_inode,
-	       user_lockname[ladvise->lla_lockahead_mode], (__u64) start, end);
+	       "Lock request: file=%pd, inode=%p, mode=%s start=%llu, end=%llu\n",
+	       dentry, dentry->d_inode,
+	       user_lockname[ladvise->lla_lockahead_mode], start, end);
 
 	cl_mode = cl_mode_user_to_kernel(ladvise->lla_lockahead_mode);
 	if (cl_mode < 0) {
