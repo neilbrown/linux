@@ -414,6 +414,7 @@ struct lnet_ni *lnet_net2ni_locked(u32 net, int cpt);
 struct lnet_ni *lnet_net2ni_addref(u32 net);
 struct lnet_net *lnet_get_net_locked(u32 net_id);
 
+extern unsigned int lnet_response_tracking;
 extern unsigned int lnet_transaction_timeout;
 extern unsigned int lnet_retry_count;
 extern unsigned int lnet_lnd_timeout;
