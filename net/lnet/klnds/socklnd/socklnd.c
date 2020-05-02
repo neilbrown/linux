@@ -1304,7 +1304,7 @@ ksocknal_create_conn(struct lnet_ni *ni, struct ksock_route *route,
 	/* Set the deadline for the outgoing HELLO to drain */
 	conn->ksnc_tx_bufnob = sock->sk->sk_wmem_queued;
 	conn->ksnc_tx_deadline = ktime_get_seconds() +
-				 lnet_get_lnd_timeout();
+				 ksocknal_timeout();
 	mb();   /* order with adding to peer_ni's conn list */
 
 	list_add(&conn->ksnc_list, &peer_ni->ksnp_conns);
@@ -1692,7 +1692,7 @@ ksocknal_destroy_conn(struct ksock_conn *conn)
 	switch (conn->ksnc_rx_state) {
 	case SOCKNAL_RX_LNET_PAYLOAD:
 		last_rcv = conn->ksnc_rx_deadline -
-			   lnet_get_lnd_timeout();
+			   ksocknal_timeout();
 		CERROR("Completing partial receive from %s[%d], ip %pI4h:%d, with error, wanted: %zd, left: %d, last alive is %lld secs ago\n",
 		       libcfs_id2str(conn->ksnc_peer->ksnp_id), conn->ksnc_type,
 		       &conn->ksnc_ipaddr, conn->ksnc_port,
