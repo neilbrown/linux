@@ -250,6 +250,9 @@ int ptlrpc_unregister_bulk(struct ptlrpc_request *req, int async)
 
 	LASSERT(!in_interrupt());     /* might sleep */
 
+	if (desc)
+		desc->bd_registered = 0;
+
 	/* Let's setup deadline for reply unlink. */
 	if (OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_LONG_BULK_UNLINK) &&
 	    async && req->rq_bulk_deadline == 0 && cfs_fail_val == 0)
@@ -614,9 +617,16 @@ int ptl_send_rpc(struct ptlrpc_request *request, int noreply)
 			request->rq_repmsg = NULL;
 		}
 
-		reply_me = LNetMEAttach(request->rq_reply_portal,
-					connection->c_peer, request->rq_xid, 0,
-					LNET_UNLINK, LNET_INS_AFTER);
+		if (request->rq_bulk &&
+		    OBD_FAIL_CHECK(OBD_FAIL_PTLRPC_BULK_REPLY_ATTACH)) {
+			reply_me = ERR_PTR(-ENOMEM);
+		} else {
+			reply_me = LNetMEAttach(request->rq_reply_portal,
+						connection->c_peer,
+						request->rq_xid, 0,
+						LNET_UNLINK, LNET_INS_AFTER);
+		}
+
 		if (IS_ERR(reply_me)) {
 			rc = PTR_ERR(reply_me);
 			CERROR("LNetMEAttach failed: %d\n", rc);
@@ -724,8 +734,6 @@ cleanup_bulk:
 	 * the chance to have long unlink to sluggish net is smaller here.
 	 */
 	ptlrpc_unregister_bulk(request, 0);
-	if (request->rq_bulk)
-		request->rq_bulk->bd_registered = 0;
 out:
 	if (rc == -ENOMEM) {
 		/*
