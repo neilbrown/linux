@@ -832,14 +832,15 @@ static int ldlm_bl_thread_need_create(struct ldlm_bl_pool *blp,
 static int ldlm_bl_thread_blwi(struct ldlm_bl_pool *blp,
 			       struct ldlm_bl_work_item *blwi)
 {
-	unsigned int flags = 0;
+	/* '1' for consistency with code that checks !mpflag to restore */
+	unsigned int mpflags = 1;
 
 	if (!blwi->blwi_ns)
 		/* added by ldlm_cleanup() */
 		return LDLM_ITER_STOP;
 
 	if (blwi->blwi_mem_pressure)
-		flags = memalloc_noreclaim_save();
+		mpflags = memalloc_noreclaim_save();
 
 	OBD_FAIL_TIMEOUT(OBD_FAIL_LDLM_PAUSE_CANCEL2, 4);
 
@@ -862,7 +863,7 @@ static int ldlm_bl_thread_blwi(struct ldlm_bl_pool *blp,
 					blwi->blwi_lock);
 	}
 	if (blwi->blwi_mem_pressure)
-		memalloc_noreclaim_restore(flags);
+		memalloc_noreclaim_restore(mpflags);
 
 	if (blwi->blwi_flags & LCF_ASYNC)
 		kfree(blwi);

@@ -2207,7 +2207,8 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	struct cl_req_attr *crattr = NULL;
 	u64 starting_offset = OBD_OBJECT_EOF;
 	u64 ending_offset = 0;
-	unsigned int mpflag = 0;
+	/* '1' for consistency with code that checks !mpflag to restore */
+	unsigned int mpflag = 1;
 	int mem_tight = 0;
 	int page_count = 0;
 	bool soft_sync = false;
@@ -2362,7 +2363,7 @@ int osc_build_rpc(const struct lu_env *env, struct client_obd *cli,
 	rc = 0;
 
 out:
-	if (mem_tight != 0)
+	if (mem_tight)
 		memalloc_noreclaim_restore(mpflag);
 
 	if (rc != 0) {

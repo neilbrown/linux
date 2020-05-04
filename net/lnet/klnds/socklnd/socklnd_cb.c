@@ -901,7 +901,8 @@ ksocknal_launch_packet(struct lnet_ni *ni, struct ksock_tx *tx,
 int
 ksocknal_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 {
-	unsigned int mpflag = 0;
+	/* '1' for consistency with code that checks !mpflag to restore */
+	unsigned int mpflag = 1;
 	int type = lntmsg->msg_type;
 	struct lnet_process_id target = lntmsg->msg_target;
 	unsigned int payload_niov = lntmsg->msg_niov;
@@ -928,6 +929,7 @@ ksocknal_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 
 	if (lntmsg->msg_vmflush)
 		mpflag = memalloc_noreclaim_save();
+
 	tx = ksocknal_alloc_tx(KSOCK_MSG_LNET, desc_size);
 	if (!tx) {
 		CERROR("Can't allocate tx desc type %d size %d\n",
@@ -956,7 +958,11 @@ ksocknal_send(struct lnet_ni *ni, void *private, struct lnet_msg *lntmsg)
 
 	/* The first fragment will be set later in pro_pack */
 	rc = ksocknal_launch_packet(ni, tx, target);
-	if (mpflag)
+	/*
+	 * We can't test lntsmg->msg_vmflush again as lntmsg may
+	 * have been freed.
+	 */
+	if (!mpflag)
 		memalloc_noreclaim_restore(mpflag);
 
 	if (!rc)
