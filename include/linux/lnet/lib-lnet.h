@@ -83,7 +83,6 @@ extern unsigned int lnet_current_net_count;
 
 /* default timeout */
 #define DEFAULT_PEER_TIMEOUT    180
-#define LNET_LND_DEFAULT_TIMEOUT 5
 
 bool lnet_is_route_alive(struct lnet_route *route);
 
