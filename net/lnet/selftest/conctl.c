@@ -38,7 +38,6 @@
  */
 
 #include <linux/lnet/lib-lnet.h>
-#include <uapi/linux/lnet/lnetst.h>
 #include "console.h"
 
 static int

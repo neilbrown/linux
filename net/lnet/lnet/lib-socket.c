@@ -41,7 +41,6 @@
 #include <linux/syscalls.h>
 #include <net/sock.h>
 #include <linux/inetdevice.h>
-
 #include <linux/lnet/lib-lnet.h>
 
 int
@@ -50,8 +49,6 @@ lnet_sock_write(struct socket *sock, void *buffer, int nob, int timeout)
 	int rc;
 	long jiffies_left = timeout * HZ;
 	unsigned long then;
-	struct timeval tv;
-	struct __kernel_sock_timeval ktv;
 	struct kvec iov = {
 		.iov_base = buffer,
 		.iov_len = nob
@@ -67,17 +64,12 @@ lnet_sock_write(struct socket *sock, void *buffer, int nob, int timeout)
 	for (;;) {
 		msg.msg_flags = !timeout ? MSG_DONTWAIT : 0;
 		if (timeout) {
+			struct sock *sk = sock->sk;
+
 			/* Set send timeout to remaining time */
-			jiffies_to_timeval(jiffies_left, &tv);
-			ktv.tv_sec = tv.tv_sec;
-			ktv.tv_usec = tv.tv_usec;
-			rc = kernel_setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO_NEW,
-					       (char *)&ktv, sizeof(ktv));
-			if (rc) {
-				CERROR("Can't set socket send timeout %ld.%06d: %d\n",
-				       (long)tv.tv_sec, (int)tv.tv_usec, rc);
-				return rc;
-			}
+			lock_sock(sk);
+			sk->sk_sndtimeo = jiffies_left;
+			release_sock(sk);
 		}
 
 		then = jiffies;
@@ -108,8 +100,6 @@ lnet_sock_read(struct socket *sock, void *buffer, int nob, int timeout)
 	int rc;
 	long jiffies_left = timeout * HZ;
 	unsigned long then;
-	struct timeval tv;
-	struct __kernel_sock_timeval ktv;
 	struct kvec iov = {
 		.iov_base = buffer,
 		.iov_len = nob
@@ -124,17 +114,12 @@ lnet_sock_read(struct socket *sock, void *buffer, int nob, int timeout)
 	iov_iter_kvec(&msg.msg_iter, READ, &iov, 1, nob);
 
 	for (;;) {
+		struct sock *sk = sock->sk;
+
 		/* Set receive timeout to remaining time */
-		jiffies_to_timeval(jiffies_left, &tv);
-		ktv.tv_sec = tv.tv_sec;
-		ktv.tv_usec = tv.tv_usec;
-		rc = kernel_setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO_NEW,
-				       (char *)&ktv, sizeof(ktv));
-		if (rc) {
-			CERROR("Can't set socket recv timeout %ld.%06d: %d\n",
-			       (long)tv.tv_sec, (int)tv.tv_usec, rc);
-			return rc;
-		}
+		lock_sock(sk);
+		sk->sk_rcvtimeo = jiffies_left;
+		release_sock(sk);
 
 		then = jiffies;
 		rc = sock_recvmsg(sock, &msg, 0);

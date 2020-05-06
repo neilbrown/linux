@@ -151,9 +151,15 @@ struct list_head {
 struct lstcon_rpc_ent {
 	struct list_head	rpe_link;	/* link chain */
 	struct lnet_process_id	rpe_peer;	/* peer's id */
-	struct timeval		rpe_stamp;	/* time stamp of RPC */
-	int			rpe_state;	/* peer's state */
-	int			rpe_rpc_errno;	/* RPC errno */
+	/* This has not been used since Lustre 2.2 so its safe to use.
+	 * Update to allow future use of timespec64
+	 */
+	struct {
+		__s64		tv_sec;
+		__s64		tv_nsec;
+	} rpe_stamp;					/* time stamp of RPC */
+	int			rpe_state;		/* peer's state */
+	int			rpe_rpc_errno;		/* RPC errno */
 
 	struct lst_sid		rpe_sid;	/* peer's session id */
 	int			rpe_fwk_errno;	/* framework errno */
