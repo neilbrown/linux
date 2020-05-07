@@ -275,7 +275,7 @@ ll_direct_rw_pages(const struct lu_env *env, struct cl_io *io, size_t size,
  * up to 22MB for 128kB kmalloc and up to 682MB for 4MB kmalloc.
  */
 #define MAX_DIO_SIZE ((KMALLOC_MAX_SIZE / sizeof(struct brw_page) *	  \
-		       PAGE_SIZE) & ~(DT_MAX_BRW_SIZE - 1))
+		       PAGE_SIZE) & ~((size_t)DT_MAX_BRW_SIZE - 1))
 
 static ssize_t ll_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 {
