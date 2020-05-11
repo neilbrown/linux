@@ -41,6 +41,7 @@
 #include <lustre_log.h>
 #include <lprocfs_status.h>
 #include <lustre_kernelcomm.h>
+#include <linux/libcfs/libcfs_cpu.h>
 
 DEFINE_RWLOCK(obd_dev_lock);
 static struct obd_device *obd_devs[MAX_OBD_DEVICES];
@@ -1218,11 +1219,11 @@ EXPORT_SYMBOL(obd_zombie_barrier);
  */
 int obd_zombie_impexp_init(void)
 {
-	zombie_wq = alloc_workqueue("obd_zombid", 0, 0);
-	if (!zombie_wq)
-		return -ENOMEM;
+	zombie_wq = cfs_cpt_bind_workqueue("obd_zombid", cfs_cpt_tab,
+					   0, CFS_CPT_ANY,
+					   cfs_cpt_number(cfs_cpt_tab));
 
-	return 0;
+	return IS_ERR(zombie_wq) ? PTR_ERR(zombie_wq) : 0;
 }
 
 /**

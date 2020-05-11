@@ -81,8 +81,6 @@ static inline unsigned int ll_get_ra_async_max_active(void)
 
 static struct ll_sb_info *ll_init_sbi(void)
 {
-	struct workqueue_attrs attrs = { };
-	cpumask_var_t *mask;
 	struct ll_sb_info *sbi = NULL;
 	unsigned long pages;
 	unsigned long lru_page_max;
@@ -111,21 +109,12 @@ static struct ll_sb_info *ll_init_sbi(void)
 
 	sbi->ll_ra_info.ra_async_max_active = ll_get_ra_async_max_active();
 	sbi->ll_ra_info.ll_readahead_wq =
-		alloc_workqueue("ll-readahead-wq", WQ_UNBOUND,
-				sbi->ll_ra_info.ra_async_max_active);
-	if (!sbi->ll_ra_info.ll_readahead_wq) {
-		rc = -ENOMEM;
+		cfs_cpt_bind_workqueue("ll-readahead-wq", cfs_cpt_tab,
+				       0, CFS_CPT_ANY,
+				       sbi->ll_ra_info.ra_async_max_active);
+	if (IS_ERR(sbi->ll_ra_info.ll_readahead_wq)) {
+		rc = PTR_ERR(sbi->ll_ra_info.ll_readahead_wq);
 		goto out_pcc;
-	mask = cfs_cpt_cpumask(cfs_cpt_tab, CFS_CPT_ANY);
-	if (mask && alloc_cpumask_var(&attrs.cpumask, GFP_KERNEL)) {
-		cpumask_copy(attrs.cpumask, *mask);
-		cpus_read_lock();
-		apply_workqueue_attrs(sbi->ll_ra_info.ll_readahead_wq,
-				      &attrs);
-		cpus_read_unlock();
-		free_cpumask_var(attrs.cpumask);
-	}
-
 	}
 
 	sbi->ll_cache = cl_cache_init(lru_page_max);

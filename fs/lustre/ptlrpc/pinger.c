@@ -287,26 +287,15 @@ static void ptlrpc_pinger_main(struct work_struct *ws)
 
 int ptlrpc_start_pinger(void)
 {
-	struct workqueue_attrs attrs = { };
-	cpumask_var_t *mask;
-
 	if (pinger_wq)
 		return -EALREADY;
 
-	pinger_wq = alloc_workqueue("ptlrpc_pinger",
-				    WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
-	if (!pinger_wq) {
+	pinger_wq = cfs_cpt_bind_workqueue("ptlrpc_pinger",
+				    cfs_cpt_tab,
+					   0, CFS_CPT_ANY | WQ_MEM_RECLAIM, 1);
+	if (IS_ERR(pinger_wq)) {
 		CERROR("cannot start pinger workqueue\n");
-		return -ENOMEM;
-	}
-
-	mask = cfs_cpt_cpumask(cfs_cpt_tab, CFS_CPT_ANY);
-	if (mask && alloc_cpumask_var(&attrs.cpumask, GFP_KERNEL)) {
-		cpumask_copy(attrs.cpumask, *mask);
-		cpus_read_lock();
-		apply_workqueue_attrs(pinger_wq, &attrs);
-		cpus_read_unlock();
-		free_cpumask_var(attrs.cpumask);
+		return PTR_ERR(pinger_wq);
 	}
 
 	queue_delayed_work(pinger_wq, &ping_work, 0);
