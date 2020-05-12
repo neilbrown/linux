@@ -983,7 +983,6 @@ static inline const char *qtype_name(int qtype)
 }
 
 #define IDENTITY_DOWNCALL_MAGIC 0x6d6dd629
-#define SEPOL_DOWNCALL_MAGIC 0x8b8bb842
 
 /* permission */
 #define N_PERMS_MAX	64
@@ -1005,10 +1004,21 @@ struct identity_downcall_data {
 	__u32			    idd_groups[0];
 };
 
-struct sepol_downcall_data {
+/* old interface struct is deprecated in 2.14 */
+#define SEPOL_DOWNCALL_MAGIC_OLD 0x8b8bb842
+struct sepol_downcall_data_old {
 	__u32		sdd_magic;
 	__s64		sdd_sepol_mtime;
 	__u16		sdd_sepol_len;
+	char		sdd_sepol[0];
+};
+
+#define SEPOL_DOWNCALL_MAGIC 0x8b8bb843
+struct sepol_downcall_data {
+	__u32		sdd_magic;
+	__u16		sdd_sepol_len;
+	__u16		sdd_padding1;
+	__s64		sdd_sepol_mtime;
 	char		sdd_sepol[0];
 };
 

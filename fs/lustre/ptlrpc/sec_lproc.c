@@ -131,6 +131,84 @@ out:
 
 LPROC_SEQ_FOPS_RO(sptlrpc_ctxs_lprocfs);
 
+static ssize_t sepol_seq_write_old(struct obd_device *obd,
+				   const char __user *buffer,
+				   size_t count)
+{
+	struct client_obd *cli = &obd->u.cli;
+	struct obd_import *imp = cli->cl_import;
+	struct sepol_downcall_data_old *param;
+	int size = sizeof(*param);
+	u16 len;
+	int rc = 0;
+
+	if (count < size) {
+		rc = -EINVAL;
+		CERROR("%s: invalid data count = %lu, size = %d: rc = %d\n",
+		       obd->obd_name, (unsigned long) count, size, rc);
+		return rc;
+	}
+
+	param = kzalloc(size, GFP_KERNEL);
+	if (!param)
+		return -ENOMEM;
+
+	if (copy_from_user(param, buffer, size)) {
+		rc = -EFAULT;
+		CERROR("%s: bad sepol data: rc = %d\n", obd->obd_name, rc);
+		goto out;
+	}
+
+	if (param->sdd_magic != SEPOL_DOWNCALL_MAGIC_OLD) {
+		rc = -EINVAL;
+		CERROR("%s: sepol downcall bad params: rc = %d\n",
+		       obd->obd_name, rc);
+		goto out;
+	}
+
+	if (param->sdd_sepol_len == 0 ||
+	    param->sdd_sepol_len >= sizeof(imp->imp_sec->ps_sepol)) {
+		rc = -EINVAL;
+		CERROR("%s: invalid sepol data returned: rc = %d\n",
+		       obd->obd_name, rc);
+		goto out;
+	}
+	len = param->sdd_sepol_len; /* save sdd_sepol_len */
+	kfree(param);
+	size = offsetof(struct sepol_downcall_data_old,
+			sdd_sepol[len]);
+
+	if (count < size) {
+		rc = -EINVAL;
+		CERROR("%s: invalid sepol count = %lu, size = %d: rc = %d\n",
+		       obd->obd_name, (unsigned long) count, size, rc);
+		return rc;
+	}
+
+	/* alloc again with real size */
+	param = kzalloc(size, GFP_KERNEL);
+	if (!param)
+		return -ENOMEM;
+
+	if (copy_from_user(param, buffer, size)) {
+		rc = -EFAULT;
+		CERROR("%s: cannot copy sepol data: rc = %d\n",
+		       obd->obd_name, rc);
+		goto out;
+	}
+
+	spin_lock(&imp->imp_sec->ps_lock);
+	snprintf(imp->imp_sec->ps_sepol, param->sdd_sepol_len + 1, "%s",
+		 param->sdd_sepol);
+	imp->imp_sec->ps_sepol_mtime = ktime_set(param->sdd_sepol_mtime, 0);
+	spin_unlock(&imp->imp_sec->ps_lock);
+
+out:
+	kfree(param);
+
+	return rc ? rc : count;
+}
+
 static ssize_t
 lprocfs_wr_sptlrpc_sepol(struct file *file, const char __user *buffer,
 			 size_t count, void *data)
@@ -140,13 +218,39 @@ lprocfs_wr_sptlrpc_sepol(struct file *file, const char __user *buffer,
 	struct client_obd *cli = &obd->u.cli;
 	struct obd_import *imp = cli->cl_import;
 	struct sepol_downcall_data *param;
-	int size = sizeof(*param);
+	u32 magic;
+	int size = sizeof(magic);
+	u16 len;
 	int rc = 0;
 
 	if (count < size) {
-		CERROR("%s: invalid data count = %lu, size = %d\n",
-		       obd->obd_name, (unsigned long) count, size);
-		return -EINVAL;
+		rc = -EINVAL;
+		CERROR("%s: invalid buffer count = %lu, size = %d: rc = %d\n",
+		       obd->obd_name, (unsigned long) count, size, rc);
+		return rc;
+	}
+
+	if (copy_from_user(&magic, buffer, size)) {
+		rc = -EFAULT;
+		CERROR("%s: bad sepol magic: rc = %d\n", obd->obd_name, rc);
+		return rc;
+	}
+
+	if (magic != SEPOL_DOWNCALL_MAGIC) {
+		if (magic == SEPOL_DOWNCALL_MAGIC_OLD)
+			return sepol_seq_write_old(obd, buffer, count);
+		rc = -EINVAL;
+		CERROR("%s: sepol downcall bad magic '%#08x': rc = %d\n",
+		       obd->obd_name, magic, rc);
+		return rc;
+	}
+
+	size = sizeof(*param);
+	if (count < size) {
+		rc = -EINVAL;
+		CERROR("%s: invalid data count = %lu, size = %d: rc = %d\n",
+		       obd->obd_name, (unsigned long) count, size, rc);
+		return rc;
 	}
 
 	param = kzalloc(size, GFP_KERNEL);
@@ -154,39 +258,32 @@ lprocfs_wr_sptlrpc_sepol(struct file *file, const char __user *buffer,
 		return -ENOMEM;
 
 	if (copy_from_user(param, buffer, size)) {
-		CERROR("%s: bad sepol data\n", obd->obd_name);
 		rc = -EFAULT;
-		goto out;
-	}
-
-	if (param->sdd_magic != SEPOL_DOWNCALL_MAGIC) {
-		CERROR("%s: sepol downcall bad params\n",
-		       obd->obd_name);
-		rc = -EINVAL;
+		CERROR("%s: bad sepol data: rc = %d\n", obd->obd_name, rc);
 		goto out;
 	}
 
 	if (param->sdd_sepol_len == 0 ||
 	    param->sdd_sepol_len >= sizeof(imp->imp_sec->ps_sepol)) {
-		CERROR("%s: invalid sepol data returned\n",
-		       obd->obd_name);
 		rc = -EINVAL;
+		CERROR("%s: invalid sepol data returned: rc = %d\n",
+		       obd->obd_name, rc);
 		goto out;
 	}
-	rc = param->sdd_sepol_len; /* save sdd_sepol_len */
+	len = param->sdd_sepol_len; /* save sdd_sepol_len */
 	kfree(param);
 	size = offsetof(struct sepol_downcall_data,
-			sdd_sepol[rc]);
+			sdd_sepol[len]);
 
 	/* alloc again with real size */
-	rc = 0;
 	param = kzalloc(size, GFP_KERNEL);
 	if (!param)
 		return -ENOMEM;
 
 	if (copy_from_user(param, buffer, size)) {
-		CERROR("%s: bad sepol data\n", obd->obd_name);
 		rc = -EFAULT;
+		CERROR("%s: cannot copy sepol data: rc = %d\n",
+		       obd->obd_name, rc);
 		goto out;
 	}
 
