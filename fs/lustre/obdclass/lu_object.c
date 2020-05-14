@@ -41,12 +41,12 @@
 
 #define DEBUG_SUBSYSTEM S_CLASS
 
+#include <linux/delay.h>
 #include <linux/module.h>
+#include <linux/list.h>
 #include <linux/processor.h>
 #include <linux/random.h>
 
-/* hash_long() */
-#include <linux/libcfs/libcfs_hash.h>
 #include <obd_class.h>
 #include <obd_support.h>
 #include <lustre_disk.h>
@@ -85,12 +85,10 @@ enum {
 #define LU_CACHE_NR_MAX_ADJUST		512
 #define LU_CACHE_NR_UNLIMITED		-1
 #define LU_CACHE_NR_DEFAULT		LU_CACHE_NR_UNLIMITED
-#define LU_CACHE_NR_LDISKFS_LIMIT	LU_CACHE_NR_UNLIMITED
-#define LU_CACHE_NR_ZFS_LIMIT		256
 
-#define LU_SITE_BITS_MIN		12
-#define LU_SITE_BITS_MAX		24
-#define LU_SITE_BITS_MAX_CL		19
+#define	LU_CACHE_NR_MIN			4096
+#define	LU_CACHE_NR_MAX			0x80000000UL
+
 /**
  * Max 256 buckets, we don't want too many buckets because:
  * - consume too much memory (currently max 16K)
@@ -111,7 +109,7 @@ MODULE_PARM_DESC(lu_cache_nr, "Maximum number of objects in lu_object cache");
 static void lu_object_free(const struct lu_env *env, struct lu_object *o);
 static u32 ls_stats_read(struct lprocfs_stats *stats, int idx);
 
-static u32 lu_fid_hash(const void *data, u32 seed)
+static u32 lu_fid_hash(const void *data, u32 len, u32 seed)
 {
 	const struct lu_fid *fid = data;
 
@@ -120,9 +118,17 @@ static u32 lu_fid_hash(const void *data, u32 seed)
 	return seed;
 }
 
+static const struct rhashtable_params obj_hash_params = {
+	.key_len	= sizeof(struct lu_fid),
+	.key_offset	= offsetof(struct lu_object_header, loh_fid),
+	.head_offset	= offsetof(struct lu_object_header, loh_hash),
+	.hashfn		= lu_fid_hash,
+	.automatic_shrinking = true,
+};
+
 static inline int lu_bkt_hash(struct lu_site *s, const struct lu_fid *fid)
 {
-	return lu_fid_hash(fid, s->ls_bkt_seed) &
+	return lu_fid_hash(fid, sizeof(*fid), s->ls_bkt_seed) &
 	       (s->ls_bkt_cnt - 1);
 }
 
@@ -147,9 +153,7 @@ void lu_object_put(const struct lu_env *env, struct lu_object *o)
 	struct lu_object_header *top = o->lo_header;
 	struct lu_site *site = o->lo_dev->ld_site;
 	struct lu_object *orig = o;
-	struct cfs_hash_bd bd;
 	const struct lu_fid *fid = lu_object_fid(o);
-	bool is_dying;
 
 	/*
 	 * till we have full fids-on-OST implemented anonymous objects
@@ -157,7 +161,6 @@ void lu_object_put(const struct lu_env *env, struct lu_object *o)
 	 * so we should not remove it from the site.
 	 */
 	if (fid_is_zero(fid)) {
-		LASSERT(!top->loh_hash.next && !top->loh_hash.pprev);
 		LASSERT(list_empty(&top->loh_lru));
 		if (!atomic_dec_and_test(&top->loh_ref))
 			return;
@@ -169,40 +172,45 @@ void lu_object_put(const struct lu_env *env, struct lu_object *o)
 		return;
 	}
 
-	cfs_hash_bd_get(site->ls_obj_hash, &top->loh_fid, &bd);
-
-	is_dying = lu_object_is_dying(top);
-	if (!cfs_hash_bd_dec_and_lock(site->ls_obj_hash, &bd, &top->loh_ref)) {
-		/* at this point the object reference is dropped and lock is
+	bkt = &site->ls_bkts[lu_bkt_hash(site, &top->loh_fid)];
+	if (atomic_add_unless(&top->loh_ref, -1, 1)) {
+still_active:
+		/*
+		 * At this point the object reference is dropped and lock is
 		 * not taken, so lu_object should not be touched because it
-		 * can be freed by concurrent thread. Use local variable for
-		 * check.
+		 * can be freed by concurrent thread.
+		 *
+		 * Somebody may be waiting for this, currently only used for
+		 * cl_object, see cl_object_put_last().
 		 */
-		if (is_dying) {
-			/*
-			 * somebody may be waiting for this, currently only
-			 * used for cl_object, see cl_object_put_last().
-			 */
-			bkt = &site->ls_bkts[lu_bkt_hash(site, &top->loh_fid)];
-			wake_up_all(&bkt->lsb_waitq);
-		}
+		wake_up(&bkt->lsb_waitq);
+
 		return;
 	}
 
+	spin_lock(&bkt->lsb_waitq.lock);
+	if (!atomic_dec_and_test(&top->loh_ref)) {
+		spin_unlock(&bkt->lsb_waitq.lock);
+		goto still_active;
+	}
+
 	/*
-	 * When last reference is released, iterate over object
-	 * layers, and notify them that object is no longer busy.
+	 * Refcount is zero, and cannot be incremented without taking the bkt
+	 * lock, so object is stable.
+	 */
+
+	/*
+	 * When last reference is released, iterate over object layers, and
+	 * notify them that object is no longer busy.
 	 */
 	list_for_each_entry_reverse(o, &top->loh_layers, lo_linkage) {
 		if (o->lo_ops->loo_object_release)
 			o->lo_ops->loo_object_release(env, o);
 	}
 
-	bkt = &site->ls_bkts[lu_bkt_hash(site, &top->loh_fid)];
-	spin_lock(&bkt->lsb_waitq.lock);
-
-	/* don't use local 'is_dying' here because if was taken without lock
-	 * but here we need the latest actual value of it so check lu_object
+	/*
+	 * Don't use local 'is_dying' here because if was taken without lock but
+	 * here we need the latest actual value of it so check lu_object
 	 * directly here.
 	 */
 	if (!lu_object_is_dying(top)) {
@@ -210,26 +218,26 @@ void lu_object_put(const struct lu_env *env, struct lu_object *o)
 		list_add_tail(&top->loh_lru, &bkt->lsb_lru);
 		spin_unlock(&bkt->lsb_waitq.lock);
 		percpu_counter_inc(&site->ls_lru_len_counter);
-		CDEBUG(D_INODE, "Add %p/%p to site lru. hash: %p, bkt: %p\n",
-		       orig, top, site->ls_obj_hash, bkt);
-		cfs_hash_bd_unlock(site->ls_obj_hash, &bd, 1);
+		CDEBUG(D_INODE, "Add %p/%p to site lru. bkt: %p\n",
+		       orig, top, bkt);
 		return;
 	}
 
 	/*
-	 * If object is dying (will not be cached), then removed it
-	 * from hash table (it is already not on the LRU).
+	 * If object is dying (will not be cached), then removed it from hash
+	 * table (it is already not on the LRU).
 	 *
-	 * This is done with hash table lists locked. As the only
-	 * way to acquire first reference to previously unreferenced
-	 * object is through hash-table lookup (lu_object_find())
-	 * which is done under hash-table, no race with concurrent
-	 * object lookup is possible and we can safely destroy object below.
+	 * This is done with bucket lock held.  As the only way to acquire first
+	 * reference to previously unreferenced object is through hash-table
+	 * lookup (lu_object_find()) which takes the lock for first reference,
+	 * no race with concurrent object lookup is possible and we can safely
+	 * destroy object below.
 	 */
 	if (!test_and_set_bit(LU_OBJECT_UNHASHED, &top->loh_flags))
-		cfs_hash_bd_del_locked(site->ls_obj_hash, &bd, &top->loh_hash);
+		rhashtable_remove_fast(&site->ls_obj_hash, &top->loh_hash,
+				       obj_hash_params);
+
 	spin_unlock(&bkt->lsb_waitq.lock);
-	cfs_hash_bd_unlock(site->ls_obj_hash, &bd, 1);
 	/* Object was already removed from hash above, can kill it. */
 	lu_object_free(env, orig);
 }
@@ -247,21 +255,19 @@ void lu_object_unhash(const struct lu_env *env, struct lu_object *o)
 	set_bit(LU_OBJECT_HEARD_BANSHEE, &top->loh_flags);
 	if (!test_and_set_bit(LU_OBJECT_UNHASHED, &top->loh_flags)) {
 		struct lu_site *site = o->lo_dev->ld_site;
-		struct cfs_hash *obj_hash = site->ls_obj_hash;
-		struct cfs_hash_bd bd;
+		struct rhashtable *obj_hash = &site->ls_obj_hash;
+		struct lu_site_bkt_data *bkt;
 
-		cfs_hash_bd_get_and_lock(obj_hash, &top->loh_fid, &bd, 1);
+		bkt = &site->ls_bkts[lu_bkt_hash(site, &top->loh_fid)];
+		spin_lock(&bkt->lsb_waitq.lock);
 		if (!list_empty(&top->loh_lru)) {
-			struct lu_site_bkt_data *bkt;
-
-			bkt = &site->ls_bkts[lu_bkt_hash(site, &top->loh_fid)];
-			spin_lock(&bkt->lsb_waitq.lock);
 			list_del_init(&top->loh_lru);
-			spin_unlock(&bkt->lsb_waitq.lock);
 			percpu_counter_dec(&site->ls_lru_len_counter);
 		}
-		cfs_hash_bd_del_locked(obj_hash, &bd, &top->loh_hash);
-		cfs_hash_bd_unlock(obj_hash, &bd, 1);
+		spin_unlock(&bkt->lsb_waitq.lock);
+
+		rhashtable_remove_fast(obj_hash, &top->loh_hash,
+				       obj_hash_params);
 	}
 }
 EXPORT_SYMBOL(lu_object_unhash);
@@ -445,11 +451,9 @@ again:
 
 			LINVRNT(lu_bkt_hash(s, &h->loh_fid) == i);
 
-			/* Cannot remove from hash under current spinlock,
-			 * so set flag to stop object from being found
-			 * by htable_lookup().
-			 */
-			set_bit(LU_OBJECT_PURGING, &h->loh_flags);
+			set_bit(LU_OBJECT_UNHASHED, &h->loh_flags);
+			rhashtable_remove_fast(&s->ls_obj_hash, &h->loh_hash,
+					       obj_hash_params);
 			list_move(&h->loh_lru, &dispose);
 			percpu_counter_dec(&s->ls_lru_len_counter);
 			if (did_sth == 0)
@@ -470,7 +474,6 @@ again:
 		while ((h = list_first_entry_or_null(&dispose,
 						     struct lu_object_header,
 						     loh_lru)) != NULL) {
-			cfs_hash_del(s->ls_obj_hash, &h->loh_fid, &h->loh_hash);
 			list_del_init(&h->loh_lru);
 			lu_object_free(env, lu_object_top(h));
 			lprocfs_counter_incr(s->ls_stats, LU_SS_LRU_PURGED);
@@ -582,9 +585,9 @@ void lu_object_header_print(const struct lu_env *env, void *cookie,
 	(*printer)(env, cookie, "header@%p[%#lx, %d, " DFID "%s%s%s]",
 		   hdr, hdr->loh_flags, atomic_read(&hdr->loh_ref),
 		   PFID(&hdr->loh_fid),
-		   hlist_unhashed(&hdr->loh_hash) ? "" : " hash",
-		   list_empty((struct list_head *)&hdr->loh_lru) ? \
-		   "" : " lru",
+		   test_bit(LU_OBJECT_UNHASHED,
+			    &hdr->loh_flags) ? "" : " hash",
+		   list_empty(&hdr->loh_lru) ? "" : " lru",
 		   hdr->loh_attr & LOHA_EXISTS ? " exist":"");
 }
 EXPORT_SYMBOL(lu_object_header_print);
@@ -624,51 +627,96 @@ EXPORT_SYMBOL(lu_object_print);
  * NOTE: htable_lookup() is called with the relevant
  * hash bucket locked, but might drop and re-acquire the lock.
  */
-static struct lu_object *htable_lookup(struct lu_site *s,
-				       struct cfs_hash_bd *bd,
-				       const struct lu_fid *f,
-				       u64 *version)
+/*
+ * Limit the lu_object cache to a maximum of lu_cache_nr objects.  Because the
+ * calculation for the number of objects to reclaim is not covered by a lock the
+ * maximum number of objects is capped by LU_CACHE_MAX_ADJUST.  This ensures
+ * that many concurrent threads will not accidentally purge the entire cache.
+ */
+static void lu_object_limit(const struct lu_env *env,
+			    struct lu_device *dev)
 {
+	u64 size, nr;
+
+	if (lu_cache_nr == LU_CACHE_NR_UNLIMITED)
+		return;
+
+	size = atomic_read(&dev->ld_site->ls_obj_hash.nelems);
+	nr = (u64)lu_cache_nr;
+	if (size <= nr)
+		return;
+
+	lu_site_purge_objects(env, dev->ld_site,
+			      min_t(u64, size - nr, LU_CACHE_NR_MAX_ADJUST),
+			      0);
+}
+
+static struct lu_object *htable_lookup(const struct lu_env *env,
+				       struct lu_device *dev,
+				       struct lu_site_bkt_data *bkt,
+				       const struct lu_fid *f,
+				       struct lu_object_header *new)
+{
+	struct lu_site *s = dev->ld_site;
 	struct lu_object_header *h;
-	struct hlist_node *hnode;
-	u64 ver = cfs_hash_bd_version_get(bd);
 
-	if (*version == ver)
+try_again:
+	rcu_read_lock();
+	if (new)
+		h = rhashtable_lookup_get_insert_fast(&s->ls_obj_hash,
+						      &new->loh_hash,
+						      obj_hash_params);
+	else
+		h = rhashtable_lookup(&s->ls_obj_hash, f, obj_hash_params);
+
+	if (IS_ERR_OR_NULL(h)) {
+		/* Not found */
+		if (!new)
+			lprocfs_counter_incr(s->ls_stats, LU_SS_CACHE_MISS);
+		rcu_read_unlock();
+		if (PTR_ERR(h) == -ENOMEM) {
+			msleep(20);
+			goto try_again;
+		}
+		lu_object_limit(env, dev);
+		if (PTR_ERR(h) == -E2BIG)
+			goto try_again;
+
 		return ERR_PTR(-ENOENT);
+	}
 
-	*version = ver;
-	/* cfs_hash_bd_peek_locked is a somehow "internal" function
-	 * of cfs_hash, it doesn't add refcount on object.
-	 */
-	hnode = cfs_hash_bd_peek_locked(s->ls_obj_hash, bd, (void *)f);
-	if (!hnode) {
+	if (atomic_inc_not_zero(&h->loh_ref)) {
+		rcu_read_unlock();
+		return lu_object_top(h);
+	}
+
+	spin_lock(&bkt->lsb_waitq.lock);
+	if (lu_object_is_dying(h) ||
+	    test_bit(LU_OBJECT_UNHASHED, &h->loh_flags)) {
+		spin_unlock(&bkt->lsb_waitq.lock);
+		rcu_read_unlock();
+		if (new) {
+			/*
+			 * Old object might have already been removed, or will
+			 * be soon.  We need to insert our new object, so
+			 * remove the old one just in case it is still there.
+			 */
+			rhashtable_remove_fast(&s->ls_obj_hash, &h->loh_hash,
+					       obj_hash_params);
+			goto try_again;
+		}
 		lprocfs_counter_incr(s->ls_stats, LU_SS_CACHE_MISS);
 		return ERR_PTR(-ENOENT);
 	}
+	/* Now protected by spinlock */
+	rcu_read_unlock();
 
-	h = container_of(hnode, struct lu_object_header, loh_hash);
 	if (!list_empty(&h->loh_lru)) {
-		struct lu_site_bkt_data *bkt;
-
-		bkt = &s->ls_bkts[lu_bkt_hash(s, &h->loh_fid)];
-		spin_lock(&bkt->lsb_waitq.lock);
-		/* Might have just been moved to the dispose list, in which
-		 * case LU_OBJECT_PURGING will be set.  In that case,
-		 * delete it from the hash table immediately.
-		 * When lu_site_purge_objects() tried, it will find it
-		 * isn't there, which is harmless.
-		 */
-		if (test_bit(LU_OBJECT_PURGING, &h->loh_flags)) {
-			spin_unlock(&bkt->lsb_waitq.lock);
-			cfs_hash_bd_del_locked(s->ls_obj_hash, bd, hnode);
-			lprocfs_counter_incr(s->ls_stats, LU_SS_CACHE_MISS);
-			return ERR_PTR(-ENOENT);
-		}
 		list_del_init(&h->loh_lru);
-		spin_unlock(&bkt->lsb_waitq.lock);
 		percpu_counter_dec(&s->ls_lru_len_counter);
 	}
-	cfs_hash_get(s->ls_obj_hash, hnode);
+	atomic_inc(&h->loh_ref);
+	spin_unlock(&bkt->lsb_waitq.lock);
 	lprocfs_counter_incr(s->ls_stats, LU_SS_CACHE_HIT);
 	return lu_object_top(h);
 }
@@ -687,28 +735,37 @@ static struct lu_object *lu_object_find(const struct lu_env *env,
 }
 
 /*
- * Limit the lu_object cache to a maximum of lu_cache_nr objects.  Because
- * the calculation for the number of objects to reclaim is not covered by
- * a lock the maximum number of objects is capped by LU_CACHE_MAX_ADJUST.
- * This ensures that many concurrent threads will not accidentally purge
- * the entire cache.
+ * Get a 'first' reference to an object that was found while looking through the
+ * hash table.
  */
-static void lu_object_limit(const struct lu_env *env, struct lu_device *dev)
+struct lu_object *lu_object_get_first(struct lu_object_header *h,
+				      struct lu_device *dev)
 {
-	u64 size, nr;
+	struct lu_site *s = dev->ld_site;
+	struct lu_object *ret;
 
-	if (lu_cache_nr == LU_CACHE_NR_UNLIMITED)
-		return;
+	if (IS_ERR_OR_NULL(h) || lu_object_is_dying(h))
+		return NULL;
 
-	size = cfs_hash_size_get(dev->ld_site->ls_obj_hash);
-	nr = (u64)lu_cache_nr;
-	if (size <= nr)
-		return;
+	ret = lu_object_locate(h, dev->ld_type);
+	if (!ret)
+		return ret;
 
-	lu_site_purge_objects(env, dev->ld_site,
-			      min_t(u64, size - nr, LU_CACHE_NR_MAX_ADJUST),
-			      false);
+	if (!atomic_inc_not_zero(&h->loh_ref)) {
+		struct lu_site_bkt_data *bkt;
+
+		bkt = &s->ls_bkts[lu_bkt_hash(s, &h->loh_fid)];
+		spin_lock(&bkt->lsb_waitq.lock);
+		if (!lu_object_is_dying(h) &&
+		    !test_bit(LU_OBJECT_UNHASHED, &h->loh_flags))
+			atomic_inc(&h->loh_ref);
+		else
+			ret = NULL;
+		spin_unlock(&bkt->lsb_waitq.lock);
+	}
+	return ret;
 }
+EXPORT_SYMBOL(lu_object_get_first);
 
 /**
  * Core logic of lu_object_find*() functions.
@@ -725,10 +782,8 @@ struct lu_object *lu_object_find_at(const struct lu_env *env,
 	struct lu_object *o;
 	struct lu_object *shadow;
 	struct lu_site *s;
-	struct cfs_hash	*hs;
-	struct cfs_hash_bd bd;
-	struct lu_site_bkt_data *bkt;
-	u64 version = 0;
+	struct lu_site_bkt_data	*bkt;
+	struct rhashtable *hs;
 	int rc;
 
 	/*
@@ -750,16 +805,13 @@ struct lu_object *lu_object_find_at(const struct lu_env *env,
 	 *
 	 */
 	s  = dev->ld_site;
-	hs = s->ls_obj_hash;
+	hs = &s->ls_obj_hash;
 	if (unlikely(OBD_FAIL_PRECHECK(OBD_FAIL_OBD_ZERO_NLINK_RACE)))
 		lu_site_purge(env, s, -1);
 
 	bkt = &s->ls_bkts[lu_bkt_hash(s, f)];
-	cfs_hash_bd_get(hs, f, &bd);
 	if (!(conf && conf->loc_flags & LOC_F_NEW)) {
-		cfs_hash_bd_lock(hs, &bd, 1);
-		o = htable_lookup(s, &bd, f, &version);
-		cfs_hash_bd_unlock(hs, &bd, 1);
+		o = htable_lookup(env, dev, bkt, f, NULL);
 
 		if (!IS_ERR(o)) {
 			if (likely(lu_object_is_inited(o->lo_header)))
@@ -795,17 +847,21 @@ struct lu_object *lu_object_find_at(const struct lu_env *env,
 
 	CFS_RACE_WAIT(OBD_FAIL_OBD_ZERO_NLINK_RACE);
 
-	cfs_hash_bd_lock(hs, &bd, 1);
-
-	if (conf && conf->loc_flags & LOC_F_NEW)
-		shadow = ERR_PTR(-ENOENT);
-	else
-		shadow = htable_lookup(s, &bd, f, &version);
+	if (conf && conf->loc_flags & LOC_F_NEW) {
+		int status = rhashtable_insert_fast(hs, &o->lo_header->loh_hash,
+						    obj_hash_params);
+		if (status)
+			/* Strange error - go the slow way */
+			shadow = htable_lookup(env, dev, bkt, f, o->lo_header);
+		else
+			shadow = ERR_PTR(-ENOENT);
+	} else {
+		shadow = htable_lookup(env, dev, bkt, f, o->lo_header);
+	}
 	if (likely(PTR_ERR(shadow) == -ENOENT)) {
-		cfs_hash_bd_add_locked(hs, &bd, &o->lo_header->loh_hash);
-		cfs_hash_bd_unlock(hs, &bd, 1);
-
 		/*
+		 * The new object has been successfully inserted.
+		 *
 		 * This may result in rather complicated operations, including
 		 * fld queries, inode loading, etc.
 		 */
@@ -817,7 +873,7 @@ struct lu_object *lu_object_find_at(const struct lu_env *env,
 			return ERR_PTR(rc);
 		}
 
-		wake_up_all(&bkt->lsb_waitq);
+		wake_up(&bkt->lsb_waitq);
 
 		lu_object_limit(env, dev);
 
@@ -825,10 +881,10 @@ struct lu_object *lu_object_find_at(const struct lu_env *env,
 	}
 
 	lprocfs_counter_incr(s->ls_stats, LU_SS_CACHE_RACE);
-	cfs_hash_bd_unlock(hs, &bd, 1);
 	lu_object_free(env, o);
 
 	if (!(conf && conf->loc_flags & LOC_F_NEW) &&
+	    !IS_ERR(shadow) &&
 	    !lu_object_is_inited(shadow->lo_header)) {
 		wait_event_idle(bkt->lsb_waitq,
 				lu_object_is_inited(shadow->lo_header) ||
@@ -906,14 +962,9 @@ struct lu_site_print_arg {
 	lu_printer_t		 lsp_printer;
 };
 
-static int
-lu_site_obj_print(struct cfs_hash *hs, struct cfs_hash_bd *bd,
-		  struct hlist_node *hnode, void *data)
+static void
+lu_site_obj_print(struct lu_object_header *h, struct lu_site_print_arg *arg)
 {
-	struct lu_site_print_arg *arg = (struct lu_site_print_arg *)data;
-	struct lu_object_header *h;
-
-	h = hlist_entry(hnode, struct lu_object_header, loh_hash);
 	if (!list_empty(&h->loh_layers)) {
 		const struct lu_object *o;
 
@@ -924,36 +975,45 @@ lu_site_obj_print(struct cfs_hash *hs, struct cfs_hash_bd *bd,
 		lu_object_header_print(arg->lsp_env, arg->lsp_cookie,
 				       arg->lsp_printer, h);
 	}
-	return 0;
 }
 
 /**
  * Print all objects in @s.
  */
-void lu_site_print(const struct lu_env *env, struct lu_site *s, void *cookie,
-		   lu_printer_t printer)
+void lu_site_print(const struct lu_env *env, struct lu_site *s, atomic_t *ref,
+		   int msg_flag, lu_printer_t printer)
 {
 	struct lu_site_print_arg arg = {
 		.lsp_env	= (struct lu_env *)env,
-		.lsp_cookie	= cookie,
 		.lsp_printer	= printer,
 	};
+	struct rhashtable_iter iter;
+	struct lu_object_header *h;
+	LIBCFS_DEBUG_MSG_DATA_DECL(msgdata, msg_flag, NULL);
 
-	cfs_hash_for_each(s->ls_obj_hash, lu_site_obj_print, &arg);
+	if (!s || !atomic_read(ref))
+		return;
+
+	arg.lsp_cookie = (void *)&msgdata;
+
+	rhashtable_walk_enter(&s->ls_obj_hash, &iter);
+	rhashtable_walk_start(&iter);
+	while ((h = rhashtable_walk_next(&iter)) != NULL) {
+		if (IS_ERR(h))
+			continue;
+		lu_site_obj_print(h, &arg);
+	}
+	rhashtable_walk_stop(&iter);
+	rhashtable_walk_exit(&iter);
 }
 EXPORT_SYMBOL(lu_site_print);
 
 /**
  * Return desired hash table order.
  */
-static unsigned long lu_htable_order(struct lu_device *top)
+static void lu_htable_limits(struct lu_device *top)
 {
-	unsigned long bits_max = LU_SITE_BITS_MAX;
 	unsigned long cache_size;
-	unsigned long bits;
-
-	if (!strcmp(top->ld_type->ldt_name, LUSTRE_VVP_NAME))
-		bits_max = LU_SITE_BITS_MAX_CL;
 
 	/*
 	 * Calculate hash table size, assuming that we want reasonable
@@ -981,72 +1041,9 @@ static unsigned long lu_htable_order(struct lu_device *top)
 	cache_size = cache_size / 100 * lu_cache_percent *
 		(PAGE_SIZE / 1024);
 
-	for (bits = 1; (1 << bits) < cache_size; ++bits)
-		;
-	return clamp_t(typeof(bits), bits, LU_SITE_BITS_MIN, bits_max);
+	lu_cache_nr = clamp_t(typeof(cache_size), cache_size,
+			      LU_CACHE_NR_MIN, LU_CACHE_NR_MAX);
 }
-
-static unsigned int lu_obj_hop_hash(struct cfs_hash *hs,
-				    const void *key, unsigned int mask)
-{
-	struct lu_fid *fid = (struct lu_fid *)key;
-	u32 hash;
-
-	hash = fid_flatten32(fid);
-	hash += (hash >> 4) + (hash << 12); /* mixing oid and seq */
-	hash = hash_long(hash, hs->hs_bkt_bits);
-
-	/* give me another random factor */
-	hash -= hash_long((unsigned long)hs, fid_oid(fid) % 11 + 3);
-
-	hash <<= hs->hs_cur_bits - hs->hs_bkt_bits;
-	hash |= (fid_seq(fid) + fid_oid(fid)) & (CFS_HASH_NBKT(hs) - 1);
-
-	return hash & mask;
-}
-
-static void *lu_obj_hop_object(struct hlist_node *hnode)
-{
-	return hlist_entry(hnode, struct lu_object_header, loh_hash);
-}
-
-static void *lu_obj_hop_key(struct hlist_node *hnode)
-{
-	struct lu_object_header *h;
-
-	h = hlist_entry(hnode, struct lu_object_header, loh_hash);
-	return &h->loh_fid;
-}
-
-static int lu_obj_hop_keycmp(const void *key, struct hlist_node *hnode)
-{
-	struct lu_object_header *h;
-
-	h = hlist_entry(hnode, struct lu_object_header, loh_hash);
-	return lu_fid_eq(&h->loh_fid, (struct lu_fid *)key);
-}
-
-static void lu_obj_hop_get(struct cfs_hash *hs, struct hlist_node *hnode)
-{
-	struct lu_object_header *h;
-
-	h = hlist_entry(hnode, struct lu_object_header, loh_hash);
-	atomic_inc(&h->loh_ref);
-}
-
-static void lu_obj_hop_put_locked(struct cfs_hash *hs, struct hlist_node *hnode)
-{
-	LBUG(); /* we should never called it */
-}
-
-static struct cfs_hash_ops lu_site_hash_ops = {
-	.hs_hash	= lu_obj_hop_hash,
-	.hs_key		= lu_obj_hop_key,
-	.hs_keycmp	= lu_obj_hop_keycmp,
-	.hs_object	= lu_obj_hop_object,
-	.hs_get		= lu_obj_hop_get,
-	.hs_put_locked	= lu_obj_hop_put_locked,
-};
 
 static void lu_dev_add_linkage(struct lu_site *s, struct lu_device *d)
 {
@@ -1062,35 +1059,19 @@ static void lu_dev_add_linkage(struct lu_site *s, struct lu_device *d)
 int lu_site_init(struct lu_site *s, struct lu_device *top)
 {
 	struct lu_site_bkt_data *bkt;
-	unsigned long bits;
 	unsigned long i;
-	char name[16];
 	int rc;
 
 	memset(s, 0, sizeof(*s));
 	mutex_init(&s->ls_purge_mutex);
+	lu_htable_limits(top);
 
 	rc = percpu_counter_init(&s->ls_lru_len_counter, 0, GFP_NOFS);
 	if (rc)
 		return -ENOMEM;
 
-	snprintf(name, sizeof(name), "lu_site_%s", top->ld_type->ldt_name);
-	for (bits = lu_htable_order(top); bits >= LU_SITE_BITS_MIN; bits--) {
-		s->ls_obj_hash = cfs_hash_create(name, bits, bits,
-						 bits - LU_SITE_BKT_BITS,
-						 0, 0, 0,
-						 &lu_site_hash_ops,
-						 CFS_HASH_SPIN_BKTLOCK |
-						 CFS_HASH_NO_ITEMREF |
-						 CFS_HASH_DEPTH |
-						 CFS_HASH_ASSERT_EMPTY |
-						 CFS_HASH_COUNTER);
-		if (s->ls_obj_hash)
-			break;
-	}
-
-	if (!s->ls_obj_hash) {
-		CERROR("failed to create lu_site hash with bits: %lu\n", bits);
+	if (rhashtable_init(&s->ls_obj_hash, &obj_hash_params) != 0) {
+		CERROR("failed to create lu_site hash\n");
 		return -ENOMEM;
 	}
 
@@ -1101,8 +1082,7 @@ int lu_site_init(struct lu_site *s, struct lu_device *top)
 	s->ls_bkts = kvmalloc_array(s->ls_bkt_cnt, sizeof(*bkt),
 				    GFP_KERNEL | __GFP_ZERO);
 	if (!s->ls_bkts) {
-		cfs_hash_putref(s->ls_obj_hash);
-		s->ls_obj_hash = NULL;
+		rhashtable_destroy(&s->ls_obj_hash);
 		s->ls_bkts = NULL;
 		return -ENOMEM;
 	}
@@ -1116,9 +1096,8 @@ int lu_site_init(struct lu_site *s, struct lu_device *top)
 	s->ls_stats = lprocfs_alloc_stats(LU_SS_LAST_STAT, 0);
 	if (!s->ls_stats) {
 		kvfree(s->ls_bkts);
-		cfs_hash_putref(s->ls_obj_hash);
-		s->ls_obj_hash = NULL;
 		s->ls_bkts = NULL;
+		rhashtable_destroy(&s->ls_obj_hash);
 		return -ENOMEM;
 	}
 
@@ -1161,12 +1140,11 @@ void lu_site_fini(struct lu_site *s)
 
 	percpu_counter_destroy(&s->ls_lru_len_counter);
 
-	if (s->ls_obj_hash) {
-		cfs_hash_putref(s->ls_obj_hash);
-		s->ls_obj_hash = NULL;
+	if (s->ls_bkts) {
+		rhashtable_destroy(&s->ls_obj_hash);
+		kvfree(s->ls_bkts);
+		s->ls_bkts = NULL;
 	}
-
-	kvfree(s->ls_bkts);
 
 	if (s->ls_top_dev) {
 		s->ls_top_dev->ld_site = NULL;
@@ -1323,7 +1301,6 @@ int lu_object_header_init(struct lu_object_header *h)
 {
 	memset(h, 0, sizeof(*h));
 	atomic_set(&h->loh_ref, 1);
-	INIT_HLIST_NODE(&h->loh_hash);
 	INIT_LIST_HEAD(&h->loh_lru);
 	INIT_LIST_HEAD(&h->loh_layers);
 	lu_ref_init(&h->loh_reference);
@@ -1338,7 +1315,6 @@ void lu_object_header_fini(struct lu_object_header *h)
 {
 	LASSERT(list_empty(&h->loh_layers));
 	LASSERT(list_empty(&h->loh_lru));
-	LASSERT(hlist_unhashed(&h->loh_hash));
 	lu_ref_fini(&h->loh_reference);
 }
 EXPORT_SYMBOL(lu_object_header_fini);
@@ -1933,7 +1909,7 @@ struct lu_site_stats {
 static void lu_site_stats_get(const struct lu_site *s,
 			      struct lu_site_stats *stats)
 {
-	int cnt = cfs_hash_size_get(s->ls_obj_hash);
+	int cnt = atomic_read(&s->ls_obj_hash.nelems);
 	/*
 	 * percpu_counter_sum_positive() won't accept a const pointer
 	 * as it does modify the struct by taking a spinlock
@@ -2235,16 +2211,23 @@ static u32 ls_stats_read(struct lprocfs_stats *stats, int idx)
  */
 int lu_site_stats_print(const struct lu_site *s, struct seq_file *m)
 {
+	const struct bucket_table *tbl;
 	struct lu_site_stats stats;
+	unsigned int chains;
 
 	memset(&stats, 0, sizeof(stats));
 	lu_site_stats_get(s, &stats);
 
-	seq_printf(m, "%d/%d %d/%ld %d %d %d %d %d %d %d\n",
+	rcu_read_lock();
+	tbl = rht_dereference_rcu(s->ls_obj_hash.tbl,
+				  &((struct lu_site *)s)->ls_obj_hash);
+	chains = tbl->size;
+	rcu_read_unlock();
+	seq_printf(m, "%d/%d %d/%u %d %d %d %d %d %d %d\n",
 		   stats.lss_busy,
 		   stats.lss_total,
 		   stats.lss_populated,
-		   CFS_HASH_NHLIST(s->ls_obj_hash),
+		   chains,
 		   stats.lss_max_search,
 		   ls_stats_read(s->ls_stats, LU_SS_CREATED),
 		   ls_stats_read(s->ls_stats, LU_SS_CACHE_HIT),
@@ -2252,6 +2235,7 @@ int lu_site_stats_print(const struct lu_site *s, struct seq_file *m)
 		   ls_stats_read(s->ls_stats, LU_SS_CACHE_RACE),
 		   ls_stats_read(s->ls_stats, LU_SS_CACHE_DEATH_RACE),
 		   ls_stats_read(s->ls_stats, LU_SS_LRU_PURGED));
+
 	return 0;
 }
 EXPORT_SYMBOL(lu_site_stats_print);
