@@ -114,6 +114,8 @@ out:
 	return cpt;
 }
 
+static int lnet_md_validate(const struct lnet_md *umd);
+
 static struct lnet_libmd *
 lnet_md_build(const struct lnet_md *umd, int unlink)
 {
@@ -122,6 +124,9 @@ lnet_md_build(const struct lnet_md *umd, int unlink)
 	int total_length = 0;
 	struct lnet_libmd *lmd;
 	unsigned int size;
+
+	if (lnet_md_validate(umd) != 0)
+		return ERR_PTR(-EINVAL);
 
 	if (umd->options & LNET_MD_KIOV)
 		niov = umd->length;
@@ -222,15 +227,14 @@ lnet_md_build(const struct lnet_md *umd, int unlink)
 }
 
 /* must be called with resource lock held */
-static int
+static void
 lnet_md_link(struct lnet_libmd *md, lnet_handler_t handler, int cpt)
 {
 	struct lnet_res_container *container = the_lnet.ln_md_containers[cpt];
 
 	/*
 	 * NB we are passed an allocated, but inactive md.
-	 * if we return success, caller may lnet_md_unlink() it.
-	 * otherwise caller may only kfree() it.
+	 * Caller may lnet_md_unlink() it, or may kfree() it.
 	 */
 	/*
 	 * This implementation doesn't know how to create START events or
@@ -243,8 +247,6 @@ lnet_md_link(struct lnet_libmd *md, lnet_handler_t handler, int cpt)
 
 	LASSERT(list_empty(&md->md_list));
 	list_add(&md->md_list, &container->rec_active);
-
-	return 0;
 }
 
 void lnet_assert_handler_unused(lnet_handler_t handler)
@@ -310,14 +312,11 @@ lnet_md_validate(const struct lnet_md *umd)
  * @handle	On successful returns, a handle to the newly created MD is
  *		saved here. This handle can be used later in LNetMDUnlink().
  *
+ * The ME will either be linked to the new MD, or it will be freed.
+ *
  * Return:	0 on success.
  *		-EINVAL If @umd is not valid.
  *		-ENOMEM If new MD cannot be allocated.
- *		-ENOENT Either @me or @umd->eq_handle does not point to a
- *		valid object. Note that it's OK to supply a NULL @umd->eq_handle
- *		by calling LNetInvalidateHandle() on it.
- *		-EBUSY if the ME pointed to by @me is already associated with
- *		a MD.
  */
 int
 LNetMDAttach(struct lnet_me *me, const struct lnet_md *umd,
@@ -327,33 +326,27 @@ LNetMDAttach(struct lnet_me *me, const struct lnet_md *umd,
 	LIST_HEAD(drops);
 	struct lnet_libmd *md;
 	int cpt;
-	int rc;
 
 	LASSERT(the_lnet.ln_refcount > 0);
-
-	if (lnet_md_validate(umd))
-		return -EINVAL;
+	LASSERT(!me->me_md);
 
 	if (!(umd->options & (LNET_MD_OP_GET | LNET_MD_OP_PUT))) {
 		CERROR("Invalid option: no MD_OP set\n");
-		return -EINVAL;
+		md = ERR_PTR(-EINVAL);
+	} else {
+		md = lnet_md_build(umd, unlink);
 	}
 
-	md = lnet_md_build(umd, unlink);
-	if (IS_ERR(md))
-		return PTR_ERR(md);
-
 	cpt = me->me_cpt;
-
 	lnet_res_lock(cpt);
 
-	if (me->me_md)
-		rc = -EBUSY;
-	else
-		rc = lnet_md_link(md, umd->handler, cpt);
+	if (IS_ERR(md)) {
+		lnet_me_unlink(me);
+		lnet_res_unlock(cpt);
+		return PTR_ERR(md);
+	}
 
-	if (rc)
-		goto out_unlock;
+	lnet_md_link(md, umd->handler, cpt);
 
 	/*
 	 * attach this MD to portal of ME and check if it matches any
@@ -369,11 +362,6 @@ LNetMDAttach(struct lnet_me *me, const struct lnet_md *umd,
 	lnet_recv_delayed_msg_list(&matches);
 
 	return 0;
-
-out_unlock:
-	lnet_res_unlock(cpt);
-	lnet_md_free(md);
-	return rc;
 }
 EXPORT_SYMBOL(LNetMDAttach);
 
@@ -389,9 +377,6 @@ EXPORT_SYMBOL(LNetMDAttach);
  * Return:		0 On success.
  *			-EINVAL If @umd is not valid.
  *			-ENOMEM If new MD cannot be allocated.
- *			-ENOENT @umd->eq_handle does not point to a valid EQ.
- *			Note that it's OK to supply a NULL @umd->eq_handle by
- *			calling LNetInvalidateHandle() on it.
  */
 int
 LNetMDBind(const struct lnet_md *umd, enum lnet_unlink unlink,
@@ -402,9 +387,6 @@ LNetMDBind(const struct lnet_md *umd, enum lnet_unlink unlink,
 	int rc;
 
 	LASSERT(the_lnet.ln_refcount > 0);
-
-	if (lnet_md_validate(umd))
-		return -EINVAL;
 
 	if ((umd->options & (LNET_MD_OP_GET | LNET_MD_OP_PUT))) {
 		CERROR("Invalid option: GET|PUT illegal on active MDs\n");
@@ -424,18 +406,14 @@ LNetMDBind(const struct lnet_md *umd, enum lnet_unlink unlink,
 
 	cpt = lnet_res_lock_current();
 
-	rc = lnet_md_link(md, umd->handler, cpt);
-	if (rc)
-		goto out_unlock;
+	lnet_md_link(md, umd->handler, cpt);
 
 	lnet_md2handle(handle, md);
 
 	lnet_res_unlock(cpt);
 	return 0;
 
-out_unlock:
-	lnet_res_unlock(cpt);
-out_free:
+ out_free:
 	lnet_md_free(md);
 
 	return rc;

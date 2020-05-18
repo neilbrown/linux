@@ -1650,14 +1650,12 @@ lnet_ping_target_setup(struct lnet_ping_buffer **ppbuf,
 	rc = LNetMDAttach(me, &md, LNET_RETAIN, ping_mdh);
 	if (rc) {
 		CERROR("Can't attach ping target MD: %d\n", rc);
-		goto fail_unlink_ping_me;
+		goto fail_decref_ping_buffer;
 	}
 	lnet_ping_buffer_addref(*ppbuf);
 
 	return 0;
 
-fail_unlink_ping_me:
-	LNetMEUnlink(me);
 fail_decref_ping_buffer:
 	LASSERT(atomic_read(&(*ppbuf)->pb_refcnt) == 1);
 	lnet_ping_buffer_decref(*ppbuf);
@@ -1858,7 +1856,6 @@ int lnet_push_target_post(struct lnet_ping_buffer *pbuf,
 	rc = LNetMDAttach(me, &md, LNET_UNLINK, mdhp);
 	if (rc) {
 		CERROR("Can't attach push MD: %d\n", rc);
-		LNetMEUnlink(me);
 		lnet_ping_buffer_decref(pbuf);
 		pbuf->pb_needs_post = true;
 		return rc;
