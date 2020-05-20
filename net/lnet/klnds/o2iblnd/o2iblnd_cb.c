@@ -975,7 +975,11 @@ kiblnd_tx_complete(struct kib_tx *tx, int status)
 	struct kib_conn *conn = tx->tx_conn;
 	int idle;
 
-	LASSERT(tx->tx_sending > 0);
+	if (tx->tx_sending <= 0) {
+		CERROR("Received an event on a freed tx: %p status %d\n",
+		       tx, tx->tx_status);
+		return;
+	}
 
 	if (failed) {
 		if (conn->ibc_state == IBLND_CONN_ESTABLISHED)
