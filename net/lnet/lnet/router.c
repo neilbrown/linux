@@ -1676,8 +1676,7 @@ lnet_notify(struct lnet_ni *ni, lnet_nid_t nid, bool alive, bool reset,
 
 	CDEBUG(D_NET, "%s notifying %s: %s\n",
 	       !ni ? "userspace" : libcfs_nid2str(ni->ni_nid),
-	       libcfs_nid2str(nid),
-	       alive ? "up" : "down");
+	       libcfs_nid2str(nid), alive ? "up" : "down");
 
 	if (ni &&
 	    LNET_NIDNET(ni->ni_nid) != LNET_NIDNET(nid)) {
@@ -1719,6 +1718,7 @@ lnet_notify(struct lnet_ni *ni, lnet_nid_t nid, bool alive, bool reset,
 
 	if (alive) {
 		if (reset) {
+			lpni->lpni_ns_status = LNET_NI_STATUS_UP;
 			lnet_set_lpni_healthv_locked(lpni,
 						     LNET_MAX_HEALTH_VALUE);
 		} else {
@@ -1729,6 +1729,8 @@ lnet_notify(struct lnet_ni *ni, lnet_nid_t nid, bool alive, bool reset,
 				lpni,
 				sensitivity ?: lnet_health_sensitivity);
 		}
+	} else if (reset) {
+		lpni->lpni_ns_status = LNET_NI_STATUS_DOWN;
 	}
 
 	/* recalculate aliveness */
