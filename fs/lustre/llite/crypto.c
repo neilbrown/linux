@@ -31,18 +31,13 @@
 
 static int ll_get_context(struct inode *inode, void *ctx, size_t len)
 {
-	struct dentry *dentry;
+	struct dentry *dentry = d_find_any_alias(inode);
 	int rc;
-
-	if (hlist_empty(&inode->i_dentry))
-		return -ENODATA;
-
-	hlist_for_each_entry(dentry, &inode->i_dentry, d_u.d_alias) {
-		break;
-	}
 
 	rc = vfs_getxattr(dentry, LL_XATTR_NAME_ENCRYPTION_CONTEXT,
 			  ctx, len);
+	if (dentry)
+		dput(dentry);
 
 	return rc;
 }
