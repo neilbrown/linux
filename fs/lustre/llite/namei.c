@@ -659,10 +659,12 @@ static int ll_lookup_it_finish(struct ptlrpc_request *request,
 		}
 
 		if (secctx && secctxlen != 0) {
-			inode_lock(inode);
+			/* no need to protect selinux_inode_setsecurity() by
+			 * inode_lock. Taking it would lead to a client deadlock
+			 * LU-13617
+			 */
 			rc = security_inode_notifysecctx(inode, secctx,
 							 secctxlen);
-			inode_unlock(inode);
 			if (rc)
 				CWARN("cannot set security context for " DFID ": rc = %d\n",
 				      PFID(ll_inode2fid(inode)), rc);
@@ -1198,13 +1200,15 @@ static int ll_create_it(struct inode *dir, struct dentry *dentry,
 		return PTR_ERR(inode);
 
 	if ((ll_i2sbi(inode)->ll_flags & LL_SBI_FILE_SECCTX) && secctx) {
-		inode_lock(inode);
 		/* must be done before d_instantiate, because it calls
 		 * security_d_instantiate, which means a getxattr if security
 		 * context is not set yet
 		 */
+		/* no need to protect selinux_inode_setsecurity() by
+		 * inode_lock. Taking it would lead to a client deadlock
+		 * LU-13617
+		 */
 		rc = security_inode_notifysecctx(inode, secctx, secctxlen);
-		inode_unlock(inode);
 		if (rc)
 			return rc;
 	}
@@ -1370,15 +1374,17 @@ again:
 		goto err_exit;
 
 	if (sbi->ll_flags & LL_SBI_FILE_SECCTX) {
-		inode_lock(inode);
 		/* must be done before d_instantiate, because it calls
 		 * security_d_instantiate, which means a getxattr if security
 		 * context is not set yet
 		 */
+		/* no need to protect selinux_inode_setsecurity() by
+		 * inode_lock. Taking it would lead to a client deadlock
+		 * LU-13617
+		 */
 		err = security_inode_notifysecctx(inode,
 						  op_data->op_file_secctx,
 						  op_data->op_file_secctx_size);
-		inode_unlock(inode);
 		if (err)
 			goto err_exit;
 	}
