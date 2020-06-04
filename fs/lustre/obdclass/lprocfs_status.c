@@ -508,9 +508,9 @@ MODULE_PARM_DESC(lprocfs_no_percpu_stats, "Do not alloc percpu data for lprocfs 
 
 /* lprocfs API calls */
 
-static const struct file_operations lprocfs_generic_fops = { };
+static const struct file_operations ldebugfs_empty_ops = { };
 
-void ldebugfs_add_vars(struct dentry *parent, struct lprocfs_vars *list,
+void ldebugfs_add_vars(struct dentry *parent, struct ldebugfs_vars *list,
 		       void *data)
 {
 	if (IS_ERR_OR_NULL(parent) || IS_ERR_OR_NULL(list))
@@ -529,11 +529,13 @@ void ldebugfs_add_vars(struct dentry *parent, struct lprocfs_vars *list,
 		}
 		debugfs_create_file(list->name, mode, parent,
 				    list->data ?: data,
-				    list->fops ?: &lprocfs_generic_fops);
+				    list->fops ?: &ldebugfs_empty_ops);
 		list++;
 	}
 }
 EXPORT_SYMBOL_GPL(ldebugfs_add_vars);
+
+static const struct file_operations lprocfs_empty_ops = { };
 
 /* Generic callbacks */
 static ssize_t uuid_show(struct kobject *kobj, struct attribute *attr,
@@ -1221,7 +1223,7 @@ int lprocfs_obd_setup(struct obd_device *obd, bool uuid_only)
 
 	obd->obd_debugfs_entry = debugfs_create_dir(obd->obd_name,
 					obd->obd_type->typ_debugfs_entry);
-	ldebugfs_add_vars(obd->obd_debugfs_entry, obd->obd_vars, obd);
+	ldebugfs_add_vars(obd->obd_debugfs_entry, obd->obd_debugfs_vars, obd);
 
 	return rc;
 }
@@ -1509,7 +1511,7 @@ static int lprocfs_stats_seq_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-const struct file_operations lprocfs_stats_seq_fops = {
+const struct file_operations ldebugfs_stats_seq_fops = {
 	.owner		= THIS_MODULE,
 	.open		= lprocfs_stats_seq_open,
 	.read		= seq_read,
@@ -1517,7 +1519,7 @@ const struct file_operations lprocfs_stats_seq_fops = {
 	.llseek		= seq_lseek,
 	.release	= seq_release,
 };
-EXPORT_SYMBOL_GPL(lprocfs_stats_seq_fops);
+EXPORT_SYMBOL(ldebugfs_stats_seq_fops);
 
 void lprocfs_counter_init(struct lprocfs_stats *stats, int index,
 			  unsigned int conf, const char *name,
@@ -1605,7 +1607,7 @@ int ldebugfs_alloc_md_stats(struct obd_device *obd,
 	obd->obd_md_stats = stats;
 
 	debugfs_create_file("md_stats", 0644, obd->obd_debugfs_entry,
-			    obd->obd_md_stats, &lprocfs_stats_seq_fops);
+			    obd->obd_md_stats, &ldebugfs_stats_seq_fops);
 	return 0;
 }
 EXPORT_SYMBOL(ldebugfs_alloc_md_stats);

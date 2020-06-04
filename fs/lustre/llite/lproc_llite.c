@@ -1483,9 +1483,9 @@ out_free_kernbuff:
 	kfree(kernbuf);
 	return rc ? rc : count;
 }
-LPROC_SEQ_FOPS(ll_pcc);
+LDEBUGFS_SEQ_FOPS(ll_pcc);
 
-struct lprocfs_vars lprocfs_llite_obd_vars[] = {
+struct ldebugfs_vars lprocfs_llite_obd_vars[] = {
 	{ .name	=	"site",
 	  .fops	=	&ll_site_stats_fops			},
 	{ .name	=	"max_cached_mb",
@@ -1691,7 +1691,7 @@ int ll_debugfs_register_super(struct super_block *sb, const char *name)
 	}
 
 	debugfs_create_file("stats", 0644, sbi->ll_debugfs_entry, sbi->ll_stats,
-			    &lprocfs_stats_seq_fops);
+			    &ldebugfs_stats_seq_fops);
 
 	sbi->ll_ra_stats = lprocfs_alloc_stats(ARRAY_SIZE(ra_stat_string),
 					       LPROCFS_STATS_FLAG_NONE);
@@ -1705,7 +1705,7 @@ int ll_debugfs_register_super(struct super_block *sb, const char *name)
 				     ra_stat_string[id], "pages");
 
 	debugfs_create_file("read_ahead_stats", 0644, sbi->ll_debugfs_entry,
-			    sbi->ll_ra_stats, &lprocfs_stats_seq_fops);
+			    sbi->ll_ra_stats, &ldebugfs_stats_seq_fops);
 out_ll_kset:
 	/* Yes we also register sysfs mount kset here as well */
 	sbi->ll_kset.kobj.parent = llite_kobj;

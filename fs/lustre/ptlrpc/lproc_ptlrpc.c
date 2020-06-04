@@ -242,7 +242,7 @@ ptlrpc_ldebugfs_register(struct dentry *root, char *dir,
 	}
 
 	debugfs_create_file("stats", 0644, svc_debugfs_entry, svc_stats,
-			    &lprocfs_stats_seq_fops);
+			    &ldebugfs_stats_seq_fops);
 	if (dir)
 		*debugfs_root_ret = svc_debugfs_entry;
 	*stats_ret = svc_stats;
@@ -1132,7 +1132,7 @@ int ptlrpc_sysfs_register_service(struct kset *parent,
 void ptlrpc_ldebugfs_register_service(struct dentry *entry,
 				      struct ptlrpc_service *svc)
 {
-	struct lprocfs_vars lproc_vars[] = {
+	struct ldebugfs_vars ldebugfs_vars[] = {
 		{ .name		= "req_buffer_history_len",
 		  .fops		= &ptlrpc_lprocfs_req_history_len_fops,
 		  .data		= svc },
@@ -1165,7 +1165,7 @@ void ptlrpc_ldebugfs_register_service(struct dentry *entry,
 	if (IS_ERR_OR_NULL(svc->srv_debugfs_entry))
 		return;
 
-	ldebugfs_add_vars(svc->srv_debugfs_entry, lproc_vars, NULL);
+	ldebugfs_add_vars(svc->srv_debugfs_entry, ldebugfs_vars, NULL);
 
 	debugfs_create_file("req_history", 0400, svc->srv_debugfs_entry, svc,
 			    &req_history_fops);
@@ -1276,7 +1276,6 @@ ssize_t ping_store(struct kobject *kobj, struct attribute *attr,
 	return (rc < 0) ? rc : count;
 }
 EXPORT_SYMBOL(ping_store);
-
 
 #undef BUFLEN
 

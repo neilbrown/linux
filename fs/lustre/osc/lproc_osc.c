@@ -737,7 +737,7 @@ LPROC_SEQ_FOPS_RO_TYPE(osc, state);
 LPROC_SEQ_FOPS_RW_TYPE(osc, import);
 LPROC_SEQ_FOPS_RW_TYPE(osc, pinger_recov);
 
-static struct lprocfs_vars lprocfs_osc_obd_vars[] = {
+static struct ldebugfs_vars ldebugfs_osc_obd_vars[] = {
 	{ .name	=	"connect_flags",
 	  .fops	=	&osc_connect_flags_fops		},
 	{ .name	=	"ost_server_uuid",
@@ -949,7 +949,7 @@ int osc_tunables_init(struct obd_device *obd)
 {
 	int rc;
 
-	obd->obd_vars = lprocfs_osc_obd_vars;
+	obd->obd_debugfs_vars = ldebugfs_osc_obd_vars;
 	obd->obd_ktype.default_attrs = osc_attrs;
 	rc = lprocfs_obd_setup(obd, false);
 	if (rc)

@@ -549,7 +549,7 @@ static int ldlm_pool_debugfs_init(struct ldlm_pool *pl)
 	struct ldlm_namespace *ns = container_of(pl, struct ldlm_namespace,
 						 ns_pool);
 	struct dentry *debugfs_ns_parent;
-	struct lprocfs_vars pool_vars[2];
+	struct ldebugfs_vars pool_vars[2];
 	int rc = 0;
 
 	debugfs_ns_parent = ns->ns_debugfs_entry;
@@ -607,7 +607,7 @@ static int ldlm_pool_debugfs_init(struct ldlm_pool *pl)
 			     LPROCFS_CNTR_AVGMINMAX | LPROCFS_CNTR_STDDEV,
 			     "recalc_timing", "sec");
 	debugfs_create_file("stats", 0644, pl->pl_debugfs_entry, pl->pl_stats,
-			    &lprocfs_stats_seq_fops);
+			    &ldebugfs_stats_seq_fops);
 
 out:
 	return rc;

@@ -101,7 +101,7 @@ ldlm_rw_uint_seq_write(struct file *file, const char __user *buffer,
 
 LPROC_SEQ_FOPS(ldlm_rw_uint);
 
-static struct lprocfs_vars ldlm_debugfs_list[] = {
+static struct ldebugfs_vars ldlm_debugfs_list[] = {
 	{ "dump_namespaces", &ldlm_dump_ns_fops, NULL, 0222 },
 	{ "dump_granted_max", &ldlm_rw_uint_fops, &ldlm_dump_granted_max },
 	{ NULL }

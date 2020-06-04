@@ -41,6 +41,6 @@
 
 /* Functions used internally in module. */
 
-extern struct lprocfs_vars seq_client_debugfs_list[];
+extern struct ldebugfs_vars seq_client_debugfs_list[];
 
 #endif /* __FID_INTERNAL_H */

@@ -49,13 +49,12 @@
 #include <uapi/linux/lustre/lustre_cfg.h>
 #include <uapi/linux/lustre/lustre_idl.h>
 
-struct lprocfs_vars {
+/* Provide a debugfs container */
+struct ldebugfs_vars {
 	const char			*name;
 	const struct file_operations	*fops;
 	void				*data;
-	/**
-	 * sysfs file mode.
-	 */
+	/* debugfs file mode. */
 	umode_t				proc_mode;
 };
 
@@ -443,10 +442,10 @@ void ldebugfs_free_md_stats(struct obd_device *obd);
 void lprocfs_counter_init(struct lprocfs_stats *stats, int index,
 			  unsigned int conf, const char *name,
 			  const char *units);
-extern const struct file_operations lprocfs_stats_seq_fops;
+extern const struct file_operations ldebugfs_stats_seq_fops;
 
 /* lprocfs_status.c */
-void ldebugfs_add_vars(struct dentry *parent, struct lprocfs_vars *var,
+void ldebugfs_add_vars(struct dentry *parent, struct ldebugfs_vars *var,
 		       void *data);
 
 int lprocfs_obd_setup(struct obd_device *obd, bool uuid_only);
@@ -499,6 +498,77 @@ unsigned long lprocfs_oh_sum(struct obd_histogram *oh);
 
 void lprocfs_stats_collect(struct lprocfs_stats *stats, int idx,
 			   struct lprocfs_counter *cnt);
+
+/* write the name##_seq_show function, call LDEBUGFS_SEQ_FOPS_RO for read-only
+ * debugfs entries; otherwise, you will define name##_seq_write function also
+ * for a read-write debugfs entry, and then call LDEBUGFS_SEQ_FOPS instead.
+ * Finally, call debugfs_create_file(filename, 0444, obd, data, &name#_fops);
+ */
+#define __LDEBUGFS_SEQ_FOPS(name, custom_seq_write)			\
+static int name##_single_open(struct inode *inode, struct file *file)	\
+{									\
+	return single_open(file, name##_seq_show, inode->i_private);	\
+}									\
+static const struct file_operations name##_fops = {			\
+	.owner	 = THIS_MODULE,						\
+	.open	 = name##_single_open,					\
+	.read	 = seq_read,						\
+	.write	 = custom_seq_write,					\
+	.llseek	 = seq_lseek,						\
+	.release = single_release,					\
+}
+
+#define LDEBUGFS_SEQ_FOPS_RO(name)	__LDEBUGFS_SEQ_FOPS(name, NULL)
+#define LDEBUGFS_SEQ_FOPS(name)		__LDEBUGFS_SEQ_FOPS(name, \
+							    name##_seq_write)
+
+#define LDEBUGFS_SEQ_FOPS_RO_TYPE(name, type)				\
+	static int name##_##type##_seq_show(struct seq_file *m, void *v)\
+	{								\
+		if (!m->private)					\
+			return -ENODEV;					\
+		return lprocfs_##type##_seq_show(m, m->private);	\
+	}								\
+	LDEBUGFS_SEQ_FOPS_RO(name##_##type)
+
+#define LDEBUGFS_SEQ_FOPS_RW_TYPE(name, type)				\
+	static int name##_##type##_seq_show(struct seq_file *m, void *v)\
+	{								\
+		if (!m->private)					\
+			return -ENODEV;					\
+		return lprocfs_##type##_seq_show(m, m->private);	\
+	}								\
+	static ssize_t name##_##type##_seq_write(struct file *file,	\
+			const char __user *buffer, size_t count,	\
+			loff_t *off)					\
+	{								\
+		struct seq_file *seq = file->private_data;		\
+									\
+		if (!seq->private)					\
+			return -ENODEV;					\
+		return ldebugfs_##type##_seq_write(file, buffer, count,	\
+						   seq->private);	\
+	}								\
+	LDEBUGFS_SEQ_FOPS(name##_##type)
+
+#define LDEBUGFS_FOPS_WR_ONLY(name, type)				\
+	static ssize_t name##_##type##_write(struct file *file,		\
+			const char __user *buffer, size_t count,	\
+			loff_t *off)					\
+	{								\
+		return ldebugfs_##type##_seq_write(file, buffer, count,	\
+						   off);		\
+	}								\
+	static int name##_##type##_open(struct inode *inode,		\
+					struct file *file)		\
+	{								\
+		return single_open(file, NULL, inode->i_private);	\
+	}								\
+	static const struct file_operations name##_##type##_fops = {	\
+		.open	 = name##_##type##_open,			\
+		.write	 = name##_##type##_write,			\
+		.release = single_release,				\
+	}
 
 /* write the name##_seq_show function, call LPROC_SEQ_FOPS_RO for read-only
  * proc entries; otherwise, you will define name##_seq_write function also for

@@ -505,7 +505,7 @@ LPROC_SEQ_FOPS_RO_TYPE(mdc, state);
 LPROC_SEQ_FOPS_RW_TYPE(mdc, import);
 LPROC_SEQ_FOPS_RW_TYPE(mdc, pinger_recov);
 
-static struct lprocfs_vars lprocfs_mdc_obd_vars[] = {
+static struct ldebugfs_vars ldebugfs_mdc_obd_vars[] = {
 	{ .name	=	"connect_flags",
 	  .fops	=	&mdc_connect_flags_fops		},
 	{ .name	=	"mds_server_uuid",
@@ -551,7 +551,7 @@ int mdc_tunables_init(struct obd_device *obd)
 	int rc;
 
 	obd->obd_ktype.default_attrs = mdc_attrs;
-	obd->obd_vars = lprocfs_mdc_obd_vars;
+	obd->obd_debugfs_vars = ldebugfs_mdc_obd_vars;
 
 	rc = lprocfs_obd_setup(obd, false);
 	if (rc)
