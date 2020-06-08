@@ -601,7 +601,8 @@ kiblnd_fmr_map_tx(struct kib_net *net, struct kib_tx *tx, struct kib_rdma_desc *
 	fps = net->ibn_fmr_ps[cpt];
 	rc = kiblnd_fmr_pool_map(fps, tx, rd, nob, 0, &tx->tx_fmr);
 	if (rc) {
-		CERROR("Can't map %u bytes: %d\n", nob, rc);
+		CERROR("Can't map %u bytes (%u/%u)s: %d\n", nob,
+		       tx->tx_nfrags, rd->rd_nfrags, rc);
 		return rc;
 	}
 

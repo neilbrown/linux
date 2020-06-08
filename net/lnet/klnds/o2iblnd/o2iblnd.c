@@ -1690,10 +1690,11 @@ again:
 				}
 
 				n = ib_map_mr_sg(mr, tx->tx_frags,
-						 tx->tx_nfrags, NULL, PAGE_SIZE);
-				if (unlikely(n != tx->tx_nfrags)) {
+						 rd->rd_nfrags,
+						 NULL, PAGE_SIZE);
+				if (unlikely(n != rd->rd_nfrags)) {
 					CERROR("Failed to map mr %d/%d elements\n",
-					       n, tx->tx_nfrags);
+					       n, rd->rd_nfrags);
 					return n < 0 ? n : -EINVAL;
 				}
 
