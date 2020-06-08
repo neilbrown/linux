@@ -1226,7 +1226,8 @@ static struct crypto_aead *macsec_alloc_tfm(char *key, int key_len, int icv_len)
 	struct crypto_aead *tfm;
 	int ret;
 
-	tfm = crypto_alloc_aead("gcm(aes)", 0, 0);
+	/* Pick a sync gcm(aes) cipher to ensure order is preserved. */
+	tfm = crypto_alloc_aead("gcm(aes)", 0, CRYPTO_ALG_ASYNC);
 
 	if (IS_ERR(tfm))
 		return tfm;
@@ -2398,6 +2399,9 @@ static int macsec_upd_offload(struct sk_buff *skb, struct genl_info *info)
 		return PTR_ERR(dev);
 	macsec = macsec_priv(dev);
 
+	if (!tb_offload[MACSEC_OFFLOAD_ATTR_TYPE])
+		return -EINVAL;
+
 	offload = nla_get_u8(tb_offload[MACSEC_OFFLOAD_ATTR_TYPE]);
 	if (macsec->offload == offload)
 		return 0;
@@ -3463,7 +3467,7 @@ static int macsec_changelink(struct net_device *dev, struct nlattr *tb[],
 			     struct netlink_ext_ack *extack)
 {
 	struct macsec_dev *macsec = macsec_priv(dev);
-	struct macsec_tx_sa tx_sc;
+	struct macsec_tx_sc tx_sc;
 	struct macsec_secy secy;
 	int ret;
 
@@ -3655,11 +3659,11 @@ static int macsec_newlink(struct net *net, struct net_device *dev,
 			  struct netlink_ext_ack *extack)
 {
 	struct macsec_dev *macsec = macsec_priv(dev);
-	struct net_device *real_dev;
-	int err;
-	sci_t sci;
-	u8 icv_len = DEFAULT_ICV_LEN;
 	rx_handler_func_t *rx_handler;
+	u8 icv_len = DEFAULT_ICV_LEN;
+	struct net_device *real_dev;
+	int err, mtu;
+	sci_t sci;
 
 	if (!tb[IFLA_LINK])
 		return -EINVAL;
@@ -3678,7 +3682,11 @@ static int macsec_newlink(struct net *net, struct net_device *dev,
 
 	if (data && data[IFLA_MACSEC_ICV_LEN])
 		icv_len = nla_get_u8(data[IFLA_MACSEC_ICV_LEN]);
-	dev->mtu = real_dev->mtu - icv_len - macsec_extra_len(true);
+	mtu = real_dev->mtu - icv_len - macsec_extra_len(true);
+	if (mtu < 0)
+		dev->mtu = 0;
+	else
+		dev->mtu = mtu;
 
 	rx_handler = rtnl_dereference(real_dev->rx_handler);
 	if (rx_handler && rx_handler != macsec_handle_frame)
