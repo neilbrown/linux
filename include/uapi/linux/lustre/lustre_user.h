@@ -422,6 +422,14 @@ struct ll_ioc_lease_id {
 #define LOV_PATTERN_F_HOLE	0x40000000 /* there is hole in LOV EA */
 #define LOV_PATTERN_F_RELEASED	0x80000000 /* HSM released file */
 
+static inline bool lov_pattern_supported(__u32 pattern)
+{
+	return (pattern & ~LOV_PATTERN_F_RELEASED) == LOV_PATTERN_RAID0 ||
+		(pattern & ~LOV_PATTERN_F_RELEASED) ==
+		(LOV_PATTERN_RAID0 | LOV_PATTERN_OVERSTRIPING) ||
+		(pattern & ~LOV_PATTERN_F_RELEASED) == LOV_PATTERN_MDT;
+}
+
 /* RELEASED and MDT patterns are not valid in many places, so rather than
  * having many extra checks on lov_pattern_supported, we have this separate
  * check for non-released, non-DOM components
