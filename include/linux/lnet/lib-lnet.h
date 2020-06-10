@@ -81,8 +81,10 @@ extern unsigned int lnet_current_net_count;
 #define LNET_ACCEPTOR_MIN_RESERVED_PORT    512
 #define LNET_ACCEPTOR_MAX_RESERVED_PORT    1023
 
-/* default timeout */
+/* default timeout and credits */
 #define DEFAULT_PEER_TIMEOUT    180
+#define DEFAULT_PEER_CREDITS    8
+#define DEFAULT_CREDITS         256
 
 bool lnet_is_route_alive(struct lnet_route *route);
 
