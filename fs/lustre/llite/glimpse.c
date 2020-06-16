@@ -211,7 +211,7 @@ int __cl_glimpse_size(struct inode *inode, int agl)
 				io->ci_need_restart = 1;
 		}
 
-		OBD_FAIL_TIMEOUT(OBD_FAIL_GLIMPSE_DELAY, 2);
+		OBD_FAIL_TIMEOUT(OBD_FAIL_GLIMPSE_DELAY, cfs_fail_val ?: 4);
 		cl_io_fini(env, io);
 	} while (unlikely(io->ci_need_restart));
 
