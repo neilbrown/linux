@@ -537,8 +537,6 @@ struct kib_tx {					/* transmit message */
 	bool			tx_gaps;
 	struct kib_fmr		tx_fmr;		/* FMR */
 	int			tx_dmadir;	/* dma direction */
-	/* time when tx added on ibc_active_txs */
-	ktime_t			tx_on_activeq;
 };
 
 struct kib_connvars {

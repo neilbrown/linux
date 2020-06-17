@@ -828,13 +828,12 @@ kiblnd_post_tx_locked(struct kib_conn *conn, struct kib_tx *tx, int credit)
 	 */
 	tx->tx_sending++;
 	list_add(&tx->tx_list, &conn->ibc_active_txs);
-	tx->tx_on_activeq = ktime_get();
 
 	/* I'm still holding ibc_lock! */
 	if (conn->ibc_state != IBLND_CONN_ESTABLISHED) {
 		rc = -ECONNABORTED;
 	} else if (tx->tx_pool->tpo_pool.po_failed ||
-		 conn->ibc_hdev != tx->tx_pool->tpo_hdev) {
+		   conn->ibc_hdev != tx->tx_pool->tpo_hdev) {
 		/* close_conn will launch failover */
 		rc = -ENETDOWN;
 	} else {
@@ -3178,8 +3177,6 @@ static int
 kiblnd_check_txs_locked(struct kib_conn *conn, struct list_head *txs)
 {
 	struct kib_tx *tx;
-	bool active_txs = strcmp(kiblnd_queue2str(conn, txs),
-				 "active_txs") == 0;
 
 	list_for_each_entry(tx, txs, tx_list) {
 		if (txs != &conn->ibc_active_txs) {
@@ -3189,28 +3186,13 @@ kiblnd_check_txs_locked(struct kib_conn *conn, struct list_head *txs)
 			LASSERT(tx->tx_waiting || tx->tx_sending);
 		}
 
-		if (ktime_compare(ktime_get(), tx->tx_deadline) < 0)
-			continue;
-
-		if (!active_txs) {
-			CERROR("Timed out tx: %s, outstanding RDMA time: %lld sec\n",
+		if (ktime_compare(ktime_get(), tx->tx_deadline) >= 0) {
+			CERROR("Timed out tx: %s, %lld seconds\n",
 			       kiblnd_queue2str(conn, txs),
-			       *kiblnd_tunables.kib_timeout +
 			       ktime_ms_delta(ktime_get(),
 					      tx->tx_deadline) / MSEC_PER_SEC);
-		} else {
-			CERROR("Timed out tx: %s, time in internal queue: %lld sec, time in active queue: %lld sec, outstanding RDMA time: %lld sec\n",
-			       kiblnd_queue2str(conn, txs),
-			       ktime_ms_delta(tx->tx_deadline,
-					      tx->tx_on_activeq) / MSEC_PER_SEC,
-			       ktime_ms_delta(ktime_get(),
-					      tx->tx_on_activeq) / MSEC_PER_SEC,
-			       *kiblnd_tunables.kib_timeout +
-			       ktime_ms_delta(ktime_get(),
-					      tx->tx_deadline) / MSEC_PER_SEC);
+			return 1;
 		}
-
-		return 1;
 	}
 
 	return 0;
