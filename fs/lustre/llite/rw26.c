@@ -376,7 +376,7 @@ out:
 			vio->u.write.vui_written += tot_bytes;
 			result = tot_bytes;
 		}
-		kfree(aio);
+		cl_aio_free(aio);
 	} else {
 		result = -EIOCBQUEUED;
 	}

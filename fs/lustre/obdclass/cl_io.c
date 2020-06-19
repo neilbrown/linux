@@ -1110,6 +1110,13 @@ struct cl_dio_aio *cl_aio_alloc(struct kiocb *iocb)
 }
 EXPORT_SYMBOL(cl_aio_alloc);
 
+void cl_aio_free(struct cl_dio_aio *aio)
+{
+	if (aio)
+		kmem_cache_free(cl_dio_aio_kmem, aio);
+}
+EXPORT_SYMBOL(cl_aio_free);
+
 /**
  * Indicate that transfer of a single page completed.
  */
@@ -1149,7 +1156,7 @@ void cl_sync_io_note(const struct lu_env *env, struct cl_sync_io *anchor,
 		 */
 		if (aio) {
 			cl_aio_end(env, anchor);
-			kmem_cache_free(cl_dio_aio_kmem, aio);
+			cl_aio_free(aio);
 		}
 	}
 }
