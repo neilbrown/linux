@@ -1515,6 +1515,7 @@ ll_file_io_generic(const struct lu_env *env, struct vvp_io_args *args,
 	int rc = 0;
 	unsigned int retried = 0;
 	unsigned int ignore_lockless = 0;
+	bool is_aio = false;
 
 	CDEBUG(D_VFSTRACE, "file: %pD, type: %d ppos: %llu, count: %zu\n",
 	       file, iot, *ppos, count);
@@ -1537,6 +1538,15 @@ restart:
 		vio->vui_fd  = file->private_data;
 		vio->vui_iter = args->u.normal.via_iter;
 		vio->vui_iocb = args->u.normal.via_iocb;
+		if (file->f_flags & O_DIRECT) {
+			if (!is_sync_kiocb(vio->vui_iocb))
+				is_aio = true;
+			io->ci_aio = cl_aio_alloc(vio->vui_iocb);
+			if (!io->ci_aio) {
+				rc = -ENOMEM;
+				goto out;
+			}
+		}
 		/*
 		 * Direct IO reads must also take range lock,
 		 * or multiple reads will try to work on the same pages
@@ -1568,7 +1578,14 @@ restart:
 		rc = io->ci_result;
 	}
 
-	if (io->ci_nob > 0) {
+	/*
+	 * In order to move forward AIO, ci_nob was increased,
+	 * but that doesn't mean io have been finished, it just
+	 * means io have been submited, we will always return
+	 * EIOCBQUEUED to the caller, So we could only return
+	 * number of bytes in non-AIO case.
+	 */
+	if (io->ci_nob > 0 && !is_aio) {
 		result += io->ci_nob;
 		count -= io->ci_nob;
 		*ppos = io->u.ci_wr.wr.crw_pos;
@@ -1578,6 +1595,19 @@ restart:
 			args->u.normal.via_iter = vio->vui_iter;
 	}
 out:
+	if (io->ci_aio) {
+		/**
+		 * Drop one extra reference so that end_io() could be
+		 * called for this IO context, we could call it after
+		 * we make sure all AIO requests have been proceed.
+		 */
+		cl_sync_io_note(env, &io->ci_aio->cda_sync,
+				rc == -EIOCBQUEUED ? 0 : rc);
+		if (!is_aio) {
+			cl_aio_free(io->ci_aio);
+			io->ci_aio = NULL;
+		}
+	}
 	cl_io_fini(env, io);
 
 	CDEBUG(D_VFSTRACE,
