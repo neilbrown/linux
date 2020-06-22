@@ -140,10 +140,8 @@ module_param(lnet_drop_asym_route, drop_asym_route, 0644);
 MODULE_PARM_DESC(lnet_drop_asym_route,
 		 "Set to 1 to drop asymmetrical route messages.");
 
-#define LNET_TRANSACTION_TIMEOUT_NO_HEALTH_DEFAULT 50
-#define LNET_TRANSACTION_TIMEOUT_HEALTH_DEFAULT 50
-
-unsigned int lnet_transaction_timeout = LNET_TRANSACTION_TIMEOUT_HEALTH_DEFAULT;
+#define LNET_TRANSACTION_TIMEOUT_DEFAULT 50
+unsigned int lnet_transaction_timeout = LNET_TRANSACTION_TIMEOUT_DEFAULT;
 static int transaction_to_set(const char *val, const struct kernel_param *kp);
 static struct kernel_param_ops param_ops_transaction_timeout = {
 	.set = transaction_to_set,
@@ -156,8 +154,8 @@ module_param(lnet_transaction_timeout, transaction_timeout, 0644);
 MODULE_PARM_DESC(lnet_transaction_timeout,
 		 "Maximum number of seconds to wait for a peer response.");
 
-#define LNET_RETRY_COUNT_HEALTH_DEFAULT 2
-unsigned int lnet_retry_count = LNET_RETRY_COUNT_HEALTH_DEFAULT;
+#define LNET_RETRY_COUNT_DEFAULT 2
+unsigned int lnet_retry_count = LNET_RETRY_COUNT_DEFAULT;
 static int retry_count_set(const char *val, const struct kernel_param *kp);
 static struct kernel_param_ops param_ops_retry_count = {
 	.set = retry_count_set,
@@ -186,8 +184,8 @@ MODULE_PARM_DESC(lnet_response_tracking,
 		 "(0|1|2|3) LNet Internal Only|GET Reply only|PUT ACK only|Full Tracking (default)");
 
 #define LNET_LND_TIMEOUT_DEFAULT				\
-	((LNET_TRANSACTION_TIMEOUT_HEALTH_DEFAULT - 1) /	\
-	 (LNET_RETRY_COUNT_HEALTH_DEFAULT + 1))
+	((LNET_TRANSACTION_TIMEOUT_DEFAULT - 1) /		\
+	 (LNET_RETRY_COUNT_DEFAULT + 1))
 
 unsigned int lnet_lnd_timeout = LNET_LND_TIMEOUT_DEFAULT;
 static void lnet_set_lnd_timeout(void)
@@ -238,20 +236,7 @@ sensitivity_set(const char *val, const struct kernel_param *kp)
 		return -EINVAL;
 	}
 
-	/* if we're turning on health then use the health timeout
-	 * defaults.
-	 */
-	if (*sensitivity == 0 && value != 0) {
-		lnet_transaction_timeout =
-			LNET_TRANSACTION_TIMEOUT_HEALTH_DEFAULT;
-		lnet_retry_count = LNET_RETRY_COUNT_HEALTH_DEFAULT;
-		lnet_set_lnd_timeout();
-	/* if we're turning off health then use the no health timeout
-	 * default.
-	 */
-	} else if (*sensitivity != 0 && value == 0) {
-		lnet_transaction_timeout =
-			LNET_TRANSACTION_TIMEOUT_NO_HEALTH_DEFAULT;
+	if (*sensitivity != 0 && value == 0 && lnet_retry_count != 0) {
 		lnet_retry_count = 0;
 		lnet_set_lnd_timeout();
 	}
@@ -400,7 +385,7 @@ transaction_to_set(const char *val, const struct kernel_param *kp)
 	 */
 	mutex_lock(&the_lnet.ln_api_mutex);
 
-	if (value < lnet_retry_count || value == 0) {
+	if (value <= lnet_retry_count || value == 0) {
 		mutex_unlock(&the_lnet.ln_api_mutex);
 		CERROR("Invalid value for lnet_transaction_timeout (%lu). Has to be greater than lnet_retry_count (%u)\n",
 		       value, lnet_retry_count);
@@ -441,9 +426,9 @@ retry_count_set(const char *val, const struct kernel_param *kp)
 	 */
 	mutex_lock(&the_lnet.ln_api_mutex);
 
-	if (lnet_health_sensitivity == 0) {
+	if (lnet_health_sensitivity == 0 && value > 0) {
 		mutex_unlock(&the_lnet.ln_api_mutex);
-		CERROR("Can not set retry_count when health feature is turned off\n");
+		CERROR("Can not set lnet_retry_count when health feature is turned off\n");
 		return -EINVAL;
 	}
 
