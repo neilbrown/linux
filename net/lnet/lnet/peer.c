@@ -1238,9 +1238,9 @@ lnet_peer_get_net_locked(struct lnet_peer *peer, u32 net_id)
  * may be attached to a different peer, in which case it will be
  * properly detached first. The whole operation is done atomically.
  *
- * Always returns 0.  This is the last function called from functions
- * that do return an int, so returning 0 here allows the compiler to
- * do a tail call.
+ * This function consumes the reference on lpni and Always returns 0.
+ * This is the last function called from functions that do return an
+ * int, so returning 0 here allows the compiler to do a tail call.
  */
 static int
 lnet_peer_attach_peer_ni(struct lnet_peer *lp,
@@ -1259,6 +1259,7 @@ lnet_peer_attach_peer_ni(struct lnet_peer *lp,
 		ptable = the_lnet.ln_peer_tables[lpni->lpni_cpt];
 		list_add_tail(&lpni->lpni_hashlist, &ptable->pt_hash[hash]);
 		ptable->pt_version++;
+		lnet_peer_ni_addref_locked(lpni);
 	}
 
 	/* Detach the peer_ni from an existing peer, if necessary. */
@@ -1306,11 +1307,12 @@ lnet_peer_attach_peer_ni(struct lnet_peer *lp,
 	spin_unlock(&lp->lp_lock);
 
 	lp->lp_nnis++;
-	lnet_net_unlock(LNET_LOCK_EX);
 
 	CDEBUG(D_NET, "peer %s NID %s flags %#x\n",
 	       libcfs_nid2str(lp->lp_primary_nid),
 	       libcfs_nid2str(lpni->lpni_nid), flags);
+	lnet_peer_ni_decref_locked(lpni);
+	lnet_net_unlock(LNET_LOCK_EX);
 
 	return 0;
 }
@@ -1431,17 +1433,16 @@ lnet_peer_add_nid(struct lnet_peer *lp, lnet_nid_t nid, unsigned int flags)
 		 * it is not connected to this peer and was configured
 		 * by DLC.
 		 */
-		lnet_peer_ni_decref_locked(lpni);
 		if (lpni->lpni_peer_net->lpn_peer == lp)
-			goto out;
+			goto out_free_lpni;
 		if (lnet_peer_ni_is_configured(lpni)) {
 			rc = -EEXIST;
-			goto out;
+			goto out_free_lpni;
 		}
 		/* If this is the primary NID, destroy the peer. */
 		if (lnet_peer_ni_is_primary(lpni)) {
 			struct lnet_peer *rtr_lp =
-			  lpni->lpni_peer_net->lpn_peer;
+				lpni->lpni_peer_net->lpn_peer;
 			int rtr_refcount = rtr_lp->lp_rtr_refcount;
 
 			/* if we're trying to delete a router it means
@@ -1453,17 +1454,18 @@ lnet_peer_add_nid(struct lnet_peer *lp, lnet_nid_t nid, unsigned int flags)
 				lnet_rtr_transfer_to_peer(rtr_lp, lp);
 			}
 			lnet_peer_del(lpni->lpni_peer_net->lpn_peer);
+			lnet_peer_ni_decref_locked(lpni);
 			lpni = lnet_peer_ni_alloc(nid);
 			if (!lpni) {
 				rc = -ENOMEM;
-				goto out;
+				goto out_free_lpni;
 			}
 		}
 	} else {
 		lpni = lnet_peer_ni_alloc(nid);
 		if (!lpni) {
 			rc = -ENOMEM;
-			goto out;
+			goto out_free_lpni;
 		}
 	}
 
@@ -1486,9 +1488,7 @@ lnet_peer_add_nid(struct lnet_peer *lp, lnet_nid_t nid, unsigned int flags)
 	return lnet_peer_attach_peer_ni(lp, lpn, lpni, flags);
 
 out_free_lpni:
-	/* If the peer_ni was allocated above its peer_net pointer is NULL */
-	if (!lpni->lpni_peer_net)
-		kfree(lpni);
+	lnet_peer_ni_decref_locked(lpni);
 out:
 	CDEBUG(D_NET, "peer %s NID %s flags %#x: %d\n",
 	       libcfs_nid2str(lp->lp_primary_nid), libcfs_nid2str(nid),
@@ -1713,18 +1713,21 @@ lnet_destroy_peer_ni_locked(struct kref *ref)
 	lpni->lpni_peer_net = NULL;
 	lpni->lpni_net = NULL;
 
-	/* remove the peer ni from the zombie list */
-	ptable = the_lnet.ln_peer_tables[lpni->lpni_cpt];
-	spin_lock(&ptable->pt_zombie_lock);
-	list_del_init(&lpni->lpni_hashlist);
-	ptable->pt_zombies--;
-	spin_unlock(&ptable->pt_zombie_lock);
+	if (!list_empty(&lpni->lpni_hashlist)) {
+		/* remove the peer ni from the zombie list */
+		ptable = the_lnet.ln_peer_tables[lpni->lpni_cpt];
+		spin_lock(&ptable->pt_zombie_lock);
+		list_del_init(&lpni->lpni_hashlist);
+		ptable->pt_zombies--;
+		spin_unlock(&ptable->pt_zombie_lock);
+	}
 
 	if (lpni->lpni_pref_nnids > 1)
 		kfree(lpni->lpni_pref.nids);
 	kfree(lpni);
 
-	lnet_peer_net_decref_locked(lpn);
+	if (lpn)
+		lnet_peer_net_decref_locked(lpn);
 }
 
 struct lnet_peer_ni *
