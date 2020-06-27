@@ -1229,17 +1229,16 @@ u32 lustre_msg_get_cksum(struct lustre_msg *msg)
 	}
 }
 
-u32 lustre_msg_calc_cksum(struct lustre_msg *msg)
+u32 lustre_msg_calc_cksum(struct lustre_msg *msg, u32 buf)
 {
 	switch (msg->lm_magic) {
 	case LUSTRE_MSG_MAGIC_V2: {
-		struct ptlrpc_body *pb = lustre_msg_ptlrpc_body(msg);
+		struct ptlrpc_body *pb = lustre_msg_buf_v2(msg, buf, 0);
 		u32 crc;
 		unsigned int hsize = 4;
 
 		cfs_crypto_hash_digest(CFS_HASH_ALG_CRC32, (unsigned char *)pb,
-				       lustre_msg_buflen(msg,
-							 MSG_PTLRPC_BODY_OFF),
+				       lustre_msg_buflen(msg, buf),
 				       NULL, 0, (unsigned char *)&crc, &hsize);
 		return crc;
 	}
