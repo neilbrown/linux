@@ -624,8 +624,6 @@ struct ksock_tx *ksocknal_alloc_tx_noop(u64 cookie, int nonblk);
 void ksocknal_next_tx_carrier(struct ksock_conn *conn);
 void ksocknal_queue_tx_locked(struct ksock_tx *tx, struct ksock_conn *conn);
 void ksocknal_txlist_done(struct lnet_ni *ni, struct list_head *txlist, int error);
-void ksocknal_notify(lnet_nid_t gw_nid);
-void ksocknal_query(struct lnet_ni *ni, lnet_nid_t nid, time64_t *when);
 int ksocknal_thread_start(int (*fn)(void *arg), void *arg, char *name);
 void ksocknal_thread_fini(void);
 void ksocknal_launch_all_connections_locked(struct ksock_peer_ni *peer_ni);
@@ -668,6 +666,5 @@ int ksocknal_tunables_init(void);
 void ksocknal_lib_csum_tx(struct ksock_tx *tx);
 
 int ksocknal_lib_memory_pressure(struct ksock_conn *conn);
-int ksocknal_lib_bind_thread_to_cpu(int id);
 
 #endif /* _SOCKLND_SOCKLND_H_ */
