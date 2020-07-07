@@ -1171,14 +1171,22 @@ static int quotactl_ioctl(struct ll_sb_info *sbi, struct if_quotactl *qctl)
 		    !(oqctl->qc_dqblk.dqb_valid & QIF_SPACE) &&
 		    !oqctl->qc_dqblk.dqb_curspace) {
 			struct obd_quotactl *oqctl_tmp;
+			int qctl_len = sizeof(*oqctl_tmp) + LOV_MAXPOOLNAME + 1;
 
-			oqctl_tmp = kzalloc(sizeof(*oqctl_tmp), GFP_NOFS);
+			oqctl_tmp = kzalloc(qctl_len, GFP_NOFS);
 			if (!oqctl_tmp) {
 				rc = -ENOMEM;
 				goto out;
 			}
 
-			oqctl_tmp->qc_cmd = Q_GETOQUOTA;
+			if (cmd == LUSTRE_Q_GETQUOTAPOOL) {
+				oqctl_tmp->qc_cmd = LUSTRE_Q_GETQUOTAPOOL;
+				memcpy(oqctl_tmp->qc_poolname,
+				       qctl->qc_poolname,
+				       LOV_MAXPOOLNAME + 1);
+			} else {
+				oqctl_tmp->qc_cmd = Q_GETOQUOTA;
+			}
 			oqctl_tmp->qc_id = oqctl->qc_id;
 			oqctl_tmp->qc_type = oqctl->qc_type;
 
@@ -1192,6 +1200,7 @@ static int quotactl_ioctl(struct ll_sb_info *sbi, struct if_quotactl *qctl)
 			}
 
 			/* collect space & inode usage from MDTs */
+			oqctl_tmp->qc_cmd = Q_GETOQUOTA;
 			oqctl_tmp->qc_dqblk.dqb_curspace = 0;
 			oqctl_tmp->qc_dqblk.dqb_curinodes = 0;
 			rc = obd_quotactl(sbi->ll_md_exp, oqctl_tmp);
