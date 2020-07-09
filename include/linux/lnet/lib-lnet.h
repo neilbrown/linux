@@ -159,6 +159,40 @@ lnet_res_unlock(int cpt)
 	cfs_percpt_unlock(the_lnet.ln_res_lock, cpt);
 }
 
+#define lnet_ptl_lock(ptl)	spin_lock(&(ptl)->ptl_lock)
+#define lnet_ptl_unlock(ptl)	spin_unlock(&(ptl)->ptl_lock)
+#define lnet_ni_lock(ni)	spin_lock(&(ni)->ni_lock)
+#define lnet_ni_unlock(ni)	spin_unlock(&(ni)->ni_lock)
+
+static inline bool
+lnet_ni_set_status_locked(struct lnet_ni *ni, u32 status)
+__must_hold(&ni->ni_lock)
+{
+	bool update = false;
+
+	if (ni->ni_status && ni->ni_status->ns_status != status) {
+		CDEBUG(D_NET, "ni %s status changed from %#x to %#x\n",
+		       libcfs_nid2str(ni->ni_nid),
+		       ni->ni_status->ns_status, status);
+		ni->ni_status->ns_status = status;
+		update = true;
+	}
+
+	return update;
+}
+
+static inline bool
+lnet_ni_set_status(struct lnet_ni *ni, u32 status)
+{
+	bool update;
+
+	lnet_ni_lock(ni);
+	update = lnet_ni_set_status_locked(ni, status);
+	lnet_ni_unlock(ni);
+
+	return update;
+}
+
 static inline void
 lnet_md_free(struct lnet_libmd *md)
 {
@@ -205,11 +239,6 @@ lnet_net_lock_current(void)
 	lnet_net_lock(cpt);
 	return cpt;
 }
-
-#define lnet_ptl_lock(ptl)	spin_lock(&(ptl)->ptl_lock)
-#define lnet_ptl_unlock(ptl)	spin_unlock(&(ptl)->ptl_lock)
-#define lnet_ni_lock(ni)	spin_lock(&(ni)->ni_lock)
-#define lnet_ni_unlock(ni)	spin_unlock(&(ni)->ni_lock)
 
 #define MAX_PORTALS		64
 
