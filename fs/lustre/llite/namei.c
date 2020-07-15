@@ -186,14 +186,6 @@ static int ll_dom_lock_cancel(struct inode *inode, struct ldlm_lock *lock)
 	u16 refcheck;
 	int rc;
 
-	if (!lli->lli_clob) {
-		/* Due to DoM read on open, there may exist pages for Lustre
-		 * regular file even though cl_object is not set up yet.
-		 */
-		truncate_inode_pages(inode->i_mapping, 0);
-		return 0;
-	}
-
 	env = cl_env_get(&refcheck);
 	if (IS_ERR(env))
 		return PTR_ERR(env);
@@ -659,10 +651,11 @@ static int ll_lookup_it_finish(struct ptlrpc_request *request,
 			}
 		}
 
-		if (it->it_op & IT_OPEN)
-			ll_dom_finish_open(inode, request, it);
-
 		ll_set_lock_data(ll_i2sbi(parent)->ll_md_exp, inode, it, &bits);
+		/* OPEN can return data if lock has DoM+LAYOUT bits set */
+		if (it->it_op & IT_OPEN &&
+		    bits & MDS_INODELOCK_DOM && bits & MDS_INODELOCK_LAYOUT)
+			ll_dom_finish_open(inode, request);
 
 		/* We used to query real size from OSTs here, but actually
 		 * this is not needed. For stat() calls size would be updated
