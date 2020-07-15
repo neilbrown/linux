@@ -81,6 +81,7 @@ struct lov_layout_operations {
 };
 
 static int lov_layout_wait(const struct lu_env *env, struct lov_object *lov);
+static struct lov_stripe_md *lov_lsm_addref(struct lov_object *lov);
 
 static void lov_lsm_put(struct lov_stripe_md *lsm)
 {
@@ -1279,8 +1280,8 @@ out:
  * Lov object operations.
  *
  */
-int lov_object_init(const struct lu_env *env, struct lu_object *obj,
-		    const struct lu_object_conf *conf)
+static int lov_object_init(const struct lu_env *env, struct lu_object *obj,
+			   const struct lu_object_conf *conf)
 {
 	struct lov_object *lov = lu2lov(obj);
 	struct lov_device *dev = lov_object_dev(lov);
@@ -1403,8 +1404,8 @@ static int lov_object_print(const struct lu_env *env, void *cookie,
 	return LOV_2DISPATCH_NOLOCK(lu2lov(o), llo_print, env, cookie, p, o);
 }
 
-int lov_page_init(const struct lu_env *env, struct cl_object *obj,
-		  struct cl_page *page, pgoff_t index)
+static int lov_page_init(const struct lu_env *env, struct cl_object *obj,
+			 struct cl_page *page, pgoff_t index)
 {
 	return LOV_2DISPATCH_NOLOCK(cl2lov(obj), llo_page_init, env, obj, page,
 				    index);
@@ -1414,8 +1415,8 @@ int lov_page_init(const struct lu_env *env, struct cl_object *obj,
  * Implements cl_object_operations::clo_io_init() method for lov
  * layer. Dispatches to the appropriate layout io initialization method.
  */
-int lov_io_init(const struct lu_env *env, struct cl_object *obj,
-		struct cl_io *io)
+static int lov_io_init(const struct lu_env *env, struct cl_object *obj,
+		       struct cl_io *io)
 {
 	CL_IO_SLICE_CLEAN(lov_env_io(env), lis_preserved);
 
@@ -1456,7 +1457,7 @@ static int lov_attr_update(const struct lu_env *env, struct cl_object *obj,
 	return 0;
 }
 
-int lov_lock_init(const struct lu_env *env, struct cl_object *obj,
+static int lov_lock_init(const struct lu_env *env, struct cl_object *obj,
 		  struct cl_lock *lock, const struct cl_io *io)
 {
 	/* No need to lock because we've taken one refcount of layout.  */
@@ -2130,7 +2131,7 @@ static const struct lu_object_operations lov_lu_obj_ops = {
 	.loo_object_release	= NULL,
 	.loo_object_free	= lov_object_free,
 	.loo_object_print	= lov_object_print,
-	.loo_object_invariant	= NULL
+	.loo_object_invariant	= NULL,
 };
 
 struct lu_object *lov_object_alloc(const struct lu_env *env,
@@ -2158,7 +2159,7 @@ struct lu_object *lov_object_alloc(const struct lu_env *env,
 	return obj;
 }
 
-struct lov_stripe_md *lov_lsm_addref(struct lov_object *lov)
+static struct lov_stripe_md *lov_lsm_addref(struct lov_object *lov)
 {
 	struct lov_stripe_md *lsm = NULL;
 
