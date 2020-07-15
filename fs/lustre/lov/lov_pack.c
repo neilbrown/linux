@@ -93,25 +93,13 @@ void lov_dump_lmm_v1(int level, struct lov_mds_md_v1 *lmm)
 			     le16_to_cpu(lmm->lmm_stripe_count));
 }
 
-void lov_dump_lmm_v3(int level, struct lov_mds_md_v3 *lmm)
-{
-	lov_dump_lmm_common(level, lmm);
-	CDEBUG_LIMIT(level, "pool_name " LOV_POOLNAMEF "\n",
-		     lmm->lmm_pool_name);
-	lov_dump_lmm_objects(level, lmm->lmm_objects,
-			     le16_to_cpu(lmm->lmm_stripe_count));
-}
-
 /**
- * Pack LOV striping metadata for disk storage format (in little
- * endian byte order).
- *
  * This follows the getxattr() conventions. If @buf_size is zero
  * then return the size needed. If @buf_size is too small then
  * return -ERANGE. Otherwise return the size of the result.
  */
-ssize_t lov_lsm_pack_v1v3(const struct lov_stripe_md *lsm, void *buf,
-			  size_t buf_size)
+static ssize_t lov_lsm_pack_v1v3(const struct lov_stripe_md *lsm, void *buf,
+				 size_t buf_size)
 {
 	struct lov_ost_data_v1 *lmm_objects;
 	struct lov_mds_md_v1 *lmmv1 = buf;
@@ -163,8 +151,8 @@ ssize_t lov_lsm_pack_v1v3(const struct lov_stripe_md *lsm, void *buf,
 	return lmm_size;
 }
 
-ssize_t lov_lsm_pack_foreign(const struct lov_stripe_md *lsm, void *buf,
-			     size_t buf_size)
+static ssize_t lov_lsm_pack_foreign(const struct lov_stripe_md *lsm, void *buf,
+				    size_t buf_size)
 {
 	struct lov_foreign_md *lfm = buf;
 	size_t lfm_size;
