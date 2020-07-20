@@ -2908,7 +2908,7 @@ static int lmv_rmfid(struct obd_export *exp, struct fid_array *fa,
 	}
 
 	/* split FIDs by targets */
-	fas = kcalloc(tgt_count, sizeof(fas), GFP_NOFS);
+	fas = kcalloc(tgt_count, sizeof(*fas), GFP_NOFS);
 	if (!fas) {
 		rc = -ENOMEM;
 		goto out;
@@ -2938,7 +2938,8 @@ static int lmv_rmfid(struct obd_export *exp, struct fid_array *fa,
 			goto out;
 		}
 		if (!rcs[idx])
-			rcs[idx] = kcalloc(fa->fa_nr, sizeof(int), GFP_NOFS);
+			rcs[idx] = kcalloc(fa->fa_nr, sizeof(*rcs[idx]),
+					   GFP_NOFS);
 		if (!rcs[idx]) {
 			rc = -ENOMEM;
 			goto out;
