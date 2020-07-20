@@ -133,8 +133,6 @@ int class_process_config(struct lustre_cfg *lcfg);
 ssize_t class_set_global(const char *param);
 ssize_t class_modify_config(struct lustre_cfg *lcfg, const char *prefix,
 			    struct kobject *kobj);
-int class_process_proc_param(char *prefix, struct lprocfs_vars *lvars,
-			     struct lustre_cfg *lcfg, void *data);
 
 /* For interoperability */
 struct cfg_interop_param {
