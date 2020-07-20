@@ -2253,8 +2253,6 @@ void cl_page_unassume(const struct lu_env *env,
 		      struct cl_io *io, struct cl_page *pg);
 void cl_page_disown(const struct lu_env *env,
 		    struct cl_io *io, struct cl_page *page);
-void __cl_page_disown(const struct lu_env *env,
-		      struct cl_io *io, struct cl_page *pg);
 int cl_page_is_owned(const struct cl_page *pg, const struct cl_io *io);
 
 /** @} ownership */
