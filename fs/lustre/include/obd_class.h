@@ -161,7 +161,6 @@ int class_config_llog_handler(const struct lu_env *env,
 			      struct llog_rec_hdr *rec, void *data);
 
 /* obdecho */
-void lprocfs_echo_init_vars(struct lprocfs_static_vars *lvars);
 
 #define CFG_F_START	0x01   /* Set when we start updating from a log */
 #define CFG_F_MARKER	0x02   /* We are within a maker */
