@@ -210,8 +210,8 @@ out:
 }
 
 static ssize_t
-lprocfs_wr_sptlrpc_sepol(struct file *file, const char __user *buffer,
-			 size_t count, void *data)
+ldebugfs_sptlrpc_sepol_seq_write(struct file *file, const char __user *buffer,
+				 size_t count, void *data)
 {
 	struct seq_file	*seq = file->private_data;
 	struct obd_device *obd = seq->private;

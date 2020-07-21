@@ -692,7 +692,7 @@ ssize_t conn_uuid_show(struct kobject *kobj, struct attribute *attr, char *buf)
 }
 EXPORT_SYMBOL(conn_uuid_show);
 
-int lprocfs_rd_server_uuid(struct seq_file *m, void *data)
+int ldebugfs_server_uuid_seq_read(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = data;
 	struct obd_import *imp;
@@ -710,7 +710,7 @@ int lprocfs_rd_server_uuid(struct seq_file *m, void *data)
 
 	return rc;
 }
-EXPORT_SYMBOL(lprocfs_rd_server_uuid);
+EXPORT_SYMBOL(ldebugfs_server_uuid_seq_read);
 
 /**
  * Lock statistics structure for access, possibly only on this CPU.
@@ -904,7 +904,7 @@ static void obd_connect_seq_flags2str(struct seq_file *m, u64 flags,
 	}
 }
 
-int lprocfs_rd_import(struct seq_file *m, void *data)
+int ldebugfs_import_seq_read(struct seq_file *m, void *data)
 {
 	char nidstr[LNET_NIDSTR_SIZE];
 	struct lprocfs_counter ret;
@@ -1051,9 +1051,9 @@ int lprocfs_rd_import(struct seq_file *m, void *data)
 
 	return rc;
 }
-EXPORT_SYMBOL(lprocfs_rd_import);
+EXPORT_SYMBOL(ldebugfs_import_seq_read);
 
-int lprocfs_rd_state(struct seq_file *m, void *data)
+int ldebugfs_state_seq_read(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = data;
 	struct obd_import *imp;
@@ -1079,7 +1079,7 @@ int lprocfs_rd_state(struct seq_file *m, void *data)
 
 	return rc;
 }
-EXPORT_SYMBOL(lprocfs_rd_state);
+EXPORT_SYMBOL(ldebugfs_state_seq_read);
 
 int lprocfs_at_hist_helper(struct seq_file *m, struct adaptive_timeout *at)
 {
@@ -1093,7 +1093,7 @@ int lprocfs_at_hist_helper(struct seq_file *m, struct adaptive_timeout *at)
 EXPORT_SYMBOL(lprocfs_at_hist_helper);
 
 /* See also ptlrpc_lprocfs_rd_timeouts */
-int lprocfs_rd_timeouts(struct seq_file *m, void *data)
+int ldebugfs_timeouts_seq_read(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = data;
 	struct obd_import *imp;
@@ -1143,9 +1143,9 @@ int lprocfs_rd_timeouts(struct seq_file *m, void *data)
 
 	return rc;
 }
-EXPORT_SYMBOL(lprocfs_rd_timeouts);
+EXPORT_SYMBOL(ldebugfs_timeouts_seq_read);
 
-int lprocfs_rd_connect_flags(struct seq_file *m, void *data)
+int ldebugfs_connect_flags_seq_read(struct seq_file *m, void *data)
 {
 	struct obd_device *obd = data;
 	struct obd_import *imp;
@@ -1163,7 +1163,7 @@ int lprocfs_rd_connect_flags(struct seq_file *m, void *data)
 
 	return rc;
 }
-EXPORT_SYMBOL(lprocfs_rd_connect_flags);
+EXPORT_SYMBOL(ldebugfs_connect_flags_seq_read);
 
 static const struct attribute *obd_def_uuid_attrs[] = {
 	&lustre_attr_uuid.attr,
@@ -1820,8 +1820,9 @@ void lprocfs_oh_clear(struct obd_histogram *oh)
 }
 EXPORT_SYMBOL(lprocfs_oh_clear);
 
-int lprocfs_wr_root_squash(const char __user *buffer, unsigned long count,
-			   struct root_squash_info *squash, char *name)
+int ldebugfs_root_squash_seq_write(const char __user *buffer,
+				   unsigned long count,
+				   struct root_squash_info *squash, char *name)
 {
 	char kernbuf[64], *tmp, *errmsg;
 	unsigned long uid, gid;
@@ -1882,10 +1883,12 @@ failed_noprint:
 	      name, errmsg, rc);
 	return rc;
 }
-EXPORT_SYMBOL(lprocfs_wr_root_squash);
+EXPORT_SYMBOL(ldebugfs_root_squash_seq_write);
 
-int lprocfs_wr_nosquash_nids(const char __user *buffer, unsigned long count,
-			     struct root_squash_info *squash, char *name)
+int ldebugfs_nosquash_nids_seq_write(const char __user *buffer,
+				     unsigned long count,
+				     struct root_squash_info *squash,
+				     char *name)
 {
 	char *kernbuf = NULL, *errmsg;
 	LIST_HEAD(tmp);
@@ -1957,7 +1960,7 @@ failed:
 	}
 	return rc;
 }
-EXPORT_SYMBOL(lprocfs_wr_nosquash_nids);
+EXPORT_SYMBOL(ldebugfs_nosquash_nids_seq_write);
 
 ssize_t lustre_attr_show(struct kobject *kobj,
 			 struct attribute *attr, char *buf)

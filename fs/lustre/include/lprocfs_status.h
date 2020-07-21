@@ -453,29 +453,30 @@ int lprocfs_obd_cleanup(struct obd_device *obd);
 
 /* Generic callbacks */
 
-int lprocfs_rd_uint(struct seq_file *m, void *data);
-int lprocfs_wr_uint(struct file *file, const char __user *buffer,
-		    unsigned long count, void *data);
-int lprocfs_rd_server_uuid(struct seq_file *m, void *data);
-int lprocfs_rd_conn_uuid(struct seq_file *m, void *data);
+int ldebugfs_uint_seq_read(struct seq_file *m, void *data);
+int ldebugfs_uint_seq_write(struct file *file, const char __user *buffer,
+			    unsigned long count, void *data);
+int ldebugfs_server_uuid_seq_read(struct seq_file *m, void *data);
+int ldebugfs_conn_uuid_seq_read(struct seq_file *m, void *data);
 ssize_t conn_uuid_show(struct kobject *kobj, struct attribute *attr, char *buf);
-int lprocfs_rd_import(struct seq_file *m, void *data);
-int lprocfs_rd_state(struct seq_file *m, void *data);
-int lprocfs_rd_connect_flags(struct seq_file *m, void *data);
+int ldebugfs_import_seq_read(struct seq_file *m, void *data);
+int ldebugfs_state_seq_read(struct seq_file *m, void *data);
+int ldebugfs_connect_flags_seq_read(struct seq_file *m, void *data);
 
 struct adaptive_timeout;
 int lprocfs_at_hist_helper(struct seq_file *m, struct adaptive_timeout *at);
-int lprocfs_rd_timeouts(struct seq_file *m, void *data);
+int ldebugfs_timeouts_seq_read(struct seq_file *m, void *data);
 ssize_t ping_store(struct kobject *kobj, struct attribute *attr,
 		   const char *buffer, size_t count);
 ssize_t ping_show(struct kobject *kobj, struct attribute *attr,
 		  char *buffer);
 
-int lprocfs_wr_import(struct file *file, const char __user *buffer,
-		      size_t count, loff_t *off);
-int lprocfs_rd_pinger_recov(struct seq_file *m, void *n);
-int lprocfs_wr_pinger_recov(struct file *file, const char __user *buffer,
-			    size_t count, loff_t *off);
+int ldebugfs_import_seq_write(struct file *file, const char __user *buffer,
+			      size_t count, loff_t *off);
+int ldebugfs_pinger_recov_seq_read(struct seq_file *m, void *n);
+int ldebugfs_pinger_recov_seq_write(struct file *file,
+				    const char __user *buffer,
+				    size_t count, loff_t *off);
 
 /* Statfs helpers */
 
@@ -527,7 +528,7 @@ static const struct file_operations name##_fops = {			\
 	{								\
 		if (!m->private)					\
 			return -ENODEV;					\
-		return lprocfs_rd_##type(m, m->private);		\
+		return ldebugfs_##type##_seq_read(m, m->private);	\
 	}								\
 	LDEBUGFS_SEQ_FOPS_RO(name##_##type)
 
@@ -536,7 +537,7 @@ static const struct file_operations name##_fops = {			\
 	{								\
 		if (!m->private)					\
 			return -ENODEV;					\
-		return lprocfs_rd_##type(m, m->private);		\
+		return ldebugfs_##type##_seq_read(m, m->private);	\
 	}								\
 	static ssize_t name##_##type##_seq_write(struct file *file,	\
 			const char __user *buffer, size_t count,	\
@@ -546,8 +547,8 @@ static const struct file_operations name##_fops = {			\
 									\
 		if (!seq->private)					\
 			return -ENODEV;					\
-		return lprocfs_wr_##type(file, buffer, count,		\
-					 seq->private);			\
+		return ldebugfs_##type##_seq_write(file, buffer, count,	\
+						   seq->private);	\
 	}								\
 	LDEBUGFS_SEQ_FOPS(name##_##type)
 
@@ -556,8 +557,8 @@ static const struct file_operations name##_fops = {			\
 			const char __user *buffer, size_t count,	\
 			loff_t *off)					\
 	{								\
-		return lprocfs_wr_##type(file, buffer, count,		\
-					 off);				\
+		return ldebugfs_##type##_seq_write(file, buffer, count,	\
+						   off);		\
 	}								\
 	static int name##_##type##_open(struct inode *inode,		\
 					struct file *file)		\
@@ -602,10 +603,13 @@ ssize_t short_io_bytes_store(struct kobject *kobj, struct attribute *attr,
 			     const char *buffer, size_t count);
 
 struct root_squash_info;
-int lprocfs_wr_root_squash(const char __user *buffer, unsigned long count,
-			   struct root_squash_info *squash, char *name);
-int lprocfs_wr_nosquash_nids(const char __user *buffer, unsigned long count,
-			     struct root_squash_info *squash, char *name);
+int ldebugfs_root_squash_seq_write(const char __user *buffer,
+				   unsigned long count,
+				   struct root_squash_info *squash, char *name);
+int ldebugfs_nosquash_nids_seq_write(const char __user *buffer,
+				     unsigned long count,
+				     struct root_squash_info *squash,
+				     char *name);
 
 /* all quota proc functions */
 int lprocfs_quota_rd_bunit(char *page, char **start,

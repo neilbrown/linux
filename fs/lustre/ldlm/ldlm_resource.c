@@ -71,8 +71,8 @@ struct dentry *ldlm_svc_debugfs_dir;
 static unsigned int ldlm_dump_granted_max = 256;
 
 static ssize_t
-lprocfs_wr_dump_ns(struct file *file, const char __user *buffer,
-		   size_t count, loff_t *off)
+ldebugfs_dump_ns_seq_write(struct file *file, const char __user *buffer,
+			   size_t count, loff_t *off)
 {
 	ldlm_dump_all_namespaces(LDLM_NAMESPACE_SERVER, D_DLMTRACE);
 	ldlm_dump_all_namespaces(LDLM_NAMESPACE_CLIENT, D_DLMTRACE);

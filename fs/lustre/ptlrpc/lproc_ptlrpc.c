@@ -1283,8 +1283,8 @@ EXPORT_SYMBOL(ping_store);
  * The connection UUID is a node's primary NID. For example,
  * "echo connection=192.168.0.1@tcp0::instance > .../import".
  */
-int lprocfs_wr_import(struct file *file, const char __user *buffer,
-		      size_t count, loff_t *off)
+int ldebugfs_import_seq_write(struct file *file, const char __user *buffer,
+			      size_t count, loff_t *off)
 {
 	struct seq_file *m = file->private_data;
 	struct obd_device *obd = m->private;
@@ -1352,9 +1352,9 @@ out:
 	kfree(kbuf);
 	return count;
 }
-EXPORT_SYMBOL(lprocfs_wr_import);
+EXPORT_SYMBOL(ldebugfs_import_seq_write);
 
-int lprocfs_rd_pinger_recov(struct seq_file *m, void *n)
+int ldebugfs_pinger_recov_seq_read(struct seq_file *m, void *n)
 {
 	struct obd_device *obd = m->private;
 	struct obd_import *imp;
@@ -1365,10 +1365,11 @@ int lprocfs_rd_pinger_recov(struct seq_file *m, void *n)
 
 	return rc;
 }
-EXPORT_SYMBOL(lprocfs_rd_pinger_recov);
+EXPORT_SYMBOL(ldebugfs_pinger_recov_seq_read);
 
-int lprocfs_wr_pinger_recov(struct file *file, const char __user *buffer,
-			    size_t count, loff_t *off)
+int ldebugfs_pinger_recov_seq_write(struct file *file,
+				    const char __user *buffer,
+				    size_t count, loff_t *off)
 {
 	struct seq_file *m = file->private_data;
 	struct obd_device *obd = m->private;
@@ -1390,4 +1391,4 @@ int lprocfs_wr_pinger_recov(struct file *file, const char __user *buffer,
 
 	return rc ?: count;
 }
-EXPORT_SYMBOL(lprocfs_wr_pinger_recov);
+EXPORT_SYMBOL(ldebugfs_pinger_recov_seq_write);

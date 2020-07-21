@@ -2215,7 +2215,7 @@ static u32 ls_stats_read(struct lprocfs_stats *stats, int idx)
 
 /**
  * Output site statistical counters into a buffer. Suitable for
- * lprocfs_rd_*()-style functions.
+ * ldebugfs_*_seq_read()-style functions.
  */
 int lu_site_stats_print(const struct lu_site *s, struct seq_file *m)
 {

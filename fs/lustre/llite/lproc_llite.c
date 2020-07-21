@@ -1400,7 +1400,8 @@ static ssize_t ll_root_squash_seq_write(struct file *file,
 	struct ll_sb_info *sbi = ll_s2sbi(sb);
 	struct root_squash_info *squash = &sbi->ll_squash;
 
-	return lprocfs_wr_root_squash(buffer, count, squash, sbi->ll_fsname);
+	return ldebugfs_root_squash_seq_write(buffer, count, squash,
+					      sbi->ll_fsname);
 }
 LDEBUGFS_SEQ_FOPS(ll_root_squash);
 
@@ -1435,7 +1436,8 @@ static ssize_t ll_nosquash_nids_seq_write(struct file *file,
 	struct root_squash_info *squash = &sbi->ll_squash;
 	int rc;
 
-	rc = lprocfs_wr_nosquash_nids(buffer, count, squash, sbi->ll_fsname);
+	rc = ldebugfs_nosquash_nids_seq_write(buffer, count, squash,
+					      sbi->ll_fsname);
 	if (rc < 0)
 		return rc;
 

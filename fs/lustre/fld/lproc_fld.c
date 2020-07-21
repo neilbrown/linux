@@ -117,8 +117,8 @@ fld_debugfs_hash_seq_write(struct file *file,
 }
 
 static ssize_t
-lprocfs_wr_cache_flush(struct file *file, const char __user *buffer,
-		      size_t count, loff_t *pos)
+ldebugfs_cache_flush_seq_write(struct file *file, const char __user *buffer,
+			       size_t count, loff_t *pos)
 {
 	struct seq_file *m = file->private_data;
 	struct lu_client_fld *fld = m->private;
