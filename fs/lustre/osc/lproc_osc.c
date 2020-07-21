@@ -248,7 +248,7 @@ static ssize_t osc_cached_mb_seq_write(struct file *file,
 	return count;
 }
 
-LPROC_SEQ_FOPS(osc_cached_mb);
+LDEBUGFS_SEQ_FOPS(osc_cached_mb);
 
 static ssize_t cur_dirty_bytes_show(struct kobject *kobj,
 				    struct attribute *attr,
@@ -448,7 +448,7 @@ static ssize_t osc_checksum_type_seq_write(struct file *file,
 	}
 	return rc;
 }
-LPROC_SEQ_FOPS(osc_checksum_type);
+LDEBUGFS_SEQ_FOPS(osc_checksum_type);
 
 static ssize_t resend_count_show(struct kobject *kobj,
 				 struct attribute *attr,
@@ -606,7 +606,7 @@ static int osc_unstable_stats_seq_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-LPROC_SEQ_FOPS_RO(osc_unstable_stats);
+LDEBUGFS_SEQ_FOPS_RO(osc_unstable_stats);
 
 static ssize_t idle_timeout_show(struct kobject *kobj, struct attribute *attr,
 				 char *buf)
@@ -729,13 +729,13 @@ static ssize_t grant_shrink_store(struct kobject *kobj, struct attribute *attr,
 }
 LUSTRE_RW_ATTR(grant_shrink);
 
-LPROC_SEQ_FOPS_RO_TYPE(osc, connect_flags);
-LPROC_SEQ_FOPS_RO_TYPE(osc, server_uuid);
-LPROC_SEQ_FOPS_RO_TYPE(osc, timeouts);
-LPROC_SEQ_FOPS_RO_TYPE(osc, state);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(osc, connect_flags);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(osc, server_uuid);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(osc, timeouts);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(osc, state);
 
-LPROC_SEQ_FOPS_RW_TYPE(osc, import);
-LPROC_SEQ_FOPS_RW_TYPE(osc, pinger_recov);
+LDEBUGFS_SEQ_FOPS_RW_TYPE(osc, import);
+LDEBUGFS_SEQ_FOPS_RW_TYPE(osc, pinger_recov);
 
 static struct ldebugfs_vars ldebugfs_osc_obd_vars[] = {
 	{ .name	=	"connect_flags",
@@ -876,7 +876,7 @@ static ssize_t osc_rpc_stats_seq_write(struct file *file,
 	return len;
 }
 
-LPROC_SEQ_FOPS(osc_rpc_stats);
+LDEBUGFS_SEQ_FOPS(osc_rpc_stats);
 
 static int osc_stats_seq_show(struct seq_file *seq, void *v)
 {
@@ -909,7 +909,7 @@ static ssize_t osc_stats_seq_write(struct file *file,
 	return len;
 }
 
-LPROC_SEQ_FOPS(osc_stats);
+LDEBUGFS_SEQ_FOPS(osc_stats);
 
 void lproc_osc_attach_seqstat(struct obd_device *obd)
 {

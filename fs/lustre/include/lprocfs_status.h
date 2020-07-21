@@ -527,7 +527,7 @@ static const struct file_operations name##_fops = {			\
 	{								\
 		if (!m->private)					\
 			return -ENODEV;					\
-		return lprocfs_##type##_seq_show(m, m->private);	\
+		return lprocfs_rd_##type(m, m->private);		\
 	}								\
 	LDEBUGFS_SEQ_FOPS_RO(name##_##type)
 
@@ -536,7 +536,7 @@ static const struct file_operations name##_fops = {			\
 	{								\
 		if (!m->private)					\
 			return -ENODEV;					\
-		return lprocfs_##type##_seq_show(m, m->private);	\
+		return lprocfs_rd_##type(m, m->private);		\
 	}								\
 	static ssize_t name##_##type##_seq_write(struct file *file,	\
 			const char __user *buffer, size_t count,	\
@@ -546,8 +546,8 @@ static const struct file_operations name##_fops = {			\
 									\
 		if (!seq->private)					\
 			return -ENODEV;					\
-		return ldebugfs_##type##_seq_write(file, buffer, count,	\
-						   seq->private);	\
+		return lprocfs_wr_##type(file, buffer, count,		\
+					 seq->private);			\
 	}								\
 	LDEBUGFS_SEQ_FOPS(name##_##type)
 
@@ -556,8 +556,8 @@ static const struct file_operations name##_fops = {			\
 			const char __user *buffer, size_t count,	\
 			loff_t *off)					\
 	{								\
-		return ldebugfs_##type##_seq_write(file, buffer, count,	\
-						   off);		\
+		return lprocfs_wr_##type(file, buffer, count,		\
+					 off);				\
 	}								\
 	static int name##_##type##_open(struct inode *inode,		\
 					struct file *file)		\
@@ -567,75 +567,6 @@ static const struct file_operations name##_fops = {			\
 	static const struct file_operations name##_##type##_fops = {	\
 		.open	 = name##_##type##_open,			\
 		.write	 = name##_##type##_write,			\
-		.release = single_release,				\
-	}
-
-/* write the name##_seq_show function, call LPROC_SEQ_FOPS_RO for read-only
- * proc entries; otherwise, you will define name##_seq_write function also for
- * a read-write proc entry, and then call LPROC_SEQ_SEQ instead. Finally,
- * call ldebugfs_obd_seq_create(obd, filename, 0444, &name#_fops, data);
- */
-#define __LPROC_SEQ_FOPS(name, custom_seq_write)			\
-static int name##_single_open(struct inode *inode, struct file *file)	\
-{									\
-	return single_open(file, name##_seq_show, inode->i_private);	\
-}									\
-static const struct file_operations name##_fops = {			\
-	.owner   = THIS_MODULE,						\
-	.open    = name##_single_open,					\
-	.read    = seq_read,						\
-	.write   = custom_seq_write,					\
-	.llseek  = seq_lseek,						\
-	.release = single_release,					\
-}
-
-#define LPROC_SEQ_FOPS_RO(name)	 __LPROC_SEQ_FOPS(name, NULL)
-#define LPROC_SEQ_FOPS(name)	    __LPROC_SEQ_FOPS(name, name##_seq_write)
-
-#define LPROC_SEQ_FOPS_RO_TYPE(name, type)				\
-	static int name##_##type##_seq_show(struct seq_file *m, void *v)\
-	{								\
-		if (!m->private)					\
-			return -ENODEV;					\
-		return lprocfs_rd_##type(m, m->private);		\
-	}								\
-	LPROC_SEQ_FOPS_RO(name##_##type)
-
-#define LPROC_SEQ_FOPS_RW_TYPE(name, type)				\
-	static int name##_##type##_seq_show(struct seq_file *m, void *v)\
-	{								\
-		if (!m->private)					\
-			return -ENODEV;					\
-		return lprocfs_rd_##type(m, m->private);		\
-	}								\
-	static ssize_t name##_##type##_seq_write(struct file *file,	\
-			const char __user *buffer, size_t count,	\
-						loff_t *off)		\
-	{								\
-		struct seq_file *seq = file->private_data;		\
-									\
-		if (!seq->private)					\
-			return -ENODEV;					\
-		return lprocfs_wr_##type(file, buffer,			\
-					 count, seq->private);		\
-	}								\
-	LPROC_SEQ_FOPS(name##_##type)
-
-#define LPROC_SEQ_FOPS_WR_ONLY(name, type)				\
-	static ssize_t name##_##type##_write(struct file *file,		\
-			const char __user *buffer, size_t count,	\
-						loff_t *off)		\
-	{								\
-		return lprocfs_wr_##type(file, buffer, count, off);	\
-	}								\
-	static int name##_##type##_open(struct inode *inode,		\
-					struct file *file)		\
-	{								\
-		return single_open(file, NULL, inode->i_private);	\
-	}								\
-	static const struct file_operations name##_##type##_fops = {	\
-		.open	= name##_##type##_open,				\
-		.write	= name##_##type##_write,			\
 		.release = single_release,				\
 	}
 

@@ -37,20 +37,20 @@
 #include <lprocfs_status.h>
 #include "mgc_internal.h"
 
-LPROC_SEQ_FOPS_RO_TYPE(mgc, connect_flags);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(mgc, connect_flags);
 
-LPROC_SEQ_FOPS_RO_TYPE(mgc, server_uuid);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(mgc, server_uuid);
 
-LPROC_SEQ_FOPS_RO_TYPE(mgc, import);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(mgc, import);
 
-LPROC_SEQ_FOPS_RO_TYPE(mgc, state);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(mgc, state);
 
 static int mgc_ir_state_seq_show(struct seq_file *m, void *v)
 {
 	return lprocfs_mgc_rd_ir_state(m, m->private);
 }
 
-LPROC_SEQ_FOPS_RO(mgc_ir_state);
+LDEBUGFS_SEQ_FOPS_RO(mgc_ir_state);
 
 struct ldebugfs_vars ldebugfs_mgc_obd_vars[] = {
 	{ .name =	"connect_flags",

@@ -79,7 +79,7 @@ lprocfs_wr_dump_ns(struct file *file, const char __user *buffer,
 	return count;
 }
 
-LPROC_SEQ_FOPS_WR_ONLY(ldlm, dump_ns);
+LDEBUGFS_FOPS_WR_ONLY(ldlm, dump_ns);
 
 static int ldlm_rw_uint_seq_show(struct seq_file *m, void *v)
 {
@@ -99,7 +99,7 @@ ldlm_rw_uint_seq_write(struct file *file, const char __user *buffer,
 				    (unsigned int *)seq->private);
 }
 
-LPROC_SEQ_FOPS(ldlm_rw_uint);
+LDEBUGFS_SEQ_FOPS(ldlm_rw_uint);
 
 static struct ldebugfs_vars ldlm_debugfs_list[] = {
 	{ "dump_namespaces", &ldlm_dump_ns_fops, NULL, 0222 },

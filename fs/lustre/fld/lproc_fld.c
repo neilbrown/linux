@@ -130,9 +130,9 @@ lprocfs_wr_cache_flush(struct file *file, const char __user *buffer,
 	return count;
 }
 
-LPROC_SEQ_FOPS_RO(fld_debugfs_targets);
-LPROC_SEQ_FOPS(fld_debugfs_hash);
-LPROC_SEQ_FOPS_WR_ONLY(fld, cache_flush);
+LDEBUGFS_SEQ_FOPS_RO(fld_debugfs_targets);
+LDEBUGFS_SEQ_FOPS(fld_debugfs_hash);
+LDEBUGFS_FOPS_WR_ONLY(fld, cache_flush);
 
 struct ldebugfs_vars fld_client_debugfs_list[] = {
 	{ .name =	"targets",

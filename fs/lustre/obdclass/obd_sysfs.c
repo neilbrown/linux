@@ -448,7 +448,7 @@ health_check_seq_show(struct seq_file *m, void *unused)
 	return 0;
 }
 
-LPROC_SEQ_FOPS_RO(health_check);
+LDEBUGFS_SEQ_FOPS_RO(health_check);
 
 struct kset *lustre_kset;
 EXPORT_SYMBOL_GPL(lustre_kset);

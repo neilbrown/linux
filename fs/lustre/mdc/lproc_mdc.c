@@ -90,7 +90,7 @@ static ssize_t mdc_max_dirty_mb_seq_write(struct file *file,
 
 	return count;
 }
-LPROC_SEQ_FOPS(mdc_max_dirty_mb);
+LDEBUGFS_SEQ_FOPS(mdc_max_dirty_mb);
 
 static int mdc_cached_mb_seq_show(struct seq_file *m, void *v)
 {
@@ -150,7 +150,7 @@ mdc_cached_mb_seq_write(struct file *file, const char __user *buffer,
 
 	return count;
 }
-LPROC_SEQ_FOPS(mdc_cached_mb);
+LDEBUGFS_SEQ_FOPS(mdc_cached_mb);
 
 static int mdc_contention_seconds_seq_show(struct seq_file *m, void *v)
 {
@@ -189,7 +189,7 @@ static ssize_t mdc_contention_seconds_seq_write(struct file *file,
 
 	return count;
 }
-LPROC_SEQ_FOPS(mdc_contention_seconds);
+LDEBUGFS_SEQ_FOPS(mdc_contention_seconds);
 
 static int mdc_unstable_stats_seq_show(struct seq_file *m, void *v)
 {
@@ -205,7 +205,7 @@ static int mdc_unstable_stats_seq_show(struct seq_file *m, void *v)
 		   "unstable_mb:              %10d\n", pages, mb);
 	return 0;
 }
-LPROC_SEQ_FOPS_RO(mdc_unstable_stats);
+LDEBUGFS_SEQ_FOPS_RO(mdc_unstable_stats);
 
 static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
 			   char *buf)
@@ -433,7 +433,7 @@ static int mdc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 
 	return 0;
 }
-LPROC_SEQ_FOPS(mdc_rpc_stats);
+LDEBUGFS_SEQ_FOPS(mdc_rpc_stats);
 
 static int mdc_stats_seq_show(struct seq_file *seq, void *v)
 {
@@ -465,7 +465,7 @@ static ssize_t mdc_stats_seq_write(struct file *file,
 	memset(stats, 0, sizeof(*stats));
 	return len;
 }
-LPROC_SEQ_FOPS(mdc_stats);
+LDEBUGFS_SEQ_FOPS(mdc_stats);
 
 static int mdc_dom_min_repsize_seq_show(struct seq_file *m, void *v)
 {
@@ -495,15 +495,15 @@ static ssize_t mdc_dom_min_repsize_seq_write(struct file *file,
 	obd->u.cli.cl_dom_min_inline_repsize = val;
 	return count;
 }
-LPROC_SEQ_FOPS(mdc_dom_min_repsize);
+LDEBUGFS_SEQ_FOPS(mdc_dom_min_repsize);
 
-LPROC_SEQ_FOPS_RO_TYPE(mdc, connect_flags);
-LPROC_SEQ_FOPS_RO_TYPE(mdc, server_uuid);
-LPROC_SEQ_FOPS_RO_TYPE(mdc, timeouts);
-LPROC_SEQ_FOPS_RO_TYPE(mdc, state);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(mdc, connect_flags);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(mdc, server_uuid);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(mdc, timeouts);
+LDEBUGFS_SEQ_FOPS_RO_TYPE(mdc, state);
 
-LPROC_SEQ_FOPS_RW_TYPE(mdc, import);
-LPROC_SEQ_FOPS_RW_TYPE(mdc, pinger_recov);
+LDEBUGFS_SEQ_FOPS_RW_TYPE(mdc, import);
+LDEBUGFS_SEQ_FOPS_RW_TYPE(mdc, pinger_recov);
 
 static struct ldebugfs_vars ldebugfs_mdc_obd_vars[] = {
 	{ .name	=	"connect_flags",
