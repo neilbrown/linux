@@ -2008,17 +2008,9 @@ ssize_t max_pages_per_rpc_store(struct kobject *kobj, struct attribute *attr,
 	struct obd_import *imp;
 	struct obd_connect_data *ocd;
 	int chunk_mask, rc;
-	char kernbuf[22];
 	u64 val;
 
-	if (count > sizeof(kernbuf) - 1)
-		return -EINVAL;
-	if (copy_from_user(kernbuf, buffer, count))
-		return -EFAULT;
-
-	kernbuf[count] = '\0';
-
-	rc = sysfs_memparse(kernbuf, count, &val, "B");
+	rc = sysfs_memparse(buffer, count, &val, "B");
 	if (rc)
 		return rc;
 
