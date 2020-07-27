@@ -38,6 +38,7 @@
 
 #define DEBUG_SUBSYSTEM S_LOV
 
+#include <linux/sched/mm.h>
 #include "lov_cl_internal.h"
 
 static inline struct lov_device *lov_object_dev(struct lov_object *obj)
@@ -206,6 +207,7 @@ static int lov_init_raid0(const struct lu_env *env, struct lov_device *dev,
 	struct cl_object_conf *subconf = &lti->lti_stripe_conf;
 	struct lu_fid *ofid = &lti->lti_fid;
 	struct cl_object *stripe;
+	unsigned int flags;
 	int result;
 	int psz, sz;
 	int i;
@@ -213,8 +215,11 @@ static int lov_init_raid0(const struct lu_env *env, struct lov_device *dev,
 	spin_lock_init(&r0->lo_sub_lock);
 	r0->lo_nr = lse->lsme_stripe_count;
 
-	r0->lo_sub = kcalloc(r0->lo_nr, sizeof(r0->lo_sub[0]),
-			     GFP_KERNEL);
+	flags = memalloc_nofs_save();
+	r0->lo_sub = kvmalloc_array(r0->lo_nr, sizeof(r0->lo_sub[0]),
+				    GFP_KERNEL | __GFP_ZERO);
+	memalloc_nofs_restore(flags);
+
 	if (!r0->lo_sub)
 		return -ENOMEM;
 
@@ -334,10 +339,7 @@ static void lov_fini_raid0(const struct lu_env *env,
 {
 	struct lov_layout_raid0 *r0 = &lle->lle_raid0;
 
-	if (r0->lo_sub) {
-		kvfree(r0->lo_sub);
-		r0->lo_sub = NULL;
-	}
+	kvfree(r0->lo_sub);
 }
 
 static int lov_print_raid0(const struct lu_env *env, void *cookie,

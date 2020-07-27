@@ -34,6 +34,7 @@
 #define DEBUG_SUBSYSTEM S_ECHO
 
 #include <linux/highmem.h>
+#include <linux/sched/mm.h>
 #include <obd.h>
 #include <obd_support.h>
 #include <obd_class.h>
@@ -1369,6 +1370,7 @@ static int echo_client_prep_commit(const struct lu_env *env,
 	struct niobuf_remote rnb;
 	u64 off;
 	u64 npages, tot_pages;
+	unsigned int flags;
 	int i, ret = 0, brw_flags = 0;
 
 	if (count <= 0 || (count & (~PAGE_MASK)) != 0)
@@ -1377,8 +1379,11 @@ static int echo_client_prep_commit(const struct lu_env *env,
 	npages = batch >> PAGE_SHIFT;
 	tot_pages = count >> PAGE_SHIFT;
 
+	flags = memalloc_nofs_save();
 	lnb = kvmalloc_array(npages, sizeof(*lnb),
-			     GFP_NOFS | __GFP_ZERO);
+			     GFP_KERNEL | __GFP_ZERO);
+	memalloc_nofs_restore(flags);
+
 	if (!lnb) {
 		ret = -ENOMEM;
 		goto out;
