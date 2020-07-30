@@ -48,7 +48,6 @@ struct llog_process_info {
 };
 
 struct llog_thread_info {
-	struct lu_attr		lgi_attr;
 	struct lu_fid		lgi_fid;
 	struct lu_buf		lgi_buf;
 	loff_t			lgi_off;

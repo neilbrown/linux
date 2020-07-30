@@ -330,7 +330,6 @@ static inline enum obd_option exp_flags_from_obd(struct obd_device *obd)
 
 
 struct inode;
-struct lu_attr;
 struct obdo;
 
 void obdo_to_ioobj(const struct obdo *oa, struct obd_ioobj *ioobj);
