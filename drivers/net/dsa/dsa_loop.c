@@ -61,7 +61,8 @@ struct dsa_loop_priv {
 static struct phy_device *phydevs[PHY_MAX_ADDR];
 
 static enum dsa_tag_protocol dsa_loop_get_protocol(struct dsa_switch *ds,
-						   int port)
+						   int port,
+						   enum dsa_tag_protocol mp)
 {
 	dev_dbg(ds->dev, "%s: port: %d\n", __func__, port);
 
@@ -286,9 +287,12 @@ static int dsa_loop_drv_probe(struct mdio_device *mdiodev)
 	dev_info(&mdiodev->dev, "%s: 0x%0x\n",
 		 pdata->name, pdata->enabled_ports);
 
-	ds = dsa_switch_alloc(&mdiodev->dev, DSA_MAX_PORTS);
+	ds = devm_kzalloc(&mdiodev->dev, sizeof(*ds), GFP_KERNEL);
 	if (!ds)
 		return -ENOMEM;
+
+	ds->dev = &mdiodev->dev;
+	ds->num_ports = DSA_MAX_PORTS;
 
 	ps = devm_kzalloc(&mdiodev->dev, sizeof(*ps), GFP_KERNEL);
 	if (!ps)
@@ -356,6 +360,7 @@ static void __exit dsa_loop_exit(void)
 }
 module_exit(dsa_loop_exit);
 
+MODULE_SOFTDEP("pre: dsa_loop_bdinfo");
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Florian Fainelli");
 MODULE_DESCRIPTION("DSA loopback driver");

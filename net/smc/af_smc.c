@@ -25,6 +25,7 @@
 #include <linux/in.h>
 #include <linux/sched/signal.h>
 #include <linux/if_vlan.h>
+#include <linux/rcupdate_wait.h>
 
 #include <net/sock.h>
 #include <net/tcp.h>
@@ -123,6 +124,12 @@ struct proto smc_proto6 = {
 };
 EXPORT_SYMBOL_GPL(smc_proto6);
 
+static void smc_restore_fallback_changes(struct smc_sock *smc)
+{
+	smc->clcsock->file->private_data = smc->sk.sk_socket;
+	smc->clcsock->file = NULL;
+}
+
 static int __smc_release(struct smc_sock *smc)
 {
 	struct sock *sk = &smc->sk;
@@ -141,6 +148,7 @@ static int __smc_release(struct smc_sock *smc)
 		}
 		sk->sk_state = SMC_CLOSED;
 		sk->sk_state_change(sk);
+		smc_restore_fallback_changes(smc);
 	}
 
 	sk->sk_prot->unhash(sk);
@@ -167,6 +175,7 @@ static int smc_release(struct socket *sock)
 	if (!sk)
 		goto out;
 
+	sock_hold(sk); /* sock_put below */
 	smc = smc_sk(sk);
 
 	/* cleanup for a dangling non-blocking connect */
@@ -189,6 +198,7 @@ static int smc_release(struct socket *sock)
 	sock->sk = NULL;
 	release_sock(sk);
 
+	sock_put(sk); /* sock_hold above */
 	sock_put(sk); /* final sock_put */
 out:
 	return rc;
@@ -460,6 +470,8 @@ static void smc_switch_to_fallback(struct smc_sock *smc)
 	if (smc->sk.sk_socket && smc->sk.sk_socket->file) {
 		smc->clcsock->file = smc->sk.sk_socket->file;
 		smc->clcsock->file->private_data = smc->clcsock;
+		smc->clcsock->wq.fasync_list =
+			smc->sk.sk_socket->wq.fasync_list;
 	}
 }
 
@@ -500,15 +512,18 @@ static int smc_connect_decline_fallback(struct smc_sock *smc, int reason_code)
 static int smc_connect_abort(struct smc_sock *smc, int reason_code,
 			     int local_contact)
 {
+	bool is_smcd = smc->conn.lgr->is_smcd;
+
 	if (local_contact == SMC_FIRST_CONTACT)
-		smc_lgr_forget(smc->conn.lgr);
-	if (smc->conn.lgr->is_smcd)
+		smc_lgr_cleanup_early(&smc->conn);
+	else
+		smc_conn_free(&smc->conn);
+	if (is_smcd)
 		/* there is only one lgr role for SMC-D; use server lock */
 		mutex_unlock(&smc_server_lgr_pending);
 	else
 		mutex_unlock(&smc_client_lgr_pending);
 
-	smc_conn_free(&smc->conn);
 	smc->connect_nonblock = 0;
 	return reason_code;
 }
@@ -700,8 +715,6 @@ static int __smc_connect(struct smc_sock *smc)
 	int smc_type;
 	int rc = 0;
 
-	sock_hold(&smc->sk); /* sock put in passive closing */
-
 	if (smc->use_fallback)
 		return smc_connect_fallback(smc, smc->fallback_rsn);
 
@@ -791,6 +804,7 @@ static void smc_connect_work(struct work_struct *work)
 			smc->sk.sk_err = EPIPE;
 		else if (signal_pending(current))
 			smc->sk.sk_err = -sock_intr_errno(timeo);
+		sock_put(&smc->sk); /* passive closing */
 		goto out;
 	}
 
@@ -845,6 +859,10 @@ static int smc_connect(struct socket *sock, struct sockaddr *addr,
 	}
 	rc = kernel_connect(smc->clcsock, addr, alen, flags);
 	if (rc && rc != -EINPROGRESS)
+		goto out;
+
+	sock_hold(&smc->sk); /* sock put in passive closing */
+	if (smc->use_fallback)
 		goto out;
 	if (flags & O_NONBLOCK) {
 		if (schedule_work(&smc->connect_work))
@@ -970,12 +988,14 @@ void smc_close_non_accepted(struct sock *sk)
 {
 	struct smc_sock *smc = smc_sk(sk);
 
+	sock_hold(sk); /* sock_put below */
 	lock_sock(sk);
 	if (!sk->sk_lingertime)
 		/* wait for peer closing */
 		sk->sk_lingertime = SMC_MAX_STREAM_WAIT_TIMEOUT;
 	__smc_release(smc);
 	release_sock(sk);
+	sock_put(sk); /* sock_hold above */
 	sock_put(sk); /* final sock_put */
 }
 
@@ -1074,7 +1094,6 @@ static void smc_listen_out_err(struct smc_sock *new_smc)
 	if (newsmcsk->sk_state == SMC_INIT)
 		sock_put(&new_smc->sk); /* passive closing */
 	newsmcsk->sk_state = SMC_CLOSED;
-	smc_conn_free(&new_smc->conn);
 
 	smc_listen_out(new_smc);
 }
@@ -1085,12 +1104,13 @@ static void smc_listen_decline(struct smc_sock *new_smc, int reason_code,
 {
 	/* RDMA setup failed, switch back to TCP */
 	if (local_contact == SMC_FIRST_CONTACT)
-		smc_lgr_forget(new_smc->conn.lgr);
+		smc_lgr_cleanup_early(&new_smc->conn);
+	else
+		smc_conn_free(&new_smc->conn);
 	if (reason_code < 0) { /* error, no fallback possible */
 		smc_listen_out_err(new_smc);
 		return;
 	}
-	smc_conn_free(&new_smc->conn);
 	smc_switch_to_fallback(new_smc);
 	new_smc->fallback_rsn = reason_code;
 	if (reason_code && reason_code != SMC_CLC_DECL_PEERDECL) {
@@ -1153,16 +1173,18 @@ static int smc_listen_ism_init(struct smc_sock *new_smc,
 			    new_smc->conn.lgr->vlan_id,
 			    new_smc->conn.lgr->smcd)) {
 		if (ini->cln_first_contact == SMC_FIRST_CONTACT)
-			smc_lgr_forget(new_smc->conn.lgr);
-		smc_conn_free(&new_smc->conn);
+			smc_lgr_cleanup_early(&new_smc->conn);
+		else
+			smc_conn_free(&new_smc->conn);
 		return SMC_CLC_DECL_SMCDNOTALK;
 	}
 
 	/* Create send and receive buffers */
 	if (smc_buf_create(new_smc, true)) {
 		if (ini->cln_first_contact == SMC_FIRST_CONTACT)
-			smc_lgr_forget(new_smc->conn.lgr);
-		smc_conn_free(&new_smc->conn);
+			smc_lgr_cleanup_early(&new_smc->conn);
+		else
+			smc_conn_free(&new_smc->conn);
 		return SMC_CLC_DECL_MEM;
 	}
 
@@ -1291,8 +1313,8 @@ static void smc_listen_work(struct work_struct *work)
 	/* check if RDMA is available */
 	if (!ism_supported) { /* SMC_TYPE_R or SMC_TYPE_B */
 		/* prepare RDMA check */
-		memset(&ini, 0, sizeof(ini));
 		ini.is_smcd = false;
+		ini.ism_dev = NULL;
 		ini.ib_lcl = &pclc->lcl;
 		rc = smc_find_rdma_device(new_smc, &ini);
 		if (rc) {
@@ -1708,8 +1730,6 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 		sk->sk_err = smc->clcsock->sk->sk_err;
 		sk->sk_error_report(sk);
 	}
-	if (rc)
-		return rc;
 
 	if (optlen < sizeof(int))
 		return -EINVAL;
@@ -1717,6 +1737,8 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 		return -EFAULT;
 
 	lock_sock(sk);
+	if (rc || smc->use_fallback)
+		goto out;
 	switch (optname) {
 	case TCP_ULP:
 	case TCP_FASTOPEN:
@@ -1724,19 +1746,18 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 	case TCP_FASTOPEN_KEY:
 	case TCP_FASTOPEN_NO_COOKIE:
 		/* option not supported by SMC */
-		if (sk->sk_state == SMC_INIT) {
+		if (sk->sk_state == SMC_INIT && !smc->connect_nonblock) {
 			smc_switch_to_fallback(smc);
 			smc->fallback_rsn = SMC_CLC_DECL_OPTUNSUPP;
 		} else {
-			if (!smc->use_fallback)
-				rc = -EINVAL;
+			rc = -EINVAL;
 		}
 		break;
 	case TCP_NODELAY:
 		if (sk->sk_state != SMC_INIT &&
 		    sk->sk_state != SMC_LISTEN &&
 		    sk->sk_state != SMC_CLOSED) {
-			if (val && !smc->use_fallback)
+			if (val)
 				mod_delayed_work(system_wq, &smc->conn.tx_work,
 						 0);
 		}
@@ -1745,7 +1766,7 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 		if (sk->sk_state != SMC_INIT &&
 		    sk->sk_state != SMC_LISTEN &&
 		    sk->sk_state != SMC_CLOSED) {
-			if (!val && !smc->use_fallback)
+			if (!val)
 				mod_delayed_work(system_wq, &smc->conn.tx_work,
 						 0);
 		}
@@ -1756,6 +1777,7 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 	default:
 		break;
 	}
+out:
 	release_sock(sk);
 
 	return rc;
@@ -2027,22 +2049,28 @@ static int __init smc_init(void)
 	if (rc)
 		goto out_pernet_subsys;
 
+	rc = smc_core_init();
+	if (rc) {
+		pr_err("%s: smc_core_init fails with %d\n", __func__, rc);
+		goto out_pnet;
+	}
+
 	rc = smc_llc_init();
 	if (rc) {
 		pr_err("%s: smc_llc_init fails with %d\n", __func__, rc);
-		goto out_pnet;
+		goto out_core;
 	}
 
 	rc = smc_cdc_init();
 	if (rc) {
 		pr_err("%s: smc_cdc_init fails with %d\n", __func__, rc);
-		goto out_pnet;
+		goto out_core;
 	}
 
 	rc = proto_register(&smc_proto, 1);
 	if (rc) {
 		pr_err("%s: proto_register(v4) fails with %d\n", __func__, rc);
-		goto out_pnet;
+		goto out_core;
 	}
 
 	rc = proto_register(&smc_proto6, 1);
@@ -2074,6 +2102,8 @@ out_proto6:
 	proto_unregister(&smc_proto6);
 out_proto:
 	proto_unregister(&smc_proto);
+out_core:
+	smc_core_exit();
 out_pnet:
 	smc_pnet_exit();
 out_pernet_subsys:
@@ -2084,14 +2114,15 @@ out_pernet_subsys:
 
 static void __exit smc_exit(void)
 {
-	smc_core_exit();
 	static_branch_disable(&tcp_have_smc);
-	smc_ib_unregister_client();
 	sock_unregister(PF_SMC);
+	smc_core_exit();
+	smc_ib_unregister_client();
 	proto_unregister(&smc_proto6);
 	proto_unregister(&smc_proto);
 	smc_pnet_exit();
 	unregister_pernet_subsys(&smc_net_ops);
+	rcu_barrier();
 }
 
 module_init(smc_init);

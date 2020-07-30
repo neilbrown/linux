@@ -19,7 +19,6 @@ x86-specific Documentation
    tlb
    mtrr
    pat
-   intel_mpx
    intel-iommu
    intel_txt
    amd-memory-encryption
@@ -27,6 +26,7 @@ x86-specific Documentation
    mds
    microcode
    resctrl_ui
+   tsx_async_abort
    usb-legacy-support
    i386/index
    x86_64/index
