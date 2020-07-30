@@ -40,6 +40,7 @@
 #define DEBUG_SUBSYSTEM S_LOV
 
 #include <linux/uaccess.h>
+#include <linux/sched/mm.h>
 #include <lustre_net.h>
 #include <lustre_swab.h>
 #include <obd.h>
@@ -358,6 +359,7 @@ int lov_getstripe(const struct lu_env *env, struct lov_object *obj,
 	struct lov_mds_md *lmmk, *lmm;
 	struct lov_foreign_md *lfm;
 	struct lov_user_md_v1 lum;
+	unsigned long flags;
 	ssize_t lmm_size;
 	static bool printed;
 	size_t lmmk_size, lum_size = 0;
@@ -380,7 +382,9 @@ int lov_getstripe(const struct lu_env *env, struct lov_object *obj,
 	}
 
 	lmmk_size = lov_comp_md_size(lsm);
+	flags = memalloc_nofs_save();
 	lmmk = kvzalloc(lmmk_size, GFP_KERNEL);
+	memalloc_nofs_restore(flags);
 	if (!lmmk) {
 		rc = -ENOMEM;
 		goto out;

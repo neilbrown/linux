@@ -37,6 +37,7 @@
 
 #define DEBUG_SUBSYSTEM S_LOV
 
+#include <linux/sched/mm.h>
 #include <asm/div64.h>
 #include <linux/sort.h>
 
@@ -169,6 +170,7 @@ lsme_unpack(struct lov_obd *lov, struct lov_mds_md *lmm, size_t buf_size,
 	loff_t lov_bytes;
 	size_t lsme_size;
 	unsigned int i;
+	unsigned long flags;
 	u32 pattern;
 	u32 magic;
 	int rc;
@@ -198,7 +200,9 @@ lsme_unpack(struct lov_obd *lov, struct lov_mds_md *lmm, size_t buf_size,
 		return ERR_PTR(rc);
 
 	lsme_size = offsetof(typeof(*lsme), lsme_oinfo[stripe_count]);
+	flags = memalloc_nofs_save();
 	lsme = kvzalloc(lsme_size, GFP_KERNEL);
+	memalloc_nofs_restore(flags);
 	if (!lsme)
 		return ERR_PTR(-ENOMEM);
 
@@ -235,7 +239,7 @@ lsme_unpack(struct lov_obd *lov, struct lov_mds_md *lmm, size_t buf_size,
 		struct lov_tgt_desc *ltd;
 		struct lov_oinfo *loi;
 
-		loi = kmem_cache_zalloc(lov_oinfo_slab, GFP_KERNEL);
+		loi = kmem_cache_zalloc(lov_oinfo_slab, GFP_NOFS);
 		if (!loi) {
 			rc = -ENOMEM;
 			goto out_lsme;
@@ -327,7 +331,7 @@ lsm_unpackmd_v1v3(struct lov_obd *lov,
 	lsme->lsme_extent.e_end = LUSTRE_EOF;
 
 	lsm_size = offsetof(typeof(*lsm), lsm_entries[1]);
-	lsm = kzalloc(lsm_size, GFP_KERNEL);
+	lsm = kzalloc(lsm_size, GFP_NOFS);
 	if (!lsm) {
 		lsme_free(lsme);
 		return ERR_PTR(-ENOMEM);
@@ -458,7 +462,7 @@ lsm_unpackmd_comp_md_v1(struct lov_obd *lov, void *buf, size_t buf_size)
 	entry_count = le16_to_cpu(lcm->lcm_entry_count);
 
 	lsm_size = offsetof(typeof(*lsm), lsm_entries[entry_count]);
-	lsm = kzalloc(lsm_size, GFP_KERNEL);
+	lsm = kzalloc(lsm_size, GFP_NOFS);
 	if (!lsm)
 		return ERR_PTR(-ENOMEM);
 

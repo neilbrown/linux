@@ -261,7 +261,7 @@ int lov_ost_pool_extend(struct lu_tgt_pool *op, unsigned int min_count)
 
 	new_count = max_t(u32, min_count,
 			  2 * op->op_size / sizeof(op->op_array[0]));
-	new = kcalloc(new_count, sizeof(op->op_array[0]), GFP_KERNEL);
+	new = kcalloc(new_count, sizeof(op->op_array[0]), GFP_NOFS);
 	if (!new)
 		return -ENOMEM;
 
