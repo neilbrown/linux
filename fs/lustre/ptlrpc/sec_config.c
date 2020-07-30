@@ -145,7 +145,7 @@ static void get_default_flavor(struct sptlrpc_flavor *sf)
 
 static void sptlrpc_rule_init(struct sptlrpc_rule *rule)
 {
-	rule->sr_netid = LNET_NIDNET(LNET_NID_ANY);
+	rule->sr_netid = LNET_NET_ANY;
 	rule->sr_from = LUSTRE_SP_ANY;
 	rule->sr_to = LUSTRE_SP_ANY;
 	rule->sr_padding = 0;
@@ -177,7 +177,7 @@ static int sptlrpc_parse_rule(char *param, struct sptlrpc_rule *rule)
 	/* 1.1 network */
 	if (strcmp(param, "default")) {
 		rule->sr_netid = libcfs_str2net(param);
-		if (rule->sr_netid == LNET_NIDNET(LNET_NID_ANY)) {
+		if (rule->sr_netid == LNET_NET_ANY) {
 			CERROR("invalid network name: %s\n", param);
 			return -EINVAL;
 		}
@@ -263,7 +263,7 @@ static inline int rule_spec_dir(struct sptlrpc_rule *rule)
 
 static inline int rule_spec_net(struct sptlrpc_rule *rule)
 {
-	return (rule->sr_netid != LNET_NIDNET(LNET_NID_ANY));
+	return (rule->sr_netid != LNET_NET_ANY);
 }
 
 static inline int rule_match_dir(struct sptlrpc_rule *r1,
@@ -384,8 +384,8 @@ static int sptlrpc_rule_set_choose(struct sptlrpc_rule_set *rset,
 	for (n = 0; n < rset->srs_nrule; n++) {
 		r = &rset->srs_rules[n];
 
-		if (LNET_NIDNET(nid) != LNET_NIDNET(LNET_NID_ANY) &&
-		    r->sr_netid != LNET_NIDNET(LNET_NID_ANY) &&
+		if (LNET_NIDNET(nid) != LNET_NET_ANY &&
+		    r->sr_netid != LNET_NET_ANY &&
 		    LNET_NIDNET(nid) != r->sr_netid)
 			continue;
 

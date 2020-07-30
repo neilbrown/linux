@@ -679,7 +679,7 @@ lnet_parse_networks(struct list_head *netlist, const char *networks,
 		 * At this point the name is properly terminated.
 		 */
 		net_id = libcfs_str2net(name);
-		if (net_id == LNET_NIDNET(LNET_NID_ANY)) {
+		if (net_id == LNET_NET_ANY) {
 			LCONSOLE_ERROR_MSG(0x113,
 					"Unrecognised network type\n");
 			str = name;
@@ -1169,7 +1169,7 @@ lnet_parse_route(char *str, int *im_a_router)
 
 			if (ntokens == 1) {
 				net = libcfs_str2net(ltb->ltb_text);
-				if (net == LNET_NIDNET(LNET_NID_ANY) ||
+				if (net == LNET_NET_ANY ||
 				    LNET_NETTYP(net) == LOLND)
 					goto token_error;
 			} else {
@@ -1197,7 +1197,7 @@ lnet_parse_route(char *str, int *im_a_router)
 
 	list_for_each_entry(ltb1, &nets, ltb_list) {
 		net = libcfs_str2net(ltb1->ltb_text);
-		LASSERT(net != LNET_NIDNET(LNET_NID_ANY));
+		LASSERT(net != LNET_NET_ANY);
 
 		list_for_each_entry(ltb2, &gateways, ltb_list) {
 			nid = libcfs_str2nid(ltb2->ltb_text);
@@ -1403,7 +1403,7 @@ lnet_splitnets(char *source, struct list_head *nets)
 			*sep++ = 0;
 
 		net = lnet_netspec2net(tb->ltb_text);
-		if (net == LNET_NIDNET(LNET_NID_ANY)) {
+		if (net == LNET_NET_ANY) {
 			lnet_syntax("ip2nets", source, offset,
 				    strlen(tb->ltb_text));
 			return -EINVAL;
