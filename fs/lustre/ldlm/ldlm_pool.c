@@ -209,13 +209,13 @@ static inline int ldlm_pool_t2gsp(unsigned int t)
  *
  * \pre ->pl_lock is locked.
  */
-static void ldlm_pool_recalc_stats(struct ldlm_pool *pl)
+static void ldlm_pool_recalc_stats(struct ldlm_pool *pl, timeout_t period)
 {
 	int grant_plan = pl->pl_grant_plan;
 	u64 slv = pl->pl_server_lock_volume;
 	int granted = atomic_read(&pl->pl_granted);
-	int grant_rate = atomic_read(&pl->pl_grant_rate);
-	int cancel_rate = atomic_read(&pl->pl_cancel_rate);
+	int grant_rate = atomic_read(&pl->pl_grant_rate) / period;
+	int cancel_rate = atomic_read(&pl->pl_cancel_rate) / period;
 
 	lprocfs_counter_add(pl->pl_stats, LDLM_POOL_SLV_STAT,
 			    slv);
@@ -254,10 +254,10 @@ static void ldlm_cli_pool_pop_slv(struct ldlm_pool *pl)
  */
 static int ldlm_cli_pool_recalc(struct ldlm_pool *pl)
 {
-	time64_t recalc_interval_sec;
+	timeout_t recalc_interval_sec;
 	int ret;
 
-	recalc_interval_sec = ktime_get_real_seconds() - pl->pl_recalc_time;
+	recalc_interval_sec = ktime_get_seconds() - pl->pl_recalc_time;
 	if (recalc_interval_sec < pl->pl_recalc_period)
 		return 0;
 
@@ -265,7 +265,7 @@ static int ldlm_cli_pool_recalc(struct ldlm_pool *pl)
 	/*
 	 * Check if we need to recalc lists now.
 	 */
-	recalc_interval_sec = ktime_get_real_seconds() - pl->pl_recalc_time;
+	recalc_interval_sec = ktime_get_seconds() - pl->pl_recalc_time;
 	if (recalc_interval_sec < pl->pl_recalc_period) {
 		spin_unlock(&pl->pl_lock);
 		return 0;
@@ -292,7 +292,7 @@ static int ldlm_cli_pool_recalc(struct ldlm_pool *pl)
 	 * Time of LRU resizing might be longer than period,
 	 * so update after LRU resizing rather than before it.
 	 */
-	pl->pl_recalc_time = ktime_get_real_seconds();
+	pl->pl_recalc_time = ktime_get_seconds();
 	lprocfs_counter_add(pl->pl_stats, LDLM_POOL_TIMING_STAT,
 			    recalc_interval_sec);
 	spin_unlock(&pl->pl_lock);
@@ -321,7 +321,9 @@ static int ldlm_cli_pool_shrink(struct ldlm_pool *pl,
 	/*
 	 * Make sure that pool knows last SLV and Limit from obd.
 	 */
+	spin_lock(&pl->pl_lock);
 	ldlm_cli_pool_pop_slv(pl);
+	spin_unlock(&pl->pl_lock);
 
 	spin_lock(&ns->ns_lock);
 	unused = ns->ns_nr_unused;
@@ -341,23 +343,24 @@ static const struct ldlm_pool_ops ldlm_cli_pool_ops = {
 /**
  * Pool recalc wrapper. Will call either client or server pool recalc callback
  * depending what pool @pl is used.
+ *
+ * Returns: time in seconds for the next recalc of this pool
  */
-static int ldlm_pool_recalc(struct ldlm_pool *pl)
+static time64_t ldlm_pool_recalc(struct ldlm_pool *pl)
 {
-	u32 recalc_interval_sec;
+	timeout_t recalc_interval_sec;
 	int count;
 
-	recalc_interval_sec = ktime_get_real_seconds() - pl->pl_recalc_time;
+	recalc_interval_sec = ktime_get_seconds() - pl->pl_recalc_time;
 	if (recalc_interval_sec > 0) {
 		spin_lock(&pl->pl_lock);
-		recalc_interval_sec = ktime_get_real_seconds() -
-				      pl->pl_recalc_time;
+		recalc_interval_sec = ktime_get_seconds() - pl->pl_recalc_time;
 
 		if (recalc_interval_sec > 0) {
 			/*
-			 * Update pool statistics every 1s.
+			 * Update pool statistics every recalc interval.
 			 */
-			ldlm_pool_recalc_stats(pl);
+			ldlm_pool_recalc_stats(pl, recalc_interval_sec);
 
 			/*
 			 * Zero out all rates and speed for the last period.
@@ -374,20 +377,7 @@ static int ldlm_pool_recalc(struct ldlm_pool *pl)
 				    count);
 	}
 
-	recalc_interval_sec = pl->pl_recalc_time - ktime_get_real_seconds() +
-			      pl->pl_recalc_period;
-	if (recalc_interval_sec <= 0) {
-		/* DEBUG: should be re-removed after LU-4536 is fixed */
-		CDEBUG(D_DLMTRACE,
-		       "%s: Negative interval(%ld), too short period(%ld)\n",
-		       pl->pl_name, (long)recalc_interval_sec,
-		       (long)pl->pl_recalc_period);
-
-		/* Prevent too frequent recalculation. */
-		recalc_interval_sec = 1;
-	}
-
-	return recalc_interval_sec;
+	return pl->pl_recalc_time + pl->pl_recalc_period;
 }
 
 /*
@@ -421,6 +411,7 @@ static int lprocfs_pool_state_seq_show(struct seq_file *m, void *unused)
 	int granted, grant_rate, cancel_rate;
 	int grant_speed, lvf;
 	struct ldlm_pool *pl = m->private;
+	timeout_t period;
 	u64 slv, clv;
 	u32 limit;
 
@@ -429,8 +420,11 @@ static int lprocfs_pool_state_seq_show(struct seq_file *m, void *unused)
 	clv = pl->pl_client_lock_volume;
 	limit = atomic_read(&pl->pl_limit);
 	granted = atomic_read(&pl->pl_granted);
-	grant_rate = atomic_read(&pl->pl_grant_rate);
-	cancel_rate = atomic_read(&pl->pl_cancel_rate);
+	period = ktime_get_seconds() - pl->pl_recalc_time;
+	if (period <= 0)
+		period = 1;
+	grant_rate = atomic_read(&pl->pl_grant_rate) / period;
+	cancel_rate = atomic_read(&pl->pl_cancel_rate) / period;
 	grant_speed = grant_rate - cancel_rate;
 	lvf = atomic_read(&pl->pl_lock_volume_factor);
 	spin_unlock(&pl->pl_lock);
@@ -439,7 +433,7 @@ static int lprocfs_pool_state_seq_show(struct seq_file *m, void *unused)
 		      "  SLV: %llu\n"
 		      "  CLV: %llu\n"
 		      "  LVF: %d\n",
-		      pl->pl_name, slv, clv, lvf);
+		      pl->pl_name, slv, clv, (lvf * 100) >> 8);
 
 	seq_printf(m, "  GR:  %d\n  CR:  %d\n  GS:  %d\n"
 		      "  G:   %d\n  L:   %d\n",
@@ -457,11 +451,15 @@ static ssize_t grant_speed_show(struct kobject *kobj, struct attribute *attr,
 	struct ldlm_pool *pl = container_of(kobj, struct ldlm_pool,
 					    pl_kobj);
 	int grant_speed;
+	timeout_t period;
 
 	spin_lock(&pl->pl_lock);
 	/* serialize with ldlm_pool_recalc */
-	grant_speed = atomic_read(&pl->pl_grant_rate) -
-			atomic_read(&pl->pl_cancel_rate);
+	period = ktime_get_seconds() - pl->pl_recalc_time;
+	if (period <= 0)
+		period = 1;
+	grant_speed = (atomic_read(&pl->pl_grant_rate) -
+		       atomic_read(&pl->pl_cancel_rate)) / period;
 	spin_unlock(&pl->pl_lock);
 	return sprintf(buf, "%d\n", grant_speed);
 }
@@ -477,6 +475,9 @@ LUSTRE_RW_ATTR(recalc_period);
 LDLM_POOL_SYSFS_READER_NOLOCK_SHOW(server_lock_volume, u64);
 LUSTRE_RO_ATTR(server_lock_volume);
 
+LDLM_POOL_SYSFS_READER_NOLOCK_SHOW(client_lock_volume, u64);
+LUSTRE_RO_ATTR(client_lock_volume);
+
 LDLM_POOL_SYSFS_READER_NOLOCK_SHOW(limit, atomic);
 LDLM_POOL_SYSFS_WRITER_NOLOCK_STORE(limit, atomic);
 LUSTRE_RW_ATTR(limit);
@@ -490,9 +491,48 @@ LUSTRE_RO_ATTR(cancel_rate);
 LDLM_POOL_SYSFS_READER_NOLOCK_SHOW(grant_rate, atomic);
 LUSTRE_RO_ATTR(grant_rate);
 
-LDLM_POOL_SYSFS_READER_NOLOCK_SHOW(lock_volume_factor, atomic);
-LDLM_POOL_SYSFS_WRITER_NOLOCK_STORE(lock_volume_factor, atomic);
+static ssize_t lock_volume_factor_show(struct kobject *kobj,
+				       struct attribute *attr,
+				       char *buf)
+{
+	struct ldlm_pool *pl = container_of(kobj, struct ldlm_pool, pl_kobj);
+	unsigned long tmp;
+
+	tmp = (atomic_read(&pl->pl_lock_volume_factor) * 100) >> 8;
+	return sprintf(buf, "%lu\n", tmp);
+}
+
+static ssize_t lock_volume_factor_store(struct kobject *kobj,
+					struct attribute *attr,
+					const char *buffer,
+					size_t count)
+{
+	struct ldlm_pool *pl = container_of(kobj, struct ldlm_pool, pl_kobj);
+	unsigned long tmp;
+	int rc;
+
+	rc = kstrtoul(buffer, 10, &tmp);
+	if (rc < 0)
+		return rc;
+
+	tmp = (tmp << 8) / 100;
+	atomic_set(&pl->pl_lock_volume_factor, tmp);
+
+	return count;
+
+}
 LUSTRE_RW_ATTR(lock_volume_factor);
+
+static ssize_t recalc_time_show(struct kobject *kobj,
+				struct attribute *attr,
+				char *buf)
+{
+	struct ldlm_pool *pl = container_of(kobj, struct ldlm_pool, pl_kobj);
+
+	return scnprintf(buf, PAGE_SIZE, "%llu\n",
+			 ktime_get_seconds() - pl->pl_recalc_time);
+}
+LUSTRE_RO_ATTR(recalc_time);
 
 /* These are for pools in /sys/fs/lustre/ldlm/namespaces/.../pool */
 static struct attribute *ldlm_pl_attrs[] = {
@@ -500,6 +540,8 @@ static struct attribute *ldlm_pl_attrs[] = {
 	&lustre_attr_grant_plan.attr,
 	&lustre_attr_recalc_period.attr,
 	&lustre_attr_server_lock_volume.attr,
+	&lustre_attr_client_lock_volume.attr,
+	&lustre_attr_recalc_time.attr,
 	&lustre_attr_limit.attr,
 	&lustre_attr_granted.attr,
 	&lustre_attr_cancel_rate.attr,
@@ -625,8 +667,8 @@ int ldlm_pool_init(struct ldlm_pool *pl, struct ldlm_namespace *ns,
 
 	spin_lock_init(&pl->pl_lock);
 	atomic_set(&pl->pl_granted, 0);
-	pl->pl_recalc_time = ktime_get_real_seconds();
-	atomic_set(&pl->pl_lock_volume_factor, 1);
+	pl->pl_recalc_time = ktime_get_seconds();
+	atomic_set(&pl->pl_lock_volume_factor, 1 << 8);
 
 	atomic_set(&pl->pl_grant_rate, 0);
 	atomic_set(&pl->pl_cancel_rate, 0);
