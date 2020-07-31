@@ -640,6 +640,7 @@ struct ldlm_namespace *ldlm_namespace_new(struct obd_device *obd, char *name,
 	ns->ns_dirty_age_limit = ktime_set(LDLM_DIRTY_AGE_LIMIT, 0);
 	ns->ns_stopping = 0;
 	ns->ns_last_pos = &ns->ns_unused_list;
+	ns->ns_flags = 0;
 
 	rc = ldlm_namespace_sysfs_register(ns);
 	if (rc != 0) {
