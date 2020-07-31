@@ -776,10 +776,14 @@ void ldlm_lock_decref_internal(struct ldlm_lock *lock, enum ldlm_mode mode)
 	}
 
 	if (!lock->l_readers && !lock->l_writers && ldlm_is_cbpending(lock)) {
+		unsigned int mask = D_DLMTRACE;
+
 		/* If we received a blocked AST and this was the last reference,
 		 * run the callback.
 		 */
-		LDLM_DEBUG(lock, "final decref done on cbpending lock");
+		LDLM_DEBUG_LIMIT(mask, lock,
+				 "final decref done on %sCBPENDING lock",
+				 mask & D_WARNING ? "non-local " : "");
 
 		LDLM_LOCK_GET(lock); /* dropped by bl thread */
 		ldlm_lock_remove_from_lru(lock);
@@ -794,24 +798,18 @@ void ldlm_lock_decref_internal(struct ldlm_lock *lock, enum ldlm_mode mode)
 	} else if (!lock->l_readers && !lock->l_writers &&
 		   !ldlm_is_no_lru(lock) && !ldlm_is_bl_ast(lock) &&
 		   !ldlm_is_converting(lock)) {
-		LDLM_DEBUG(lock, "add lock into lru list");
 
 		/* If this is a client-side namespace and this was the last
 		 * reference, put it on the LRU.
 		 */
 		ldlm_lock_add_to_lru(lock);
 		unlock_res_and_lock(lock);
+		LDLM_DEBUG(lock, "add lock into lru list");
 
 		if (ldlm_is_fail_loc(lock))
 			OBD_RACE(OBD_FAIL_LDLM_CP_BL_RACE);
 
-		/* Call ldlm_cancel_lru() only if EARLY_CANCEL and LRU RESIZE
-		 * are not supported by the server, otherwise, it is done on
-		 * enqueue.
-		 */
-		if (!exp_connect_cancelset(lock->l_conn_export) &&
-		    !ns_connect_lru_resize(ns))
-			ldlm_cancel_lru(ns, 0, LCF_ASYNC, 0);
+		ldlm_cancel_lru(ns, 0, LCF_ASYNC, 0);
 	} else {
 		LDLM_DEBUG(lock, "do not add lock into lru list");
 		unlock_res_and_lock(lock);

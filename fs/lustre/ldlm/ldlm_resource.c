@@ -246,6 +246,32 @@ static ssize_t lru_size_store(struct kobject *kobj, struct attribute *attr,
 }
 LUSTRE_RW_ATTR(lru_size);
 
+static ssize_t lru_cancel_batch_show(struct kobject *kobj,
+				     struct attribute *attr, char *buf)
+{
+	struct ldlm_namespace *ns = container_of(kobj, struct ldlm_namespace,
+						 ns_kobj);
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", ns->ns_cancel_batch);
+}
+
+static ssize_t lru_cancel_batch_store(struct kobject *kobj,
+				  struct attribute *attr,
+				  const char *buffer, size_t count)
+{
+	struct ldlm_namespace *ns = container_of(kobj, struct ldlm_namespace,
+						 ns_kobj);
+	unsigned long tmp;
+
+	if (kstrtoul(buffer, 10, &tmp))
+		return -EINVAL;
+
+	ns->ns_cancel_batch = (unsigned int)tmp;
+
+	return count;
+}
+LUSTRE_RW_ATTR(lru_cancel_batch);
+
 static ssize_t lru_max_age_show(struct kobject *kobj, struct attribute *attr,
 				char *buf)
 {
@@ -349,6 +375,7 @@ static struct attribute *ldlm_ns_attrs[] = {
 	&lustre_attr_lock_count.attr,
 	&lustre_attr_lock_unused_count.attr,
 	&lustre_attr_lru_size.attr,
+	&lustre_attr_lru_cancel_batch.attr,
 	&lustre_attr_lru_max_age.attr,
 	&lustre_attr_early_lock_cancel.attr,
 	&lustre_attr_dirty_age_limit.attr,
@@ -634,6 +661,7 @@ struct ldlm_namespace *ldlm_namespace_new(struct obd_device *obd, char *name,
 	ns->ns_max_parallel_ast = LDLM_DEFAULT_PARALLEL_AST_LIMIT;
 	ns->ns_nr_unused = 0;
 	ns->ns_max_unused = LDLM_DEFAULT_LRU_SIZE;
+	ns->ns_cancel_batch = LDLM_DEFAULT_LRU_SHRINK_BATCH;
 	ns->ns_max_age = ktime_set(LDLM_DEFAULT_MAX_ALIVE, 0);
 	ns->ns_orig_connect_flags = 0;
 	ns->ns_connect_flags = 0;
