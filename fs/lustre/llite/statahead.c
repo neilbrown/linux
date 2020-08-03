@@ -1499,9 +1499,8 @@ static int revalidate_statahead_dentry(struct inode *dir,
 				goto out_unplug;
 			}
 
-			if ((bits & MDS_INODELOCK_LOOKUP) &&
-			    d_lustre_invalid(*dentryp))
-				d_lustre_revalidate(*dentryp);
+			if ((bits & MDS_INODELOCK_LOOKUP))
+				ll_d2d(*dentryp)->lld_invalid = 0;
 			ll_intent_release(&it);
 		}
 	}

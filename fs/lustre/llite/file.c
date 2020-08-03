@@ -664,7 +664,7 @@ retry:
 		 */
 		ll_set_lock_data(sbi->ll_md_exp, de->d_inode, itp, &bits);
 		if (bits & MDS_INODELOCK_LOOKUP)
-			d_lustre_revalidate(de);
+			ll_d2d(de)->lld_invalid = 0;
 		/* if DoM bit returned along with LAYOUT bit then there
 		 * can be read-on-open data returned.
 		 */
@@ -4642,11 +4642,8 @@ static int ll_inode_revalidate(struct dentry *dentry, enum ldlm_intent_flags op)
 	 * here to preserve get_cwd functionality on 2.6.
 	 * Bug 10503
 	 */
-	if (!d_inode(dentry)->i_nlink) {
-		spin_lock(&inode->i_lock);
-		d_lustre_invalidate(dentry, 0);
-		spin_unlock(&inode->i_lock);
-	}
+	if (!d_inode(dentry)->i_nlink)
+		d_lustre_invalidate(dentry);
 
 	ll_lookup_finish_locks(&oit, inode);
 out:
