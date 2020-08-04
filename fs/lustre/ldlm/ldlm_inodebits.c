@@ -66,6 +66,7 @@ void ldlm_ibits_policy_local_to_wire(const union ldlm_policy_data *lpolicy,
 {
 	memset(wpolicy, 0, sizeof(*wpolicy));
 	wpolicy->l_inodebits.bits = lpolicy->l_inodebits.bits;
+	wpolicy->l_inodebits.li_gid = lpolicy->l_inodebits.li_gid;
 }
 
 /**

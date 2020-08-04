@@ -1224,6 +1224,11 @@ EXPORT_SYMBOL(ldlm_resource_putref);
 
 /**
  * Add a lock into a given resource into specified lock list.
+ *
+ * IBITS waiting locks are to be inserted to the ibit lists as well, and only
+ * the insert-after operation is supported for them, because the set of bits
+ * of the previous and the new locks must match. Therefore, get the previous
+ * lock and insert after.
  */
 void ldlm_resource_add_lock(struct ldlm_resource *res, struct list_head *head,
 			    struct ldlm_lock *lock)
