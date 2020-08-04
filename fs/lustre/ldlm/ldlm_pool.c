@@ -282,7 +282,7 @@ static int ldlm_cli_pool_recalc(struct ldlm_pool *pl)
 	/*
 	 * Cancel aged locks if lru resize is disabled for this ns.
 	 */
-	if (!ns_connect_lru_resize(container_of(pl, struct ldlm_namespace,
+	if (ns_connect_lru_resize(container_of(pl, struct ldlm_namespace,
 						ns_pool)))
 		lru_flags = LDLM_LRU_FLAG_LRUR;
 	else
