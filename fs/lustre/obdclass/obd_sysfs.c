@@ -225,6 +225,7 @@ static ssize_t jobid_var_store(struct kobject *kobj, struct attribute *attr,
 		JOBSTATS_DISABLE,
 		JOBSTATS_PROCNAME_UID,
 		JOBSTATS_NODELOCAL,
+		JOBSTATS_SESSION,
 		NULL
 	};
 	int i;
