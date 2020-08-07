@@ -234,19 +234,16 @@ static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
 	if (rc)
 		return rc;
 
-	with_imp_locked(obd, imp, count) {
+	with_imp_locked(obd, imp, rc) {
 		/* opposite senses */
-		if (imp->imp_deactive == val) {
+		if (imp->imp_deactive == val)
 			rc = ptlrpc_set_import_active(imp, val);
-			if (rc)
-				count = rc;
-		} else {
+		else
 			CDEBUG(D_CONFIG,
 			       "activate %u: ignoring repeat request\n", val);
-		}
 	}
 
-	return count;
+	return rc ?: count;
 }
 LUSTRE_RW_ATTR(active);
 

@@ -2063,7 +2063,6 @@ ssize_t short_io_bytes_store(struct kobject *kobj, struct attribute *attr,
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct client_obd *cli = &obd->u.cli;
-	struct obd_import *imp;
 	u64 val;
 	int rc;
 
@@ -2082,13 +2081,11 @@ ssize_t short_io_bytes_store(struct kobject *kobj, struct attribute *attr,
 
 	rc = count;
 
-	with_imp_locked(obd, imp, rc) {
-		spin_lock(&cli->cl_loi_list_lock);
-		cli->cl_max_short_io_bytes = min_t(unsigned long long,
-						   val, OST_MAX_SHORT_IO_BYTES);
-		spin_unlock(&cli->cl_loi_list_lock);
+	spin_lock(&cli->cl_loi_list_lock);
+	cli->cl_max_short_io_bytes = min_t(unsigned long long,
+					   val, OST_MAX_SHORT_IO_BYTES);
+	spin_unlock(&cli->cl_loi_list_lock);
 
-	}
 out:
 	return rc;
 }

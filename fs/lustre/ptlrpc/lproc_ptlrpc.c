@@ -1295,6 +1295,7 @@ int ldebugfs_import_seq_write(struct file *file, const char __user *buffer,
 	int do_reconn = 1;
 	const char prefix[] = "connection=";
 	const int prefix_len = sizeof(prefix) - 1;
+	int rc;
 
 	if (count > PAGE_SIZE - 1 || count <= prefix_len)
 		return -EINVAL;
@@ -1304,7 +1305,7 @@ int ldebugfs_import_seq_write(struct file *file, const char __user *buffer,
 		return -ENOMEM;
 
 	if (copy_from_user(kbuf, buffer, count)) {
-		count = -EFAULT;
+		rc = -EFAULT;
 		goto out;
 	}
 
@@ -1312,21 +1313,20 @@ int ldebugfs_import_seq_write(struct file *file, const char __user *buffer,
 
 	/* only support connection=uuid::instance now */
 	if (strncmp(prefix, kbuf, prefix_len) != 0) {
-		count = -EINVAL;
+		rc = -EINVAL;
 		goto out;
 	}
 
 	uuid = kbuf + prefix_len;
 	ptr = strstr(uuid, "::");
-	if (ptr) {
-		u32 inst;
-		int rc;
+	with_imp_locked(obd, imp, rc) {
+		if (ptr) {
+			u32 inst;
 
-		*ptr = 0;
-		do_reconn = 0;
-		ptr += strlen("::");
-		rc = kstrtouint(ptr, 10, &inst);
-		with_imp_locked(obd, imp, count) {
+			*ptr = 0;
+			do_reconn = 0;
+			ptr += strlen("::");
+			rc = kstrtouint(ptr, 10, &inst);
 			if (rc) {
 				CERROR("config: wrong instance # %s\n", ptr);
 			} else if (inst != imp->imp_connect_data.ocd_instance) {
@@ -1342,15 +1342,14 @@ int ldebugfs_import_seq_write(struct file *file, const char __user *buffer,
 				       imp->imp_obd->obd_name, inst);
 			}
 		}
-	}
 
-	if (do_reconn)
-		with_imp_locked(obd, imp, count)
+		if (do_reconn)
 			ptlrpc_recover_import(imp, uuid, 1);
+	}
 
 out:
 	kfree(kbuf);
-	return count;
+	return rc ?: count;
 }
 EXPORT_SYMBOL(ldebugfs_import_seq_write);
 
