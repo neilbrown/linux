@@ -322,13 +322,29 @@ int lustre_get_jobid(char *jobid, size_t joblen)
 	}
 
 	if (strcmp(obd_jobid_var, JOBSTATS_SESSION) == 0) {
-		char *jid;
+		/*
+		 * jobid wanted from per-session setting.
+		 * If obd_jobid_name contains "%j" or if getting the
+		 * per-session jobid directly fails, fall back to using
+		 * obd_jobid_name.
+		 */
+		int rc = -EAGAIN;
+		if (!strnstr(obd_jobid_name, "%j", joblen)) {
+			char *jid;
 
-		rcu_read_lock();
-		jid = jobid_current();
-		if (jid)
-			strlcpy(tmp_jobid, jid, sizeof(tmp_jobid));
-		rcu_read_unlock();
+			rcu_read_lock();
+			jid = jobid_current();
+			if (jid) {
+				strlcpy(tmp_jobid, jid, sizeof(tmp_jobid));
+				rc = 0;
+			}
+			rcu_read_unlock();
+		}
+
+		/* fall back to jobid_node if per-session not available */
+		if (rc < 0)
+			jobid_interpret_string(obd_jobid_name,
+					       tmp_jobid, joblen);
 		goto out_cache_jobid;
 	}
 
