@@ -1152,9 +1152,13 @@ static int mgc_apply_recover_logs(struct obd_device *mgc,
 	int pos;
 	int rc = 0;
 	int off = 0;
+	unsigned long dynamic_nids;
 
 	LASSERT(cfg->cfg_instance);
 	LASSERT(ll_get_cfg_instance(cfg->cfg_sb) == cfg->cfg_instance);
+
+	/* get dynamic nids setting */
+	dynamic_nids = mgc->obd_dynamic_nids;
 
 	inst = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	if (!inst)
@@ -1172,7 +1176,7 @@ static int mgc_apply_recover_logs(struct obd_device *mgc,
 
 	while (datalen > 0) {
 		int entry_len = sizeof(*entry);
-		int is_ost, i;
+		int is_ost;
 		struct obd_device *obd;
 		char *obdname;
 		char *cname;
@@ -1281,23 +1285,54 @@ static int mgc_apply_recover_logs(struct obd_device *mgc,
 
 		/* iterate all nids to find one */
 		/* find uuid by nid */
+		/* create import entries if they don't exist */
 		rc = -ENOENT;
-		for (i = 0; i < entry->mne_nid_count; i++) {
-			rc = client_import_find_conn(obd->u.cli.cl_import,
-						     entry->u.nids[0],
-						     (struct obd_uuid *)uuid);
-			if (!rc)
-				break;
+		rc = client_import_add_nids_to_conn(obd->u.cli.cl_import,
+						    entry->u.nids,
+						    entry->mne_nid_count,
+						    (struct obd_uuid *)uuid);
+
+		if (rc == -ENOENT && dynamic_nids) {
+			/* create a new connection for this import */
+			char *primary_nid = libcfs_nid2str(entry->u.nids[0]);
+			int prim_nid_len = strlen(primary_nid) + 1;
+			struct obd_uuid server_uuid;
+
+			if (prim_nid_len > UUID_MAX)
+				goto fail;
+			strncpy(server_uuid.uuid, primary_nid, prim_nid_len);
+
+			CDEBUG(D_INFO, "Adding a connection for %s\n",
+			       primary_nid);
+
+			rc = client_import_dyn_add_conn(obd->u.cli.cl_import,
+							&server_uuid,
+							entry->u.nids[0], 1);
+			if (rc < 0) {
+				CERROR("%s: Failed to add new connection with NID '%s' to import: rc = %d\n",
+				       obd->obd_name, primary_nid, rc);
+				goto fail;
+			}
+			rc = client_import_add_nids_to_conn(obd->u.cli.cl_import,
+							entry->u.nids,
+							entry->mne_nid_count,
+							(struct obd_uuid *)uuid);
+			if (rc < 0) {
+				CERROR("%s: failed to lookup UUID: rc = %d\n",
+				       obd->obd_name, rc);
+				goto fail;
+			}
 		}
 
+fail:
 		up_read(&obd->u.cli.cl_sem);
-		if (rc < 0) {
-			CERROR("mgc: cannot find uuid by nid %s\n",
-			       libcfs_nid2str(entry->u.nids[0]));
+		if (rc < 0 && rc != -ENOSPC) {
+			CERROR("mgc: cannot find UUID by nid '%s': rc = %d\n",
+			       libcfs_nid2str(entry->u.nids[0]), rc);
 			break;
 		}
 
-		CDEBUG(D_INFO, "Find uuid %s by nid %s\n",
+		CDEBUG(D_INFO, "Found UUID '%s' by NID '%s'\n",
 		       uuid, libcfs_nid2str(entry->u.nids[0]));
 
 		pos += strlen(uuid);

@@ -560,7 +560,8 @@ struct obd_device {
 		      obd_inactive:1,	  /* device active/inactive
 					   * (for sysfs status only!!)
 					   */
-		      obd_process_conf:1; /* device is processing mgs config */
+		      obd_process_conf:1, /* device is processing mgs config */
+		      obd_dynamic_nids:1;/* Allow dynamic NIDs on device */
 
 	/* uuid-export hash body */
 	struct rhashtable	 obd_uuid_hash;
