@@ -2568,6 +2568,7 @@ struct cl_dio_aio {
 	struct cl_page_list	cda_pages;
 	struct kiocb		*cda_iocb;
 	ssize_t			cda_bytes;
+	unsigned int		cda_no_aio_complete:1;
 };
 
 /** @} cl_sync_io */
