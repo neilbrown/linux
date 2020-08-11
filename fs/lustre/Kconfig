@@ -13,6 +13,7 @@ config LUSTRE_FS
 	select DEBUG_FS
 	select FHANDLE
 	select QUOTA
+	select CRC32
 	depends on MULTIUSER
 	help
 	  This option enables Lustre file system client support. Choose Y

@@ -41,6 +41,7 @@
 
 #define DEBUG_SUBSYSTEM S_RPC
 
+#include <linux/crc32.h>
 #include <uapi/linux/lustre/lustre_fiemap.h>
 
 #include <llog_swab.h>
@@ -1234,13 +1235,10 @@ u32 lustre_msg_calc_cksum(struct lustre_msg *msg, u32 buf)
 	switch (msg->lm_magic) {
 	case LUSTRE_MSG_MAGIC_V2: {
 		struct ptlrpc_body *pb = lustre_msg_buf_v2(msg, buf, 0);
-		u32 crc;
-		unsigned int hsize = 4;
 
-		cfs_crypto_hash_digest(CFS_HASH_ALG_CRC32, (unsigned char *)pb,
-				       lustre_msg_buflen(msg, buf),
-				       NULL, 0, (unsigned char *)&crc, &hsize);
-		return crc;
+		/* about 10x faster than crypto_hash for small buffers */
+		return crc32_le(~(u32)0, (unsigned char *)pb,
+				lustre_msg_buflen(msg, buf));
 	}
 	default:
 		CERROR("incorrect message magic: %08x\n", msg->lm_magic);
