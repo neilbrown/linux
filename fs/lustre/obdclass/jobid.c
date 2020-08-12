@@ -206,7 +206,7 @@ static void jobid_prune_expedite(void)
  *   %e = executable
  *   %g = gid
  *   %h = hostname
- *   %j = jobid from environment
+ *   %j = per-session
  *   %p = pid
  *   %u = uid
  *
@@ -247,10 +247,9 @@ static int jobid_interpret_string(const char *jobfmt, char *jobid,
 			l = snprintf(jobid, joblen, "%s",
 				     init_utsname()->nodename);
 			break;
-		case 'j': /* jobid requested by process
-			   * - currently not supported
-			   */
-			l = snprintf(jobid, joblen, "%s", "jobid");
+		case 'j': /* jobid requested by process */
+			l = snprintf(jobid, joblen, "%s",
+				     jobid_current() ?: "jobid");
 			break;
 		case 'p': /* process ID */
 			l = snprintf(jobid, joblen, "%u", current->pid);
@@ -306,7 +305,8 @@ int lustre_get_jobid(char *jobid, size_t joblen)
 		goto out_cache_jobid;
 
 	/* Whole node dedicated to single job */
-	if (strcmp(obd_jobid_var, JOBSTATS_NODELOCAL) == 0) {
+	if (strcmp(obd_jobid_var, JOBSTATS_NODELOCAL) == 0
+	    || strnstr(obd_jobid_name, "%j", LUSTRE_JOBID_SIZE)) {
 		int rc2 = jobid_interpret_string(obd_jobid_name,
 						 tmp_jobid, joblen);
 		if (!rc2)
@@ -327,7 +327,7 @@ int lustre_get_jobid(char *jobid, size_t joblen)
 		rcu_read_lock();
 		jid = jobid_current();
 		if (jid)
-			strlcpy(jobid, jid, sizeof(jobid));
+			strlcpy(tmp_jobid, jid, sizeof(tmp_jobid));
 		rcu_read_unlock();
 		goto out_cache_jobid;
 	}
