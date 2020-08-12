@@ -645,7 +645,7 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 
 	with_imp_locked(obd, imp, rc) {
 		if (idle_debug) {
-			imp->imp_idle_timeout = val;
+			imp->imp_idle_debug = idle_debug;
 		} else {
 			/* to initiate the connection if it's in IDLE state */
 			if (!val) {
@@ -654,6 +654,7 @@ static ssize_t idle_timeout_store(struct kobject *kobj, struct attribute *attr,
 				if (req)
 					ptlrpc_req_finished(req);
 			}
+			imp->imp_idle_timeout = val;
 		}
 	}
 
