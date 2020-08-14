@@ -40,6 +40,110 @@
 
 #include "mdc_internal.h"
 
+static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
+			   char *buf)
+{
+	struct obd_device *obd = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
+	struct obd_import *imp;
+	ssize_t rc;
+
+	with_imp_locked(obd, imp, rc)
+		rc =  sprintf(buf, "%u\n", !imp->imp_deactive);
+
+	return rc;
+}
+
+static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
+			    const char *buffer, size_t count)
+{
+	struct obd_device *obd = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
+	struct obd_import *imp;
+	bool val;
+	int rc;
+
+	rc = kstrtobool(buffer, &val);
+	if (rc)
+		return rc;
+
+	with_imp_locked(obd, imp, rc) {
+		/* opposite senses */
+		if (imp->imp_deactive == val)
+			rc = ptlrpc_set_import_active(imp, val);
+		else
+			CDEBUG(D_CONFIG,
+			       "activate %u: ignoring repeat request\n", val);
+	}
+
+	return rc ?: count;
+}
+LUSTRE_RW_ATTR(active);
+
+static ssize_t max_rpcs_in_flight_show(struct kobject *kobj,
+				       struct attribute *attr,
+				       char *buf)
+{
+	struct obd_device *obd = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
+
+	return sprintf(buf, "%u\n", obd_get_max_rpcs_in_flight(&obd->u.cli));
+}
+
+static ssize_t max_rpcs_in_flight_store(struct kobject *kobj,
+					struct attribute *attr,
+					const char *buffer,
+					size_t count)
+{
+	struct obd_device *obd = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
+	unsigned int val;
+	int rc;
+
+	rc = kstrtouint(buffer, 10, &val);
+	if (rc)
+		return rc;
+
+	rc = obd_set_max_rpcs_in_flight(&obd->u.cli, val);
+	if (rc)
+		count = rc;
+
+	return count;
+}
+LUSTRE_RW_ATTR(max_rpcs_in_flight);
+
+static ssize_t max_mod_rpcs_in_flight_show(struct kobject *kobj,
+					   struct attribute *attr,
+					   char *buf)
+{
+	struct obd_device *obd = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
+
+	return sprintf(buf, "%hu\n", obd->u.cli.cl_max_mod_rpcs_in_flight);
+}
+
+static ssize_t max_mod_rpcs_in_flight_store(struct kobject *kobj,
+					    struct attribute *attr,
+					    const char *buffer,
+					    size_t count)
+{
+	struct obd_device *obd = container_of(kobj, struct obd_device,
+					      obd_kset.kobj);
+	u16 val;
+	int rc;
+
+	rc = kstrtou16(buffer, 10, &val);
+	if (rc)
+		return rc;
+
+	rc = obd_set_max_mod_rpcs_in_flight(&obd->u.cli, val);
+	if (rc)
+		count = rc;
+
+	return count;
+}
+LUSTRE_RW_ATTR(max_mod_rpcs_in_flight);
+
 static int mdc_max_dirty_mb_seq_show(struct seq_file *m, void *v)
 {
 	struct obd_device *obd = m->private;
@@ -206,110 +310,6 @@ static int mdc_unstable_stats_seq_show(struct seq_file *m, void *v)
 	return 0;
 }
 LDEBUGFS_SEQ_FOPS_RO(mdc_unstable_stats);
-
-static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
-			   char *buf)
-{
-	struct obd_device *obd = container_of(kobj, struct obd_device,
-					      obd_kset.kobj);
-	struct obd_import *imp;
-	ssize_t rc;
-
-	with_imp_locked(obd, imp, rc)
-		rc =  sprintf(buf, "%u\n", !imp->imp_deactive);
-
-	return rc;
-}
-
-static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
-			    const char *buffer, size_t count)
-{
-	struct obd_device *obd = container_of(kobj, struct obd_device,
-					      obd_kset.kobj);
-	struct obd_import *imp;
-	bool val;
-	int rc;
-
-	rc = kstrtobool(buffer, &val);
-	if (rc)
-		return rc;
-
-	with_imp_locked(obd, imp, rc) {
-		/* opposite senses */
-		if (imp->imp_deactive == val)
-			rc = ptlrpc_set_import_active(imp, val);
-		else
-			CDEBUG(D_CONFIG,
-			       "activate %u: ignoring repeat request\n", val);
-	}
-
-	return rc ?: count;
-}
-LUSTRE_RW_ATTR(active);
-
-static ssize_t max_rpcs_in_flight_show(struct kobject *kobj,
-				       struct attribute *attr,
-				       char *buf)
-{
-	struct obd_device *obd = container_of(kobj, struct obd_device,
-					      obd_kset.kobj);
-
-	return sprintf(buf, "%u\n", obd_get_max_rpcs_in_flight(&obd->u.cli));
-}
-
-static ssize_t max_rpcs_in_flight_store(struct kobject *kobj,
-					struct attribute *attr,
-					const char *buffer,
-					size_t count)
-{
-	struct obd_device *obd = container_of(kobj, struct obd_device,
-					      obd_kset.kobj);
-	unsigned int val;
-	int rc;
-
-	rc = kstrtouint(buffer, 10, &val);
-	if (rc)
-		return rc;
-
-	rc = obd_set_max_rpcs_in_flight(&obd->u.cli, val);
-	if (rc)
-		count = rc;
-
-	return count;
-}
-LUSTRE_RW_ATTR(max_rpcs_in_flight);
-
-static ssize_t max_mod_rpcs_in_flight_show(struct kobject *kobj,
-					   struct attribute *attr,
-					   char *buf)
-{
-	struct obd_device *obd = container_of(kobj, struct obd_device,
-					      obd_kset.kobj);
-
-	return sprintf(buf, "%hu\n", obd->u.cli.cl_max_mod_rpcs_in_flight);
-}
-
-static ssize_t max_mod_rpcs_in_flight_store(struct kobject *kobj,
-					    struct attribute *attr,
-					    const char *buffer,
-					    size_t count)
-{
-	struct obd_device *obd = container_of(kobj, struct obd_device,
-					      obd_kset.kobj);
-	u16 val;
-	int rc;
-
-	rc = kstrtou16(buffer, 10, &val);
-	if (rc)
-		return rc;
-
-	rc = obd_set_max_mod_rpcs_in_flight(&obd->u.cli, val);
-	if (rc)
-		count = rc;
-
-	return count;
-}
-LUSTRE_RW_ATTR(max_mod_rpcs_in_flight);
 
 LUSTRE_RW_ATTR(max_pages_per_rpc);
 
