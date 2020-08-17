@@ -999,7 +999,7 @@ static int mdc_io_setattr_start(const struct lu_env *env,
 	struct obdo *oa = &oio->oi_oa;
 	struct osc_async_cbargs *cbargs = &oio->oi_cbarg;
 	u64 size = io->u.ci_setattr.sa_attr.lvb_size;
-	unsigned int ia_valid = io->u.ci_setattr.sa_avalid;
+	unsigned int ia_avalid = io->u.ci_setattr.sa_avalid;
 	enum op_xvalid ia_xvalid = io->u.ci_setattr.sa_xvalid;
 	int rc;
 
@@ -1019,15 +1019,15 @@ static int mdc_io_setattr_start(const struct lu_env *env,
 			struct ost_lvb *lvb = &io->u.ci_setattr.sa_attr;
 			unsigned int cl_valid = 0;
 
-			if (ia_valid & ATTR_SIZE) {
+			if (ia_avalid & ATTR_SIZE) {
 				attr->cat_size = attr->cat_kms = size;
 				cl_valid = (CAT_SIZE | CAT_KMS);
 			}
-			if (ia_valid & ATTR_MTIME_SET) {
+			if (ia_avalid & ATTR_MTIME_SET) {
 				attr->cat_mtime = lvb->lvb_mtime;
 				cl_valid |= CAT_MTIME;
 			}
-			if (ia_valid & ATTR_ATIME_SET) {
+			if (ia_avalid & ATTR_ATIME_SET) {
 				attr->cat_atime = lvb->lvb_atime;
 				cl_valid |= CAT_ATIME;
 			}
@@ -1042,7 +1042,7 @@ static int mdc_io_setattr_start(const struct lu_env *env,
 			return rc;
 	}
 
-	if (!(ia_valid & ATTR_SIZE))
+	if (!(ia_avalid & ATTR_SIZE))
 		return 0;
 
 	memset(oa, 0, sizeof(*oa));
