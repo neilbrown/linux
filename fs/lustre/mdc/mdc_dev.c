@@ -217,7 +217,6 @@ static int mdc_lock_discard_pages(const struct lu_env *env,
 	struct osc_thread_info *info = osc_env_info(env);
 	struct cl_io *io = &info->oti_io;
 	osc_page_gang_cbt cb;
-	bool res;
 	int result;
 
 	io->ci_obj = cl_object_top(osc2cl(osc));
@@ -228,13 +227,8 @@ static int mdc_lock_discard_pages(const struct lu_env *env,
 
 	cb = discard ? osc_discard_cb : mdc_check_and_discard_cb;
 	info->oti_fn_index = info->oti_next_index = start;
-	do {
-		res = osc_page_gang_lookup(env, io, osc, info->oti_next_index,
-					   end, cb, (void *)osc);
-		if (info->oti_next_index > end)
-			break;
-
-	} while (!res);
+	osc_page_gang_lookup(env, io, osc, info->oti_next_index,
+			     end, cb, (void *)osc);
 out:
 	cl_io_fini(env, io);
 	return result;
