@@ -129,6 +129,7 @@ static const char * const obd_connect_names[] = {
 	"client_encryption",	/* 0x8000 */
 	"fidmap",		/* 0x10000 */
 	"getattr_pfid",		/* 0x20000 */
+	"lseek",		/* 0x40000 */
 	NULL
 };
 

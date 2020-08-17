@@ -836,6 +836,7 @@ struct ptlrpc_body_v2 {
 #define OBD_CONNECT2_ENCRYPT	       0x8000ULL /* client-to-disk encrypt */
 #define OBD_CONNECT2_FIDMAP	       0x10000ULL /* FID map */
 #define OBD_CONNECT2_GETATTR_PFID      0x20000ULL /* pack parent FID in getattr */
+#define OBD_CONNECT2_LSEEK	       0x40000ULL /* SEEK_HOLE/DATA RPC */
 /* XXX README XXX:
  * Please DO NOT add flag values here before first ensuring that this same
  * flag value is not in use on some other branch.  Please clear any such
@@ -928,7 +929,7 @@ enum cksum_type {
 };
 
 #define OBD_CKSUM_T10_ALL (OBD_CKSUM_T10IP512 | OBD_CKSUM_T10IP4K | \
-	OBD_CKSUM_T10CRC512 | OBD_CKSUM_T10CRC4K)
+	OBD_CKSUM_T10CRC512 | OBD_CKSUM_T10CRC4K | OBD_CONNECT2_LSEEK)
 
 #define OBD_CKSUM_ALL (OBD_CKSUM_CRC32 | OBD_CKSUM_ADLER | OBD_CKSUM_CRC32C | \
 		       OBD_CKSUM_T10_ALL)
@@ -970,6 +971,7 @@ enum ost_cmd {
 	OST_QUOTA_ADJUST_QUNIT = 20, /* not used since 2.4 */
 	OST_LADVISE	= 21,
 	OST_FALLOCATE	= 22,
+	OST_SEEK	= 23,
 	OST_LAST_OPC /* must be < 33 to avoid MDS_GETATTR */
 };
 #define OST_FIRST_OPC  OST_REPLY

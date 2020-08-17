@@ -108,7 +108,9 @@ void lustre_assert_wire_constants(void)
 		 (long long)OST_LADVISE);
 	LASSERTF(OST_FALLOCATE == 22, "found %lld\n",
 		 (long long)OST_FALLOCATE);
-	LASSERTF(OST_LAST_OPC == 23, "found %lld\n",
+	LASSERTF(OST_SEEK == 23, "found %lld\n",
+		 (long long)OST_SEEK);
+	LASSERTF(OST_LAST_OPC == 24, "found %lld\n",
 		 (long long)OST_LAST_OPC);
 	LASSERTF(OBD_OBJECT_EOF == 0xffffffffffffffffULL, "found 0x%.16llxULL\n",
 		 OBD_OBJECT_EOF);
@@ -441,7 +443,7 @@ void lustre_assert_wire_constants(void)
 	LASSERTF(LMAC_NOT_IN_OI == 0x00000004UL, "found 0x%.8xUL\n",
 		 (unsigned int)LMAC_NOT_IN_OI);
 	LASSERTF(LMAC_FID_ON_OST == 0x00000008UL, "found 0x%.8xUL\n",
-		 (unsigned int)LMAC_FID_ON_OST);
+		(unsigned int)LMAC_FID_ON_OST);
 
 	/* Checks for struct ost_id */
 	LASSERTF((int)sizeof(struct ost_id) == 16, "found %lld\n",
@@ -1180,6 +1182,8 @@ void lustre_assert_wire_constants(void)
 		 OBD_CONNECT2_FIDMAP);
 	LASSERTF(OBD_CONNECT2_GETATTR_PFID == 0x20000ULL, "found 0x%.16llxULL\n",
 		 OBD_CONNECT2_GETATTR_PFID);
+	LASSERTF(OBD_CONNECT2_LSEEK == 0x40000ULL, "found 0x%.16llxULL\n",
+		 OBD_CONNECT2_LSEEK);
 	LASSERTF(OBD_CKSUM_CRC32 == 0x00000001UL, "found 0x%.8xUL\n",
 		 (unsigned int)OBD_CKSUM_CRC32);
 	LASSERTF(OBD_CKSUM_ADLER == 0x00000002UL, "found 0x%.8xUL\n",
@@ -2236,7 +2240,7 @@ void lustre_assert_wire_constants(void)
 	LASSERTF(LUSTRE_INLINE_DATA_FL == 0x10000000, "found 0x%.8x\n",
 		 LUSTRE_INLINE_DATA_FL);
 	LASSERTF(LUSTRE_ENCRYPT_FL == 0x00800000UL, "found 0x%.8xUL\n",
-		 (unsigned int)LUSTRE_ENCRYPT_FL);
+		(unsigned int)LUSTRE_ENCRYPT_FL);
 	LASSERTF(MDS_INODELOCK_LOOKUP == 0x00000001UL, "found 0x%.8xUL\n",
 		 (unsigned int)MDS_INODELOCK_LOOKUP);
 	LASSERTF(MDS_INODELOCK_UPDATE == 0x00000002UL, "found 0x%.8xUL\n",
