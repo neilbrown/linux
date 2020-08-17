@@ -1743,7 +1743,7 @@ lmv_op_default_specific_mkdir(const struct md_op_data *op_data)
 }
 int lmv_create(struct obd_export *exp, struct md_op_data *op_data,
 		const void *data, size_t datalen, umode_t mode, uid_t uid,
-		gid_t gid, kernel_cap_t cap_effective, u64 rdev,
+		gid_t gid, cfs_cap_t cap_effective, u64 rdev,
 		struct ptlrpc_request **request)
 {
 	struct obd_device *obd = exp->exp_obd;
@@ -1977,7 +1977,7 @@ static int lmv_link(struct obd_export *exp, struct md_op_data *op_data,
 
 	op_data->op_fsuid = from_kuid(&init_user_ns, current_fsuid());
 	op_data->op_fsgid = from_kgid(&init_user_ns, current_fsgid());
-	op_data->op_cap = current_cap();
+	op_data->op_cap = cfs_curproc_cap_pack();
 
 	tgt = lmv_locate_tgt2(lmv, op_data);
 	if (IS_ERR(tgt))
@@ -2017,7 +2017,7 @@ static int lmv_migrate(struct obd_export *exp, struct md_op_data *op_data,
 
 	op_data->op_fsuid = from_kuid(&init_user_ns, current_fsuid());
 	op_data->op_fsgid = from_kgid(&init_user_ns, current_fsgid());
-	op_data->op_cap = current_cap();
+	op_data->op_cap = cfs_curproc_cap_pack();
 
 	parent_tgt = lmv_fid2tgt(lmv, &op_data->op_fid1);
 	if (IS_ERR(parent_tgt))
@@ -2169,7 +2169,7 @@ static int lmv_rename(struct obd_export *exp, struct md_op_data *op_data,
 
 	op_data->op_fsuid = from_kuid(&init_user_ns, current_fsuid());
 	op_data->op_fsgid = from_kgid(&init_user_ns, current_fsgid());
-	op_data->op_cap = current_cap();
+	op_data->op_cap = cfs_curproc_cap_pack();
 
 	op_data->op_name = new;
 	op_data->op_namelen = newlen;
@@ -2751,7 +2751,7 @@ static int lmv_unlink(struct obd_export *exp, struct md_op_data *op_data,
 
 	op_data->op_fsuid = from_kuid(&init_user_ns, current_fsuid());
 	op_data->op_fsgid = from_kgid(&init_user_ns, current_fsgid());
-	op_data->op_cap = current_cap();
+	op_data->op_cap = cfs_curproc_cap_pack();
 
 retry:
 	parent_tgt = lmv_locate_tgt(lmv, op_data);

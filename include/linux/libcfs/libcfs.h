@@ -38,6 +38,9 @@
 #include <linux/workqueue.h>
 #include <linux/sysctl.h>
 
+#include <linux/cred.h>
+#include <linux/capability.h>
+
 #include <linux/libcfs/libcfs_debug.h>
 #include <linux/libcfs/libcfs_private.h>
 #include <linux/libcfs/libcfs_fail.h>
@@ -58,6 +61,17 @@ extern struct workqueue_struct *cfs_rehash_wq;
 
 void lnet_insert_debugfs(struct ctl_table *table);
 void lnet_remove_debugfs(struct ctl_table *table);
+
+/* Currently all the CFS_CAP_* defines match CAP_* ones. */
+typedef u32 cfs_cap_t;
+#define cfs_cap_pack(cap) (cap)
+#define cfs_cap_unpack(cap) (cap)
+
+static inline cfs_cap_t cfs_curproc_cap_pack(void)
+{
+	/* XXX lost high byte */
+	return cfs_cap_pack(current_cap().cap[0]);
+}
 
 /*
  * Memory

@@ -158,7 +158,7 @@ int mdc_setattr(struct obd_export *exp, struct md_op_data *op_data,
 
 int mdc_create(struct obd_export *exp, struct md_op_data *op_data,
 	       const void *data, size_t datalen, umode_t mode,
-	       uid_t uid, gid_t gid, kernel_cap_t cap_effective,
+	       uid_t uid, gid_t gid, cfs_cap_t cap_effective,
 	       u64 rdev, struct ptlrpc_request **request)
 {
 	struct ptlrpc_request *req;
@@ -506,7 +506,7 @@ int mdc_file_resync(struct obd_export *exp, struct md_op_data *op_data)
 	rec->rs_opcode	= REINT_RESYNC;
 	rec->rs_fsuid	= op_data->op_fsuid;
 	rec->rs_fsgid	= op_data->op_fsgid;
-	rec->rs_cap	= op_data->op_cap.cap[0];
+	rec->rs_cap	= op_data->op_cap;
 	rec->rs_fid	= op_data->op_fid1;
 	rec->rs_bias	= op_data->op_bias;
 	rec->rs_mirror_id = op_data->op_mirror_id;

@@ -49,7 +49,7 @@ static void __mdc_pack_body(struct mdt_body *b, u32 suppgid)
 	b->mbo_gid = from_kgid(&init_user_ns, current_gid());
 	b->mbo_fsuid = from_kuid(&init_user_ns, current_fsuid());
 	b->mbo_fsgid = from_kgid(&init_user_ns, current_fsgid());
-	b->mbo_capability = current_cap().cap[0];
+	b->mbo_capability = cfs_curproc_cap_pack();
 }
 
 void mdc_swap_layouts_pack(struct ptlrpc_request *req,
@@ -187,7 +187,7 @@ void mdc_readdir_pack(struct ptlrpc_request *req, u64 pgoff, size_t size,
 /* packing of MDS records */
 void mdc_create_pack(struct ptlrpc_request *req, struct md_op_data *op_data,
 		     const void *data, size_t datalen, umode_t mode,
-		     uid_t uid, gid_t gid, kernel_cap_t cap_effective,
+		     uid_t uid, gid_t gid, cfs_cap_t cap_effective,
 		     u64 rdev)
 {
 	struct mdt_rec_create *rec;
@@ -201,7 +201,7 @@ void mdc_create_pack(struct ptlrpc_request *req, struct md_op_data *op_data,
 	rec->cr_opcode = REINT_CREATE;
 	rec->cr_fsuid = uid;
 	rec->cr_fsgid = gid;
-	rec->cr_cap = cap_effective.cap[0];
+	rec->cr_cap = cap_effective;
 	rec->cr_fid1 = op_data->op_fid1;
 	rec->cr_fid2 = op_data->op_fid2;
 	rec->cr_mode = mode;
@@ -281,7 +281,7 @@ void mdc_open_pack(struct ptlrpc_request *req, struct md_op_data *op_data,
 	rec->cr_opcode = REINT_OPEN;
 	rec->cr_fsuid = from_kuid(&init_user_ns, current_fsuid());
 	rec->cr_fsgid = from_kgid(&init_user_ns, current_fsgid());
-	rec->cr_cap = current_cap().cap[0];
+	rec->cr_cap = cfs_curproc_cap_pack();
 	rec->cr_fid1 = op_data->op_fid1;
 	rec->cr_fid2 = op_data->op_fid2;
 
@@ -379,7 +379,7 @@ static void mdc_setattr_pack_rec(struct mdt_rec_setattr *rec,
 	rec->sa_opcode = REINT_SETATTR;
 	rec->sa_fsuid = from_kuid(&init_user_ns, current_fsuid());
 	rec->sa_fsgid = from_kgid(&init_user_ns, current_fsgid());
-	rec->sa_cap = current_cap().cap[0];
+	rec->sa_cap = cfs_curproc_cap_pack();
 	rec->sa_suppgid = -1;
 
 	rec->sa_fid = op_data->op_fid1;
@@ -452,7 +452,7 @@ void mdc_unlink_pack(struct ptlrpc_request *req, struct md_op_data *op_data)
 			 REINT_RMENTRY : REINT_UNLINK;
 	rec->ul_fsuid = op_data->op_fsuid;
 	rec->ul_fsgid = op_data->op_fsgid;
-	rec->ul_cap = op_data->op_cap.cap[0];
+	rec->ul_cap = op_data->op_cap;
 	rec->ul_mode = op_data->op_mode;
 	rec->ul_suppgid1 = op_data->op_suppgids[0];
 	rec->ul_suppgid2 = -1;
@@ -478,7 +478,7 @@ void mdc_link_pack(struct ptlrpc_request *req, struct md_op_data *op_data)
 	rec->lk_opcode = REINT_LINK;
 	rec->lk_fsuid = op_data->op_fsuid; /* current->fsuid; */
 	rec->lk_fsgid = op_data->op_fsgid; /* current->fsgid; */
-	rec->lk_cap = op_data->op_cap.cap[0]; /* current->cap_effective; */
+	rec->lk_cap = op_data->op_cap;
 	rec->lk_suppgid1 = op_data->op_suppgids[0];
 	rec->lk_suppgid2 = op_data->op_suppgids[1];
 	rec->lk_fid1 = op_data->op_fid1;
@@ -550,7 +550,7 @@ void mdc_rename_pack(struct ptlrpc_request *req, struct md_op_data *op_data,
 	rec->rn_opcode = REINT_RENAME;
 	rec->rn_fsuid = op_data->op_fsuid;
 	rec->rn_fsgid = op_data->op_fsgid;
-	rec->rn_cap = op_data->op_cap.cap[0];
+	rec->rn_cap = op_data->op_cap;
 	rec->rn_suppgid1 = op_data->op_suppgids[0];
 	rec->rn_suppgid2 = op_data->op_suppgids[1];
 	rec->rn_fid1 = op_data->op_fid1;
@@ -581,7 +581,7 @@ void mdc_migrate_pack(struct ptlrpc_request *req, struct md_op_data *op_data,
 	rec->rn_opcode	 = REINT_MIGRATE;
 	rec->rn_fsuid	 = op_data->op_fsuid;
 	rec->rn_fsgid	 = op_data->op_fsgid;
-	rec->rn_cap	 = op_data->op_cap.cap[0];
+	rec->rn_cap	 = op_data->op_cap;
 	rec->rn_suppgid1 = op_data->op_suppgids[0];
 	rec->rn_suppgid2 = op_data->op_suppgids[1];
 	rec->rn_fid1	 = op_data->op_fid1;
