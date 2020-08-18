@@ -3694,7 +3694,7 @@ out_kmem:
 	return rc;
 }
 
-static void /*__exit*/ osc_exit(void)
+static void __exit osc_exit(void)
 {
 	osc_stop_grant_work();
 	unregister_shrinker(&osc_cache_shrinker);

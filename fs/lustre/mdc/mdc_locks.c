@@ -1108,8 +1108,7 @@ static int mdc_finish_intent_lock(struct obd_export *exp,
 			rc = it->it_status;
 			goto out;
 		}
-		goto matching_lock;
-	}
+	} else {
 
 	if (!it_disposition(it, DISP_IT_EXECD)) {
 		/* The server failed before it even started executing the
@@ -1155,8 +1154,7 @@ static int mdc_finish_intent_lock(struct obd_export *exp,
 		LASSERT(!it_disposition(it, DISP_OPEN_CREATE));
 	else
 		LASSERT(it->it_op & (IT_GETATTR | IT_LOOKUP));
-
-matching_lock:
+	}
 	/* If we already have a matching lock, then cancel the new
 	 * one. We have to set the data here instead of in
 	 * mdc_enqueue, because we need to use the child's inode as
@@ -1311,7 +1309,7 @@ int mdc_intent_lock(struct obd_export *exp, struct md_op_data *op_data,
 
 	LASSERT(it);
 	CDEBUG(D_DLMTRACE, "(name: %.*s," DFID ") in obj " DFID
-		", intent: %s flags %#Lo\n", (int)op_data->op_namelen,
+		", intent: %s flags %#llo\n", (int)op_data->op_namelen,
 		op_data->op_name, PFID(&op_data->op_fid2),
 		PFID(&op_data->op_fid1), ldlm_it2str(it->it_op),
 		it->it_flags);
@@ -1408,7 +1406,7 @@ int mdc_intent_getattr_async(struct obd_export *exp,
 	int rc = 0;
 
 	CDEBUG(D_DLMTRACE,
-	       "name: %.*s in inode " DFID ", intent: %s flags %#Lo\n",
+	       "name: %.*s in inode " DFID ", intent: %s flags %#llo\n",
 	       (int)op_data->op_namelen, op_data->op_name,
 	       PFID(&op_data->op_fid1), ldlm_it2str(it->it_op), it->it_flags);
 

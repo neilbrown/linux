@@ -2976,7 +2976,7 @@ out_dev:
 	return rc;
 }
 
-static void /*__exit*/ mdc_exit(void)
+static void __exit mdc_exit(void)
 {
 	class_unregister_type(LUSTRE_MDC_NAME);
 	class_destroy(mdc_changelog_class);

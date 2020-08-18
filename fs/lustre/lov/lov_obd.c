@@ -1413,7 +1413,7 @@ static int __init lov_init(void)
 	return rc;
 }
 
-static void /*__exit*/ lov_exit(void)
+static void __exit lov_exit(void)
 {
 	class_unregister_type(LUSTRE_LOV_NAME);
 	kmem_cache_destroy(lov_oinfo_slab);

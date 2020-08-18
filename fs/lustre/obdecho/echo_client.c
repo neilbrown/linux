@@ -1765,7 +1765,7 @@ static int __init obdecho_init(void)
 	return echo_client_init();
 }
 
-static void /*__exit*/ obdecho_exit(void)
+static void __exit obdecho_exit(void)
 {
 	echo_client_exit();
 }
