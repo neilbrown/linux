@@ -1438,8 +1438,7 @@ static int mdc_read_page(struct obd_export *exp, struct md_op_data *op_data,
 	page = mdc_page_locate(mapping, &rp_param.rp_off, &start, &end,
 			       rp_param.rp_hash64);
 	if (IS_ERR(page)) {
-		CDEBUG(D_INFO,
-		       "%s: dir page locate: " DFID " at %llu: rc %ld\n",
+		CERROR("%s: dir page locate: " DFID " at %llu: rc %ld\n",
 		       exp->exp_obd->obd_name, PFID(&op_data->op_fid1),
 		       rp_param.rp_off, PTR_ERR(page));
 		rc = PTR_ERR(page);
@@ -1469,7 +1468,7 @@ static int mdc_read_page(struct obd_export *exp, struct md_op_data *op_data,
 					    rp_param.rp_hash64),
 			       mdc_read_page_remote, &rp_param);
 	if (IS_ERR(page)) {
-		CERROR("%s: read cache page: " DFID " at %llu: rc %ld\n",
+		CDEBUG(D_INFO, "%s: read cache page: " DFID " at %llu: %ld\n",
 		       exp->exp_obd->obd_name, PFID(&op_data->op_fid1),
 		       rp_param.rp_off, PTR_ERR(page));
 		rc = PTR_ERR(page);
