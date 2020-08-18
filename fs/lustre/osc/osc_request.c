@@ -2766,7 +2766,7 @@ int osc_enqueue_base(struct obd_export *exp, struct ldlm_res_id *res_id,
 	if (intent != 0)
 		match_flags |= LDLM_FL_BLOCK_GRANTED;
 	mode = ldlm_lock_match(obd->obd_namespace, match_flags, res_id,
-			       einfo->ei_type, policy, mode, &lockh, 0);
+			       einfo->ei_type, policy, mode, &lockh);
 	if (mode) {
 		struct ldlm_lock *matched;
 
@@ -2873,7 +2873,7 @@ int osc_match_base(const struct lu_env *env, struct obd_export *exp,
 		   struct ldlm_res_id *res_id, enum ldlm_type type,
 		   union ldlm_policy_data *policy, enum ldlm_mode mode,
 		   u64 *flags, struct osc_object *obj,
-		   struct lustre_handle *lockh, int unref)
+		   struct lustre_handle *lockh, enum ldlm_match_flags match_flags)
 {
 	struct obd_device *obd = exp->exp_obd;
 	u64 lflags = *flags;
@@ -2896,9 +2896,11 @@ int osc_match_base(const struct lu_env *env, struct obd_export *exp,
 	rc = mode;
 	if (mode == LCK_PR)
 		rc |= LCK_PW;
-	rc = ldlm_lock_match(obd->obd_namespace, lflags,
-			     res_id, type, policy, rc, lockh, unref);
-	if (!rc || lflags & LDLM_FL_TEST_LOCK)
+
+	rc = ldlm_lock_match_with_skip(obd->obd_namespace, lflags, 0,
+				       res_id, type, policy, rc, lockh,
+				       match_flags);
+	if (rc == 0 || lflags & LDLM_FL_TEST_LOCK)
 		return rc;
 
 	if (obj) {
