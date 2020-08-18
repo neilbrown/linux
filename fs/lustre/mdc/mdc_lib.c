@@ -282,17 +282,17 @@ void mdc_open_pack(struct ptlrpc_request *req, struct md_op_data *op_data,
 	rec->cr_fsuid = from_kuid(&init_user_ns, current_fsuid());
 	rec->cr_fsgid = from_kgid(&init_user_ns, current_fsgid());
 	rec->cr_cap = cfs_curproc_cap_pack();
-	rec->cr_fid1 = op_data->op_fid1;
-	rec->cr_fid2 = op_data->op_fid2;
 
 	rec->cr_mode = mode;
 	cr_flags = mds_pack_open_flags(flags);
 	rec->cr_rdev = rdev;
+	rec->cr_umask = current_umask();
+	rec->cr_fid1 = op_data->op_fid1;
+	rec->cr_fid2 = op_data->op_fid2;
 	rec->cr_time = op_data->op_mod_time;
 	rec->cr_suppgid1 = op_data->op_suppgids[0];
 	rec->cr_suppgid2 = op_data->op_suppgids[1];
 	rec->cr_bias = op_data->op_bias;
-	rec->cr_umask = current_umask();
 	rec->cr_open_handle_old = op_data->op_open_handle;
 
 	if (op_data->op_name) {
@@ -301,17 +301,16 @@ void mdc_open_pack(struct ptlrpc_request *req, struct md_op_data *op_data,
 
 		if (op_data->op_bias & MDS_CREATE_VOLATILE)
 			cr_flags |= MDS_OPEN_VOLATILE;
-
-		mdc_file_secctx_pack(req, op_data->op_file_secctx_name,
-				     op_data->op_file_secctx,
-				     op_data->op_file_secctx_size);
-
-		mdc_file_encctx_pack(req, op_data->op_file_encctx,
-				     op_data->op_file_encctx_size);
-
-		/* pack SELinux policy info if any */
-		mdc_file_sepol_pack(req);
 	}
+	mdc_file_secctx_pack(req, op_data->op_file_secctx_name,
+			     op_data->op_file_secctx,
+			     op_data->op_file_secctx_size);
+
+	mdc_file_encctx_pack(req, op_data->op_file_encctx,
+			     op_data->op_file_encctx_size);
+
+	/* pack SELinux policy info if any */
+	mdc_file_sepol_pack(req);
 
 	if (lmm) {
 		cr_flags |= MDS_OPEN_HAS_EA;
