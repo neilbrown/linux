@@ -891,10 +891,11 @@ static inline bool mdc_skip_mod_rpc_slot(const struct lookup_intent *it)
 /* We always reserve enough space in the reply packet for a stripe MD, because
  * we don't know in advance the file type.
  */
-int mdc_enqueue_base(struct obd_export *exp, struct ldlm_enqueue_info *einfo,
-		     const union ldlm_policy_data *policy,
-		     struct lookup_intent *it, struct md_op_data *op_data,
-		     struct lustre_handle *lockh, u64 extra_lock_flags)
+static int
+mdc_enqueue_base(struct obd_export *exp, struct ldlm_enqueue_info *einfo,
+		 const union ldlm_policy_data *policy,
+		 struct lookup_intent *it, struct md_op_data *op_data,
+		 struct lustre_handle *lockh, u64 extra_lock_flags)
 {
 	static const union ldlm_policy_data lookup_policy = {
 		.l_inodebits = { MDS_INODELOCK_LOOKUP }
@@ -1031,7 +1032,7 @@ resend:
 	 * intent operation, when server returns -EINPROGRESS for acquiring
 	 * intent lock, we'll retry in after_reply().
 	 */
-	if (it->it_op && (int)lockrep->lock_policy_res2 == -EINPROGRESS) {
+	if (it && (int)lockrep->lock_policy_res2 == -EINPROGRESS) {
 		mdc_clear_replay_flag(req, rc);
 		ptlrpc_req_finished(req);
 		if (generation == obd->u.cli.cl_import->imp_generation) {
