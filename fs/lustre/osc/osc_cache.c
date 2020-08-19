@@ -944,8 +944,7 @@ static int osc_extent_wait(const struct lu_env *env, struct osc_extent *ext,
 	/* `Kick' this extent only if the caller is waiting for it to be
 	 * written out.
 	 */
-	if (state == OES_INV && !ext->oe_urgent && !ext->oe_hp &&
-	    !ext->oe_trunc_pending) {
+	if (state == OES_INV && !ext->oe_urgent && !ext->oe_hp) {
 		if (ext->oe_state == OES_ACTIVE) {
 			ext->oe_urgent = 1;
 		} else if (ext->oe_state == OES_CACHE) {
