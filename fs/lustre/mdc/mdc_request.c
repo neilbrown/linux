@@ -2842,7 +2842,7 @@ err_llog_cleanup:
 	ldebugfs_free_md_stats(obd);
 	ptlrpc_lprocfs_unregister_obd(obd);
 err_osc_cleanup:
-	client_obd_cleanup(obd);
+	osc_cleanup_common(obd);
 	return rc;
 }
 
