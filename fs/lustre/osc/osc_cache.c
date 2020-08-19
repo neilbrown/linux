@@ -878,7 +878,7 @@ int osc_extent_finish(const struct lu_env *env, struct osc_extent *ext,
 	int nr_pages = ext->oe_nr_pages;
 	int lost_grant = 0;
 	int blocksize = cli->cl_import->imp_obd->obd_osfs.os_bsize ? : 4096;
-	u64 last_off = 0;
+	loff_t last_off = 0;
 	int last_count = -1;
 
 	OSC_EXTENT_DUMP(D_CACHE, ext, "extent finished.\n");

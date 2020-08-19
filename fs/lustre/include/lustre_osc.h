@@ -79,10 +79,10 @@ struct osc_async_page {
 	int			oap_magic;
 	unsigned short		oap_cmd;
 
-	struct list_head        oap_pending_item;
-	struct list_head        oap_rpc_item;
+	struct list_head	oap_pending_item;
+	struct list_head	oap_rpc_item;
 
-	u64			oap_obj_off;
+	loff_t			oap_obj_off;
 	unsigned int		oap_page_off;
 	enum async_flags	oap_async_flags;
 
