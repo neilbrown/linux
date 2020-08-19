@@ -1172,9 +1172,9 @@ static int osc_extent_make_ready(const struct lu_env *env,
 	list_for_each_entry(oap, &ext->oe_pages, oap_pending_item) {
 		if (!(oap->oap_async_flags & ASYNC_COUNT_STABLE)) {
 			oap->oap_count = PAGE_SIZE - oap->oap_page_off;
-			spin_lock(&last->oap_lock);
+			spin_lock(&oap->oap_lock);
 			oap->oap_async_flags |= ASYNC_COUNT_STABLE;
-			spin_unlock(&last->oap_lock);
+			spin_unlock(&oap->oap_lock);
 		}
 	}
 
