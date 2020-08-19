@@ -317,7 +317,7 @@ static ssize_t cur_dirty_grant_bytes_show(struct kobject *kobj,
 					      obd_kset.kobj);
 	struct client_obd *cli = &obd->u.cli;
 
-	return sprintf(buf, "%lu\n", cli->cl_dirty_grant);
+	return scnprintf(buf, PAGE_SIZE, "%lu\n", cli->cl_dirty_grant);
 }
 LUSTRE_RO_ATTR(cur_dirty_grant_bytes);
 
