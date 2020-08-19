@@ -1030,8 +1030,8 @@ void osc_init_grant(struct client_obd *cli, struct obd_connect_data *ocd)
 	 * race is tolerable here: if we're evicted, but imp_state already
 	 * left EVICTED state, then cl_dirty_pages must be 0 already.
 	 */
-	cli->cl_avail_grant = ocd->ocd_grant;
 	spin_lock(&cli->cl_loi_list_lock);
+	cli->cl_avail_grant = ocd->ocd_grant;
 	if (cli->cl_import->imp_state != LUSTRE_IMP_EVICTED) {
 		cli->cl_avail_grant -= cli->cl_reserved_grant;
 		if (OCD_HAS_FLAG(ocd, GRANT_PARAM))
