@@ -443,7 +443,7 @@ void lustre_assert_wire_constants(void)
 	LASSERTF(LMAC_NOT_IN_OI == 0x00000004UL, "found 0x%.8xUL\n",
 		 (unsigned int)LMAC_NOT_IN_OI);
 	LASSERTF(LMAC_FID_ON_OST == 0x00000008UL, "found 0x%.8xUL\n",
-		(unsigned int)LMAC_FID_ON_OST);
+		 (unsigned int)LMAC_FID_ON_OST);
 
 	/* Checks for struct ost_id */
 	LASSERTF((int)sizeof(struct ost_id) == 16, "found %lld\n",
