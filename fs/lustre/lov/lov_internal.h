@@ -266,13 +266,13 @@ int lov_merge_lvb_kms(struct lov_stripe_md *lsm, int index,
 /* lov_offset.c */
 u64 lov_stripe_size(struct lov_stripe_md *lsm, int index, u64 ost_size,
 		    int stripeno);
-int lov_stripe_offset(struct lov_stripe_md *lsm, int index, u64 lov_off,
-		      int stripeno, u64 *obd_off);
-u64 lov_size_to_stripe(struct lov_stripe_md *lsm, int index, u64 file_size,
-		       int stripeno);
+int lov_stripe_offset(struct lov_stripe_md *lsm, int index, loff_t lov_off,
+		      int stripeno, loff_t *obd_off);
+loff_t lov_size_to_stripe(struct lov_stripe_md *lsm, int index, u64 file_size,
+			  int stripeno);
 int lov_stripe_intersects(struct lov_stripe_md *lsm, int index, int stripeno,
 			  struct lu_extent *ext, u64 *obd_start, u64 *obd_end);
-int lov_stripe_number(struct lov_stripe_md *lsm, int index, u64 lov_off);
+int lov_stripe_number(struct lov_stripe_md *lsm, int index, loff_t lov_off);
 pgoff_t lov_stripe_pgoff(struct lov_stripe_md *lsm, int index,
 			 pgoff_t stripe_index, int stripe);
 

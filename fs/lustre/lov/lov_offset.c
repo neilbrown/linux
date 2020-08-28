@@ -135,11 +135,11 @@ pgoff_t lov_stripe_pgoff(struct lov_stripe_md *lsm, int index,
  * falls in the stripe and no shifting was done; > 0 when the offset
  * was outside the stripe and was pulled back to its final byte.
  */
-int lov_stripe_offset(struct lov_stripe_md *lsm, int index, u64 lov_off,
-		      int stripeno, u64 *obdoff)
+int lov_stripe_offset(struct lov_stripe_md *lsm, int index, loff_t lov_off,
+		      int stripeno, loff_t *obdoff)
 {
 	unsigned long ssize = lsm->lsm_entries[index]->lsme_stripe_size;
-	u64 stripe_off, this_stripe, swidth;
+	loff_t stripe_off, this_stripe, swidth;
 	int ret = 0;
 
 	if (lov_off == OBD_OBJECT_EOF) {
@@ -188,8 +188,8 @@ int lov_stripe_offset(struct lov_stripe_md *lsm, int index, u64 lov_off,
  * |    0    |     1     |     2     |    0    |     1     |     2     |
  * ---------------------------------------------------------------------
  */
-u64 lov_size_to_stripe(struct lov_stripe_md *lsm, int index, u64 file_size,
-		       int stripeno)
+loff_t lov_size_to_stripe(struct lov_stripe_md *lsm, int index, u64 file_size,
+			  int stripeno)
 {
 	unsigned long ssize = lsm->lsm_entries[index]->lsme_stripe_size;
 	u64 stripe_off, this_stripe, swidth;
@@ -273,7 +273,7 @@ int lov_stripe_intersects(struct lov_stripe_md *lsm, int index, int stripeno,
 }
 
 /* compute which stripe number "lov_off" will be written into */
-int lov_stripe_number(struct lov_stripe_md *lsm, int index, u64 lov_off)
+int lov_stripe_number(struct lov_stripe_md *lsm, int index, loff_t lov_off)
 {
 	unsigned long ssize = lsm->lsm_entries[index]->lsme_stripe_size;
 	u64 stripe_off, swidth;

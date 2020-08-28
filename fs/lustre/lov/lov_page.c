@@ -75,8 +75,8 @@ int lov_page_init_composite(const struct lu_env *env, struct cl_object *obj,
 	struct cl_object *o;
 	struct lov_io_sub *sub;
 	struct lov_page *lpg = cl_object_page_slice(obj, page);
-	u64 offset;
-	u64 suboff;
+	loff_t offset;
+	loff_t suboff;
 	int stripe;
 	int entry;
 	int rc;

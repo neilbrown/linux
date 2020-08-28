@@ -681,7 +681,7 @@ static void lov_io_sub_inherit(struct lov_io_sub *sub, struct lov_io *lio,
 	}
 	case CIT_FAULT: {
 		struct cl_object *obj = parent->ci_obj;
-		u64 off = cl_offset(obj, parent->u.ci_fault.ft_index);
+		loff_t off = cl_offset(obj, parent->u.ci_fault.ft_index);
 
 		io->u.ci_fault = parent->u.ci_fault;
 		off = lov_size_to_stripe(lsm, index, off, stripe);
@@ -722,7 +722,7 @@ static void lov_io_sub_inherit(struct lov_io_sub *sub, struct lov_io *lio,
 	}
 }
 
-static u64 lov_offset_mod(u64 val, int delta)
+static loff_t lov_offset_mod(loff_t val, int delta)
 {
 	if (val != OBD_OBJECT_EOF)
 		val += delta;
@@ -809,10 +809,10 @@ static int lov_io_rw_iter_init(const struct lu_env *env,
 {
 	struct lov_io *lio = cl2lov_io(env, ios);
 	struct cl_io *io = ios->cis_io;
-	u64 start = io->u.ci_rw.crw_pos;
+	loff_t start = io->u.ci_rw.crw_pos;
 	struct lov_stripe_md_entry *lse;
 	int index;
-	u64 next;
+	loff_t next;
 
 	LASSERT(io->ci_type == CIT_READ || io->ci_type == CIT_WRITE);
 
@@ -850,10 +850,10 @@ static int lov_io_rw_iter_init(const struct lu_env *env,
 	}
 
 	LASSERTF(io->u.ci_rw.crw_pos >= lse->lsme_extent.e_start,
-		 "pos %lld, [%lld, %lld]\n", io->u.ci_rw.crw_pos,
+		 "pos %lld, [%lld, %lld)\n", io->u.ci_rw.crw_pos,
 		 lse->lsme_extent.e_start, lse->lsme_extent.e_end);
 	next = min_t(u64, next, lse->lsme_extent.e_end);
-	next = min_t(u64, next, lio->lis_io_endpos);
+	next = min_t(loff_t, next, lio->lis_io_endpos);
 
 	io->ci_continue = next < lio->lis_io_endpos;
 	io->u.ci_rw.crw_count = next - io->u.ci_rw.crw_pos;
@@ -861,7 +861,7 @@ static int lov_io_rw_iter_init(const struct lu_env *env,
 	lio->lis_endpos = io->u.ci_rw.crw_pos + io->u.ci_rw.crw_count;
 
 	CDEBUG(D_VFSTRACE,
-	       "stripe: %llu chunk: [%llu, %llu] %llu\n",
+	       "stripe: %llu chunk: [%llu, %llu) %llu\n",
 	       start, lio->lis_pos, lio->lis_endpos,
 	       lio->lis_io_endpos);
 
@@ -1007,8 +1007,8 @@ static int lov_io_read_ahead(const struct lu_env *env,
 	unsigned int pps; /* pages per stripe */
 	struct lov_io_sub *sub;
 	pgoff_t ra_end;
-	u64 offset;
-	u64 suboff;
+	loff_t offset;
+	loff_t suboff;
 	int stripe;
 	int index;
 	int rc;

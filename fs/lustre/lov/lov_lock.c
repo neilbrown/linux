@@ -121,8 +121,8 @@ static struct lov_lock *lov_lock_sub_init(const struct lu_env *env,
 	int index;
 	int i;
 	int nr;
-	u64 start;
-	u64 end;
+	loff_t start;
+	loff_t end;
 
 	ext.e_start = cl_offset(obj, lock->cll_descr.cld_start);
 	if (lock->cll_descr.cld_end == CL_PAGE_EOF)
