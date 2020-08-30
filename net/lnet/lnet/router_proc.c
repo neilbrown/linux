@@ -83,8 +83,7 @@ static int proc_lnet_stats(struct ctl_table *table, int write,
 	size_t nob = *lenp;
 	loff_t pos = *ppos;
 	int len;
-	char *tmpstr;
-	const int tmpsiz = 256; /* 7 %u and 4 %llu */
+	char tmpstr[256]; /* 7 %u and 4 %llu */
 
 	if (write) {
 		lnet_counters_reset();
@@ -96,16 +95,13 @@ static int proc_lnet_stats(struct ctl_table *table, int write,
 	if (!ctrs)
 		return -ENOMEM;
 
-	tmpstr = kmalloc(tmpsiz, GFP_KERNEL);
-	if (!tmpstr) {
-		kfree(ctrs);
-		return -ENOMEM;
-	}
+	rc = lnet_counters_get(ctrs);
+	if (rc)
+		goto out_no_ctrs;
 
-	lnet_counters_get(ctrs);
 	common = ctrs->lct_common;
 
-	len = scnprintf(tmpstr, tmpsiz,
+	len = scnprintf(tmpstr, sizeof(tmpstr),
 			"%u %u %u %u %u %u %u %llu %llu %llu %llu",
 			common.lcc_msgs_alloc, common.lcc_msgs_max,
 			common.lcc_errors,
@@ -119,8 +115,7 @@ static int proc_lnet_stats(struct ctl_table *table, int write,
 	else
 		rc = cfs_trace_copyout_string(buffer, nob,
 					      tmpstr + pos, "\n");
-
-	kfree(tmpstr);
+out_no_ctrs:
 	kfree(ctrs);
 	return rc;
 }
