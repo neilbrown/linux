@@ -786,6 +786,13 @@ struct lu_object *lu_object_find_at(const struct lu_env *env,
 	struct rhashtable *hs;
 	int rc;
 
+	/* FID is from disk or network, zero FID is meaningless, return error
+	 * early to avoid assertion in lu_object_put. If a zero FID is wanted,
+	 * it should be allocated via lu_object_anon().
+	 */
+	if (fid_is_zero(f))
+		return ERR_PTR(-EINVAL);
+
 	/*
 	 * This uses standard index maintenance protocol:
 	 *
