@@ -438,13 +438,13 @@ static void ll_agl_add(struct ll_statahead_info *sai,
 		if (list_empty(&sai->sai_agls))
 			added = 1;
 		list_add_tail(&child->lli_agl_list, &sai->sai_agls);
+		if (added && sai->sai_agl_task)
+			wake_up_process(sai->sai_agl_task);
 		spin_unlock(&parent->lli_agl_lock);
 	} else {
 		spin_unlock(&child->lli_agl_lock);
 	}
 
-	if (added > 0)
-		wake_up_process(sai->sai_agl_task);
 }
 
 /* allocate sai */
@@ -898,8 +898,8 @@ static int ll_agl_thread(void *arg)
 	CDEBUG(D_READA, "agl thread started: sai %p, parent %pd\n",
 	       sai, parent);
 
-	while (!kthread_should_stop()) {
-
+	while (({set_current_state(TASK_IDLE);
+		 !kthread_should_stop(); })) {
 		spin_lock(&plli->lli_agl_lock);
 		/* The statahead thread maybe help to process AGL entries,
 		 * so check whether list empty again.
@@ -908,20 +908,18 @@ static int ll_agl_thread(void *arg)
 						struct ll_inode_info,
 						lli_agl_list);
 		if (clli) {
+			__set_current_state(TASK_RUNNING);
 			list_del_init(&clli->lli_agl_list);
 			spin_unlock(&plli->lli_agl_lock);
 			ll_agl_trigger(&clli->lli_vfs_inode, sai);
 			cond_resched();
 		} else {
 			spin_unlock(&plli->lli_agl_lock);
-		}
-
-		set_current_state(TASK_IDLE);
-		if (list_empty(&sai->sai_agls) &&
-		    !kthread_should_stop())
 			schedule();
-		__set_current_state(TASK_RUNNING);
+		}
 	}
+	__set_current_state(TASK_RUNNING);
+
 	return 0;
 }
 
@@ -929,12 +927,19 @@ static void ll_stop_agl(struct ll_statahead_info *sai)
 {
 	struct ll_inode_info *plli = ll_i2info(sai->sai_dentry->d_inode);
 	struct ll_inode_info *clli;
+	struct task_struct *agl_task;
+
+	spin_lock(&plli->lli_agl_lock);
+	agl_task = sai->sai_agl_task;
+	sai->sai_agl_task = NULL;
+	spin_unlock(&plli->lli_agl_lock);
+	if (!agl_task)
+		return;
 
 	CDEBUG(D_READA, "stop agl thread: sai %p pid %u\n",
-	       sai, (unsigned int)sai->sai_agl_task->pid);
-	kthread_stop(sai->sai_agl_task);
+	       sai, (unsigned int)agl_task->pid);
+	kthread_stop(agl_task);
 
-	sai->sai_agl_task = NULL;
 	spin_lock(&plli->lli_agl_lock);
 	sai->sai_agl_valid = 0;
 	while ((clli = list_first_entry_or_null(&sai->sai_agls,
@@ -972,10 +977,8 @@ static void ll_start_agl(struct dentry *parent, struct ll_statahead_info *sai)
 	}
 
 	sai->sai_agl_task = task;
-	atomic_inc(&ll_i2sbi(d_inode(parent))->ll_agl_total);
-	spin_lock(&plli->lli_agl_lock);
 	LASSERT(sai->sai_agl_valid == 1);
-	spin_unlock(&plli->lli_agl_lock);
+	atomic_inc(&ll_i2sbi(d_inode(parent))->ll_agl_total);
 	/* Get an extra reference that the thread holds */
 	ll_sai_get(d_inode(parent));
 
@@ -1081,14 +1084,20 @@ static int ll_statahead_thread(void *arg)
 
 			fid_le_to_cpu(&fid, &ent->lde_fid);
 
-			do {
-				sa_handle_callback(sai);
+			while (({set_current_state(TASK_IDLE);
+				 sai->sai_task; })) {
+
+				if (sa_has_callback(sai)) {
+					__set_current_state(TASK_RUNNING);
+					sa_handle_callback(sai);
+				}
 
 				spin_lock(&lli->lli_agl_lock);
 				while (sa_sent_full(sai) &&
 				       !agl_list_empty(sai)) {
 					struct ll_inode_info *clli;
 
+					__set_current_state(TASK_RUNNING);
 					clli = list_first_entry(&sai->sai_agls,
 								struct ll_inode_info,
 								lli_agl_list);
@@ -1102,15 +1111,11 @@ static int ll_statahead_thread(void *arg)
 				}
 				spin_unlock(&lli->lli_agl_lock);
 
-				set_current_state(TASK_IDLE);
-				if (sa_sent_full(sai) &&
-				    !sa_has_callback(sai) &&
-				    agl_list_empty(sai) &&
-				    sai->sai_task)
-					/* wait for spare statahead window */
-					schedule();
-				__set_current_state(TASK_RUNNING);
-			} while (sa_sent_full(sai) && sai->sai_task);
+				if (!sa_sent_full(sai))
+					break;
+				schedule();
+			}
+			__set_current_state(TASK_RUNNING);
 
 			sa_statahead(parent, name, namelen, &fid);
 		}
@@ -1143,21 +1148,18 @@ static int ll_statahead_thread(void *arg)
 	 * statahead is finished, but statahead entries need to be cached, wait
 	 * for file release to stop me.
 	 */
-	while (sai->sai_task) {
-		sa_handle_callback(sai);
-
-		set_current_state(TASK_IDLE);
-		/* ensure we see the NULL stored by
-		 * ll_deauthorize_statahead()
-		 */
-		if (!sa_has_callback(sai) &&
-		    smp_load_acquire(&sai->sai_task))
+	while (({set_current_state(TASK_IDLE);
+		 smp_load_acquire(&sai->sai_task); })) {
+		if (sa_has_callback(sai)) {
+			__set_current_state(TASK_RUNNING);
+			sa_handle_callback(sai);
+		} else {
 			schedule();
-		__set_current_state(TASK_RUNNING);
+		}
 	}
+	__set_current_state(TASK_RUNNING);
 out:
-	if (sai->sai_agl_task)
-		ll_stop_agl(sai);
+	ll_stop_agl(sai);
 
 	/*
 	 * wait for inflight statahead RPCs to finish, and then we can free sai
