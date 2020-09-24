@@ -111,6 +111,7 @@ static void *pool_proc_next(struct seq_file *s, void *v, loff_t *pos)
 
 	LASSERTF(iter->magic == POOL_IT_MAGIC, "%08X\n", iter->magic);
 
+	(*pos)++;
 	/* test if end of file */
 	if (*pos >= pool_tgt_count(iter->pool))
 		return NULL;
@@ -122,7 +123,6 @@ static void *pool_proc_next(struct seq_file *s, void *v, loff_t *pos)
 		iter->idx = prev_idx; /* we stay on the last entry */
 		return NULL;
 	}
-	(*pos)++;
 	/* return != NULL to continue */
 	return iter;
 }
