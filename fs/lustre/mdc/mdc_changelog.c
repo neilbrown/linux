@@ -282,7 +282,7 @@ static int chlg_load(void *args)
 {
 	struct chlg_reader_state *crs = args;
 	struct chlg_registered_dev *ced = crs->crs_ced;
-	struct obd_device *obd;
+	struct obd_device *obd = NULL;
 	struct llog_ctxt *ctx = NULL;
 	struct llog_handle *llh = NULL;
 	int rc;
@@ -382,7 +382,7 @@ static ssize_t chlg_read(struct file *file, char __user *buff, size_t count,
 	struct chlg_reader_state *crs = file->private_data;
 	struct chlg_rec_entry *rec;
 	struct chlg_rec_entry *tmp;
-	ssize_t written_total = 0;
+	size_t written_total = 0;
 	LIST_HEAD(consumed);
 	size_t rc;
 

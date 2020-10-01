@@ -1028,7 +1028,8 @@ static int mdc_io_setattr_start(const struct lu_env *env,
 			unsigned int cl_valid = 0;
 
 			if (ia_avalid & ATTR_SIZE) {
-				attr->cat_size = attr->cat_kms = size;
+				attr->cat_size = size;
+				attr->cat_kms = size;
 				cl_valid = (CAT_SIZE | CAT_KMS);
 			}
 			if (ia_avalid & ATTR_MTIME_SET) {

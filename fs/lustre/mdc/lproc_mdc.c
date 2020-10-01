@@ -45,12 +45,12 @@ static ssize_t active_show(struct kobject *kobj, struct attribute *attr,
 	struct obd_device *obd = container_of(kobj, struct obd_device,
 					      obd_kset.kobj);
 	struct obd_import *imp;
-	ssize_t rc;
+	ssize_t len;
 
-	with_imp_locked(obd, imp, rc)
-		rc =  sprintf(buf, "%u\n", !imp->imp_deactive);
+	with_imp_locked(obd, imp, len)
+		len = sprintf(buf, "%u\n", !imp->imp_deactive);
 
-	return rc;
+	return len;
 }
 
 static ssize_t active_store(struct kobject *kobj, struct attribute *attr,
@@ -222,6 +222,11 @@ static ssize_t contention_seconds_store(struct kobject *kobj,
 }
 LUSTRE_RW_ATTR(contention_seconds);
 
+LUSTRE_ATTR(mds_conn_uuid, 0444, conn_uuid_show, NULL);
+LUSTRE_RO_ATTR(conn_uuid);
+
+LUSTRE_RW_ATTR(ping);
+
 static int mdc_cached_mb_seq_show(struct seq_file *m, void *v)
 {
 	struct obd_device *obd = m->private;
@@ -300,11 +305,6 @@ LDEBUGFS_SEQ_FOPS_RO(mdc_unstable_stats);
 
 LUSTRE_RW_ATTR(max_pages_per_rpc);
 
-LUSTRE_ATTR(mds_conn_uuid, 0444, conn_uuid_show, NULL);
-LUSTRE_RO_ATTR(conn_uuid);
-
-LUSTRE_RW_ATTR(ping);
-
 static ssize_t mdc_rpc_stats_seq_write(struct file *file,
 				       const char __user *buf,
 				       size_t len, loff_t *off)
@@ -345,9 +345,9 @@ static int mdc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 	seq_printf(seq, "pending read pages:   %d\n",
 		   atomic_read(&cli->cl_pending_r_pages));
 
-	seq_puts(seq, "\n\t\t\tread\t\t\twrite\n");
-	seq_puts(seq, "pages per rpc         rpcs   %% cum %% |");
-	seq_puts(seq, "       rpcs   %% cum %%\n");
+	seq_printf(seq, "\n\t\t\tread\t\t\twrite\n");
+	seq_printf(seq, "pages per rpc         rpcs   %% cum %% |");
+	seq_printf(seq, "       rpcs   %% cum %%\n");
 
 	read_tot = lprocfs_oh_sum(&cli->cl_read_page_hist);
 	write_tot = lprocfs_oh_sum(&cli->cl_write_page_hist);
@@ -369,9 +369,9 @@ static int mdc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 			break;
 	}
 
-	seq_puts(seq, "\n\t\t\tread\t\t\twrite\n");
-	seq_puts(seq, "rpcs in flight        rpcs   %% cum %% |");
-	seq_puts(seq, "       rpcs   %% cum %%\n");
+	seq_printf(seq, "\n\t\t\tread\t\t\twrite\n");
+	seq_printf(seq, "rpcs in flight        rpcs   %% cum %% |");
+	seq_printf(seq, "       rpcs   %% cum %%\n");
 
 	read_tot = lprocfs_oh_sum(&cli->cl_read_rpc_hist);
 	write_tot = lprocfs_oh_sum(&cli->cl_write_rpc_hist);
@@ -391,9 +391,9 @@ static int mdc_rpc_stats_seq_show(struct seq_file *seq, void *v)
 			break;
 	}
 
-	seq_puts(seq, "\n\t\t\tread\t\t\twrite\n");
-	seq_puts(seq, "offset                rpcs   %% cum %% |");
-	seq_puts(seq, "       rpcs   %% cum %%\n");
+	seq_printf(seq, "\n\t\t\tread\t\t\twrite\n");
+	seq_printf(seq, "offset                rpcs   %% cum %% |");
+	seq_printf(seq, "       rpcs   %% cum %%\n");
 
 	read_tot = lprocfs_oh_sum(&cli->cl_read_offset_hist);
 	write_tot = lprocfs_oh_sum(&cli->cl_write_offset_hist);
@@ -493,7 +493,7 @@ static struct ldebugfs_vars ldebugfs_mdc_obd_vars[] = {
 	{ .name	=	"connect_flags",
 	  .fops	=	&mdc_connect_flags_fops		},
 	{ .name	=	"mds_server_uuid",
-	  .fops	=	&mdc_server_uuid_fops,		},
+	  .fops	=	&mdc_server_uuid_fops		},
 	{ .name	=	"max_dirty_mb",
 	  .fops	=	&mdc_max_dirty_mb_fops		},
 	{ .name	=	"mdc_cached_mb",
@@ -518,10 +518,10 @@ static struct ldebugfs_vars ldebugfs_mdc_obd_vars[] = {
 };
 
 static struct attribute *mdc_attrs[] = {
-	&lustre_attr_contention_seconds.attr,
 	&lustre_attr_active.attr,
 	&lustre_attr_max_rpcs_in_flight.attr,
 	&lustre_attr_max_mod_rpcs_in_flight.attr,
+	&lustre_attr_contention_seconds.attr,
 	&lustre_attr_max_pages_per_rpc.attr,
 	&lustre_attr_mds_conn_uuid.attr,
 	&lustre_attr_conn_uuid.attr,
