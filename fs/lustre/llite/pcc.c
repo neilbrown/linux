@@ -1734,35 +1734,6 @@ out:
 	return rc;
 }
 
-ssize_t pcc_file_splice_read(struct file *in_file, loff_t *ppos,
-			     struct pipe_inode_info *pipe,
-			     size_t count, unsigned int flags,
-			     bool *cached)
-{
-	struct inode *inode = file_inode(in_file);
-	struct ll_file_data *fd = in_file->private_data;
-	struct file *pcc_file = fd->fd_pcc_file.pccf_file;
-	ssize_t result;
-
-	*cached = false;
-	if (!pcc_file)
-		return 0;
-
-	if (!file_inode(pcc_file)->i_fop->splice_read)
-		return -ENOTSUPP;
-
-	pcc_io_init(inode, PIT_SPLICE_READ, cached);
-	if (!*cached)
-		return 0;
-
-	result = file_inode(pcc_file)->i_fop->splice_read(pcc_file,
-							  ppos, pipe, count,
-							  flags);
-
-	pcc_io_fini(inode);
-	return result;
-}
-
 int pcc_fsync(struct file *file, loff_t start, loff_t end,
 	      int datasync, bool *cached)
 {
