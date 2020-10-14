@@ -1010,7 +1010,6 @@ static int ptlrpc_connect_interpret(const struct lu_env *env,
 		 */
 		imp->imp_force_reconnect = ptlrpc_busy_reconnect(rc);
 		spin_unlock(&imp->imp_lock);
-		ptlrpc_maybe_ping_import_soon(imp);
 		goto out;
 	}
 
@@ -1285,6 +1284,8 @@ out:
 
 	if (rc) {
 		bool inact = false;
+		time64_t now = ktime_get_seconds();
+		time64_t next_connect;
 
 		import_set_state_nolock(imp, LUSTRE_IMP_DISCON);
 		if (rc == -EACCES) {
@@ -1326,7 +1327,28 @@ out:
 				import_set_state_nolock(imp, LUSTRE_IMP_CLOSED);
 				inact = true;
 			}
+		} else if (rc == -ENODEV || rc == -ETIMEDOUT) {
+			/* ENODEV means there is no service, force reconnection
+			 * to a pair if attempt happen ptlrpc_next_reconnect
+			 * before now. ETIMEDOUT could be set during network
+			 * error and do not guarantee request deadline happened.
+			 */
+			struct obd_import_conn *conn;
+			time64_t reconnect_time;
+
+			/* Same as ptlrpc_next_reconnect, but in past */
+			reconnect_time = now - INITIAL_CONNECT_TIMEOUT;
+			list_for_each_entry(conn, &imp->imp_conn_list,
+					    oic_item) {
+				if (conn->oic_last_attempt <= reconnect_time) {
+					imp->imp_force_verify = 1;
+					break;
+				}
+			}
 		}
+
+		next_connect = imp->imp_conn_current->oic_last_attempt +
+			       (request->rq_deadline - request->rq_sent);
 		spin_unlock(&imp->imp_lock);
 
 		if (inact)
@@ -1334,6 +1356,18 @@ out:
 
 		if (rc == -EPROTO)
 			return rc;
+
+		/* adjust imp_next_ping to request deadline + 1 and reschedule
+		 * a pinger if import lost processing during CONNECTING or far
+		 * away from request deadline. It could happen when connection
+		 * was initiated outside of pinger, like
+		 * ptlrpc_set_import_discon().
+		 */
+		if (!imp->imp_force_verify && (imp->imp_next_ping <= now ||
+		    imp->imp_next_ping > next_connect)) {
+			imp->imp_next_ping = max(now, next_connect) + 1;
+			ptlrpc_pinger_wake_up();
+		}
 
 		ptlrpc_maybe_ping_import_soon(imp);
 

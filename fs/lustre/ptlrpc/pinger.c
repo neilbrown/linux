@@ -100,6 +100,19 @@ static bool ptlrpc_check_import_is_idle(struct obd_import *imp)
 	return true;
 }
 
+static void ptlrpc_update_next_ping(struct obd_import *imp, int soon)
+{
+	time64_t time = soon ? PING_INTERVAL_SHORT : PING_INTERVAL;
+
+	if (imp->imp_state == LUSTRE_IMP_DISCON) {
+		time64_t dtime = max_t(time64_t, CONNECTION_SWITCH_MIN,
+				       AT_OFF ? 0 :
+				       at_get(&imp->imp_at.iat_net_latency));
+		time = min(time, dtime);
+	}
+	imp->imp_next_ping = ktime_get_seconds() + time;
+}
+
 static int ptlrpc_ping(struct obd_import *imp)
 {
 	struct ptlrpc_request *req;
@@ -117,22 +130,15 @@ static int ptlrpc_ping(struct obd_import *imp)
 
 	DEBUG_REQ(D_INFO, req, "pinging %s->%s",
 		  imp->imp_obd->obd_uuid.uuid, obd2cli_tgt(imp->imp_obd));
+	/* Updating imp_next_ping early, it allows pinger_check_timeout to
+	 * see an actual time for next awake. request_out_callback update
+	 * happens at another thread, and ptlrpc_pinger_main may sleep
+	 * already.
+	 */
+	ptlrpc_update_next_ping(imp, 0);
 	ptlrpcd_add_req(req);
 
 	return 0;
-}
-
-static void ptlrpc_update_next_ping(struct obd_import *imp, int soon)
-{
-	time64_t time = soon ? PING_INTERVAL_SHORT : PING_INTERVAL;
-
-	if (imp->imp_state == LUSTRE_IMP_DISCON) {
-		time64_t dtime = max_t(time64_t, CONNECTION_SWITCH_MIN,
-				  AT_OFF ? 0 :
-				  at_get(&imp->imp_at.iat_net_latency));
-		time = min(time, dtime);
-	}
-	imp->imp_next_ping = ktime_get_seconds() + time;
 }
 
 static inline int imp_is_deactive(struct obd_import *imp)
@@ -143,17 +149,32 @@ static inline int imp_is_deactive(struct obd_import *imp)
 
 static inline time64_t ptlrpc_next_reconnect(struct obd_import *imp)
 {
-	if (imp->imp_server_timeout)
-		return ktime_get_seconds() + (obd_timeout >> 1);
-	else
-		return ktime_get_seconds() + obd_timeout;
+	return ktime_get_seconds() + INITIAL_CONNECT_TIMEOUT;
 }
 
-static time64_t pinger_check_timeout(time64_t time)
+static timeout_t pinger_check_timeout(time64_t time)
 {
-	time64_t timeout = PING_INTERVAL;
+	timeout_t timeout = PING_INTERVAL;
+	timeout_t next_timeout;
+	time64_t now;
+	struct list_head *iter;
+	struct obd_import *imp;
 
-	return time + timeout - ktime_get_seconds();
+	mutex_lock(&pinger_mutex);
+	now = ktime_get_seconds();
+	/* Process imports to find a nearest next ping */
+	list_for_each(iter, &pinger_imports) {
+		imp = list_entry(iter, struct obd_import, imp_pinger_chain);
+		if (!imp->imp_pingable || imp->imp_next_ping < now)
+			continue;
+		next_timeout = imp->imp_next_ping - now;
+		/* make sure imp_next_ping in the future from time */
+		if (next_timeout > (now - time) && timeout > next_timeout)
+			timeout = next_timeout;
+	}
+	mutex_unlock(&pinger_mutex);
+
+	return timeout - (now - time);
 }
 
 static bool ir_up;
@@ -235,7 +256,8 @@ static DECLARE_DELAYED_WORK(ping_work, ptlrpc_pinger_main);
 
 static void ptlrpc_pinger_main(struct work_struct *ws)
 {
-	time64_t this_ping, time_after_ping, time_to_next_wake;
+	time64_t this_ping, time_after_ping;
+	timeout_t time_to_next_wake;
 	struct obd_import *imp;
 
 	do {
@@ -266,7 +288,7 @@ static void ptlrpc_pinger_main(struct work_struct *ws)
 		 * we will SKIP the next ping at next_ping, and the
 		 * ping will get sent 2 timeouts from now!  Beware.
 		 */
-		CDEBUG(D_INFO, "next wakeup in %lld (%lld)\n",
+		CDEBUG(D_INFO, "next wakeup in %d (%lld)\n",
 		       time_to_next_wake,
 		       this_ping + PING_INTERVAL);
 	} while (time_to_next_wake <= 0);
