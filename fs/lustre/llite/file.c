@@ -946,9 +946,6 @@ restart:
 
 	mutex_unlock(&lli->lli_och_mutex);
 
-	/* lockless for direct IO so that it can do IO in parallel */
-	if (file->f_flags & O_DIRECT)
-		fd->fd_flags |= LL_FILE_LOCKLESS_IO;
 	fd = NULL;
 
 	/* Must do this outside lli_och_mutex lock to prevent deadlock where
@@ -1575,7 +1572,7 @@ ll_file_io_generic(const struct lu_env *env, struct vvp_io_args *args,
 	ssize_t result = 0;
 	int rc = 0;
 	unsigned int retried = 0;
-	unsigned int ignore_lockless = 0;
+	unsigned int dio_lock = 0;
 	bool is_aio = false;
 	struct cl_dio_aio *ci_aio = NULL;
 
@@ -1597,7 +1594,7 @@ restart:
 	io = vvp_env_thread_io(env);
 	ll_io_init(io, file, iot == CIT_WRITE, args);
 	io->ci_aio = ci_aio;
-	io->ci_ignore_lockless = ignore_lockless;
+	io->ci_dio_lock = dio_lock;
 	io->ci_ndelay_tried = retried;
 
 	if (cl_io_rw_init(env, io, iot, *ppos, count) == 0) {
@@ -1677,7 +1674,7 @@ out:
 		       *ppos, count, result);
 		/* preserve the tried count for FLR */
 		retried = io->ci_ndelay_tried;
-		ignore_lockless = io->ci_ignore_lockless;
+		dio_lock = io->ci_dio_lock;
 		goto restart;
 	}
 
