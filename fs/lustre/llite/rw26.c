@@ -324,7 +324,7 @@ static ssize_t ll_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 		return 0;
 
 	/* FIXME: io smaller than PAGE_SIZE is broken on ia64 ??? */
-	if ((file_offset & ~PAGE_MASK) || (count & ~PAGE_MASK))
+	if (file_offset & ~PAGE_MASK)
 		return -EINVAL;
 
 	CDEBUG(D_VFSTRACE,
