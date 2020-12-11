@@ -475,7 +475,7 @@ static int ll_dir_setdirstripe(struct dentry *dparent, struct lmv_user_md *lump,
 	}
 
 	if (encrypt) {
-		err = fscrypt_inherit_context(parent, NULL, op_data, false);
+		err = fscrypt_set_context(parent, op_data);
 		if (err)
 			goto out_op_data;
 	}

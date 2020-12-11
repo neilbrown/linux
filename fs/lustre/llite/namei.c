@@ -847,7 +847,7 @@ static struct dentry *ll_lookup_it(struct inode *parent, struct dentry *dentry,
 			*secctxlen = 0;
 	}
 	if (it->it_op & IT_CREAT && encrypt) {
-		rc = fscrypt_inherit_context(parent, NULL, op_data, false);
+		rc = fscrypt_set_context(parent, op_data);
 		if (rc) {
 			retval = ERR_PTR(rc);
 			goto out;
@@ -1393,12 +1393,6 @@ again:
 		encrypt = true;
 	}
 
-	if (encrypt) {
-		err = fscrypt_inherit_context(dir, NULL, op_data, false);
-		if (err)
-			goto err_exit;
-	}
-
 	err = md_create(sbi->ll_md_exp, op_data, tgt, tgt_len, mode,
 			from_kuid(&init_user_ns, current_fsuid()),
 			from_kgid(&init_user_ns, current_fsgid()),
@@ -1493,6 +1487,10 @@ again:
 		if (err)
 			goto err_exit;
 	}
+
+	err = fscrypt_prepare_new_inode(dir, inode, &encrypt);
+	if (err)
+		goto err_exit;
 
 	d_instantiate(dchild, inode);
 
