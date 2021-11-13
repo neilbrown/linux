@@ -90,8 +90,6 @@ source "drivers/staging/mt7621-pci/Kconfig"
 
 source "drivers/staging/mt7621-dma/Kconfig"
 
-source "drivers/staging/ralink-gdma/Kconfig"
-
 source "drivers/staging/mt7621-dts/Kconfig"
 
 source "drivers/staging/axis-fifo/Kconfig"
