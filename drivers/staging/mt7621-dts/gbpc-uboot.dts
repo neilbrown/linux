@@ -47,5 +47,11 @@
 			label = "firmware-2";
 			reg = <0x1050000 0xFB0000>;
 		};
+
+		partition@2050000 {
+			label = "firmware-full";
+			reg = <0x50000 0x1FB0000>;
+		};
+
 	};
 };
