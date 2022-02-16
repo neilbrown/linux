@@ -12,10 +12,18 @@
 	function = "gpio";
 };
 
-&gmac1 {
-	status = "ok";
-};
+&ethernet {
+	pinctrl-0 = <&rgmii2_pins>, <&mdio_pins>, <&rgmii1_pins>;
+	gmac1: mac@1 {
+		status = "ok";
+		phy-handle = <&phy_external>;
+	};
 
-&phy_external {
-	status = "ok";
+	mdio-bus {
+		phy_external: ethernet-phy@5 {
+			reg = <5>;
+			status = "ok";
+			phy-mode = "rgmii-rxid";
+		};
+	};
 };
