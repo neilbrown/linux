@@ -753,7 +753,7 @@ out_estate:
 
 __be32
 nfsd4_set_nfs4_acl(struct svc_rqst *rqstp, struct svc_fh *fhp,
-		struct nfs4_acl *acl)
+		   struct nfs4_acl *acl)
 {
 	__be32 error;
 	int host_error;
@@ -762,10 +762,12 @@ nfsd4_set_nfs4_acl(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct posix_acl *pacl = NULL, *dpacl = NULL;
 	unsigned int flags = 0;
 
-	/* Get inode */
-	error = fh_verify(rqstp, fhp, 0, NFSD_MAY_SATTR);
-	if (error)
-		return error;
+	if (rqstp) {
+		/* Get inode */
+		error = fh_verify(rqstp, fhp, 0, NFSD_MAY_SATTR);
+		if (error)
+			return error;
+	}
 
 	dentry = fhp->fh_dentry;
 	inode = d_inode(dentry);

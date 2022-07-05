@@ -163,12 +163,11 @@ is_create_with_attrs(struct nfsd4_open *open)
  * in the returned attr bitmap.
  */
 static void
-do_set_nfs4_acl(struct svc_rqst *rqstp, struct svc_fh *fhp,
-		struct nfs4_acl *acl, u32 *bmval)
+do_set_nfs4_acl(struct svc_fh *fhp, struct nfs4_acl *acl, u32 *bmval)
 {
 	__be32 status;
 
-	status = nfsd4_set_nfs4_acl(rqstp, fhp, acl);
+	status = nfsd4_set_nfs4_acl(NULL, fhp, acl);
 	if (status)
 		/*
 		 * We should probably fail the whole open at this point,
@@ -474,7 +473,7 @@ do_open_lookup(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate, stru
 		goto out;
 
 	if (is_create_with_attrs(open) && open->op_acl != NULL)
-		do_set_nfs4_acl(rqstp, *resfh, open->op_acl, open->op_bmval);
+		do_set_nfs4_acl(*resfh, open->op_acl, open->op_bmval);
 
 	nfsd4_set_open_owner_reply_cache(cstate, open, *resfh);
 	accmode = NFSD_MAY_NOP;
@@ -862,7 +861,7 @@ nfsd4_create(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		nfsd4_security_inode_setsecctx(&resfh, &create->cr_label, create->cr_bmval);
 
 	if (create->cr_acl != NULL)
-		do_set_nfs4_acl(rqstp, &resfh, create->cr_acl,
+		do_set_nfs4_acl(&resfh, create->cr_acl,
 				create->cr_bmval);
 
 	fh_unlock(&cstate->current_fh);
