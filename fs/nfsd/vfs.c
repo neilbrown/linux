@@ -461,6 +461,14 @@ out_unlock:
 	if (attr->label && attr->label->len)
 		attr->label_failed = security_inode_setsecctx(
 			dentry, attr->label->data, attr->label->len);
+	if (attr->pacl)
+		attr->acl_failed = set_posix_acl(&init_user_ns,
+						 inode, ACL_TYPE_ACCESS,
+						 attr->pacl);
+	if (!attr->acl_failed && attr->dpacl && S_ISDIR(inode->i_mode))
+		attr->acl_failed = set_posix_acl(&init_user_ns,
+						 inode, ACL_TYPE_DEFAULT,
+						 attr->dpacl);
 	fh_unlock(fhp);
 	if (size_change)
 		put_write_access(inode);
