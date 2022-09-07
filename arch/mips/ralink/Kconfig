@@ -62,7 +62,6 @@ endchoice
 
 choice
 	prompt "Devicetree selection"
-	depends on !SOC_MT7621
 	default DTB_RT_NONE
 	help
 	  Select the devicetree.
@@ -98,6 +97,16 @@ choice
 	config DTB_VOCORE2
 		bool "VoCore2"
 		depends on SOC_MT7620
+		select BUILTIN_DTB
+
+	config DTB_GNUBEE1
+		bool "GnuBee1 2.5inch NAS"
+		depends on SOC_MT7621
+		select BUILTIN_DTB
+
+	config DTB_GNUBEE2
+		bool "GnuBee2 3.5inch NAS"
+		depends on SOC_MT7621
 		select BUILTIN_DTB
 
 endchoice
