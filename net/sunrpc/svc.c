@@ -713,9 +713,6 @@ svc_prepare_thread(struct svc_serv *serv, struct svc_pool *pool, int node)
 
 	rqstp->rq_err = -EAGAIN; /* No error yet */
 
-	serv->sv_nrthreads += 1;
-	pool->sp_nrthreads += 1;
-
 	/* Protected by whatever lock the service uses when calling
 	 * svc_set_num_threads()
 	 */
@@ -815,6 +812,8 @@ svc_start_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 			svc_exit_thread(rqstp);
 			return PTR_ERR(task);
 		}
+		serv->sv_nrthreads += 1;
+		chosen_pool->sp_nrthreads += 1;
 
 		rqstp->rq_task = task;
 		if (serv->sv_nrpools > 1)
@@ -844,6 +843,8 @@ svc_stop_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 		victim = svc_pool_victim(serv, pool, &state);
 		if (!victim)
 			break;
+		victim->sp_nrthreads -= 1;
+		serv->sv_nrthreads -= 1;
 		svc_pool_wake_idle_thread(victim);
 		wait_on_bit(&victim->sp_flags, SP_VICTIM_REMAINS,
 			    TASK_IDLE);
@@ -959,8 +960,6 @@ svc_exit_thread(struct svc_rqst *rqstp)
 
 	list_del_rcu(&rqstp->rq_all);
 
-	pool->sp_nrthreads -= 1;
-	serv->sv_nrthreads -= 1;
 	svc_sock_update_bufs(serv);
 
 	svc_rqst_free(rqstp);
