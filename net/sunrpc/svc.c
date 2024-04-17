@@ -781,8 +781,12 @@ svc_pool_victim(struct svc_serv *serv, struct svc_pool *target_pool,
 	}
 
 	if (pool && pool->sp_nrthreads) {
-		set_bit(SP_VICTIM_REMAINS, &pool->sp_flags);
-		set_bit(SP_NEED_VICTIM, &pool->sp_flags);
+		if (pool->sp_nrthreads <= pool->sp_nractual) {
+			set_bit(SP_VICTIM_REMAINS, &pool->sp_flags);
+			set_bit(SP_NEED_VICTIM, &pool->sp_flags);
+			pool->sp_nractual -= 1;
+			serv->sv_nractual -= 1;
+		}
 		return pool;
 	}
 	return NULL;
@@ -803,6 +807,12 @@ svc_start_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 		chosen_pool = svc_pool_next(serv, pool, &state);
 		node = svc_pool_map_get_node(chosen_pool->sp_id);
 
+		serv->sv_nrthreads += 1;
+		chosen_pool->sp_nrthreads += 1;
+
+		if (chosen_pool->sp_nrthreads <= chosen_pool->sp_nractual)
+			continue;
+
 		rqstp = svc_prepare_thread(serv, chosen_pool, node);
 		if (!rqstp)
 			return -ENOMEM;
@@ -812,8 +822,8 @@ svc_start_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 			svc_exit_thread(rqstp);
 			return PTR_ERR(task);
 		}
-		serv->sv_nrthreads += 1;
-		chosen_pool->sp_nrthreads += 1;
+		serv->sv_nractual += 1;
+		chosen_pool->sp_nractual += 1;
 
 		rqstp->rq_task = task;
 		if (serv->sv_nrpools > 1)
@@ -850,6 +860,7 @@ svc_stop_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 			    TASK_IDLE);
 		nrservs++;
 	} while (nrservs < 0);
+	svc_sock_update_bufs(serv);
 	return 0;
 }
 
@@ -955,12 +966,9 @@ void svc_rqst_release_pages(struct svc_rqst *rqstp)
 void
 svc_exit_thread(struct svc_rqst *rqstp)
 {
-	struct svc_serv	*serv = rqstp->rq_server;
 	struct svc_pool	*pool = rqstp->rq_pool;
 
 	list_del_rcu(&rqstp->rq_all);
-
-	svc_sock_update_bufs(serv);
 
 	svc_rqst_free(rqstp);
 
