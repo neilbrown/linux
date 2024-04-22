@@ -2088,6 +2088,25 @@ TRACE_EVENT(nfsd_ctl_maxconn,
 	)
 );
 
+TRACE_EVENT(nfsd_ctl_maxthreads,
+	TP_PROTO(
+		const struct net *net,
+		int maxthreads
+	),
+	TP_ARGS(net, maxthreads),
+	TP_STRUCT__entry(
+		__field(unsigned int, netns_ino)
+		__field(int, maxthreads)
+	),
+	TP_fast_assign(
+		__entry->netns_ino = net->ns.inum;
+		__entry->maxthreads = maxthreads
+	),
+	TP_printk("maxthreads=%d",
+		__entry->maxthreads
+	)
+);
+
 TRACE_EVENT(nfsd_ctl_time,
 	TP_PROTO(
 		const struct net *net,

@@ -128,6 +128,12 @@ struct nfsd_net {
 	seqlock_t writeverf_lock;
 	unsigned char writeverf[8];
 
+	/*
+	 * Maximum number of threads to auto-adjust up to.  If 0 then a
+	 * share of nfsd_max_threads will be used.
+	 */
+	unsigned int max_threads;
+
 	u32 clientid_base;
 	u32 clientid_counter;
 	u32 clverifier_counter;

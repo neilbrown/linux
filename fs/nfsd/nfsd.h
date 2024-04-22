@@ -160,6 +160,10 @@ int nfsd_create_serv(struct net *net);
 void nfsd_destroy_serv(struct net *net);
 
 extern int nfsd_max_blksize;
+void nfsd_update_nets(void);
+extern unsigned int	nfsd_max_threads;
+extern unsigned long	nfsd_net_used;
+extern unsigned int	nfsd_net_cnt;
 
 static inline int nfsd_v4client(struct svc_rqst *rq)
 {

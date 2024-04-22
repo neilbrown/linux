@@ -80,6 +80,21 @@ DEFINE_SPINLOCK(nfsd_drc_lock);
 unsigned long	nfsd_drc_max_mem;
 unsigned long	nfsd_drc_mem_used;
 
+/*
+ * nfsd_max_threads is auto-configured based on available ram.
+ * Each network namespace can configure a minimum number of threads
+ * and optionally a maximum.
+ * nfsd_net_used is the number of the max or min from each net namespace.
+ * nfsd_new_cnt is the number of net namespaces with a configured minimum
+ *    but no configured maximum.
+ * When nfsd_max_threads exceeds nfsd_net_used, the different is divided
+ * by nfsd_net_cnt and this number gives the excess above the configured minimum
+ * for all net namespaces without a configured maximum.
+ */
+unsigned int	nfsd_max_threads;
+unsigned long	nfsd_net_used;
+unsigned int	nfsd_net_cnt;
+
 #if IS_ENABLED(CONFIG_NFS_LOCALIO)
 static const struct svc_version *localio_versions[] = {
 	[1] = &localio_version1,
@@ -150,6 +165,47 @@ struct svc_program		nfsd_programs[] = {
 	}
 #endif /* CONFIG_NFS_LOCALIO */
 };
+
+void nfsd_update_nets(void)
+{
+	struct net *net;
+
+	if (nfsd_max_threads == 0) {
+		nfsd_max_threads = (nr_free_buffer_pages() >> 7) /
+			(NFSSVC_MAXBLKSIZE >> PAGE_SHIFT);
+	}
+	nfsd_net_used = 0;
+	nfsd_net_cnt = 0;
+	down_read(&net_rwsem);
+	for_each_net(net) {
+		struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+
+		if (!nn->nfsd_serv)
+			continue;
+		if (nn->max_threads > 0) {
+			nfsd_net_used += nn->max_threads;
+		} else {
+			nfsd_net_used += nn->nfsd_serv->sv_nrthreads;
+			nfsd_net_cnt += 1;
+		}
+	}
+	up_read(&net_rwsem);
+}
+
+static inline int nfsd_max_pool_threads(struct svc_pool *p, struct nfsd_net *nn)
+{
+	int svthreads = nn->nfsd_serv->sv_nrthreads;
+
+	if (nn->max_threads > 0)
+		return nn->max_threads;
+	if (nfsd_net_cnt == 0 || svthreads == 0)
+		return 0;
+	if (nfsd_max_threads < nfsd_net_cnt)
+		return p->sp_nrthreads;
+	/* Share nfsd_max_threads among all net, then among pools in this net. */
+	return p->sp_nrthreads +
+		nfsd_max_threads / nfsd_net_cnt * p->sp_nrthreads / svthreads;
+}
 
 bool nfsd_support_version(int vers)
 {
@@ -534,6 +590,7 @@ void nfsd_destroy_serv(struct net *net)
 	spin_lock(&nfsd_notifier_lock);
 	nn->nfsd_serv = NULL;
 	spin_unlock(&nfsd_notifier_lock);
+	nfsd_update_nets();
 
 	/* check if the notifier still has clients */
 	if (atomic_dec_return(&nfsd_notifier_refcount) == 0) {
@@ -677,6 +734,8 @@ int nfsd_create_serv(struct net *net)
 	nn->nfsd_serv = serv;
 	spin_unlock(&nfsd_notifier_lock);
 
+	nfsd_update_nets();
+
 	set_max_drc();
 	/* check if the notifier is already set */
 	if (atomic_inc_return(&nfsd_notifier_refcount) == 1) {
@@ -783,6 +842,7 @@ int nfsd_set_nrthreads(int n, int *nthreads, struct net *net)
 			goto out;
 	}
 out:
+	nfsd_update_nets();
 	return err;
 }
 
@@ -822,6 +882,7 @@ nfsd_svc(int n, int *nthreads, struct net *net, const struct cred *cred, const c
 	error = nfsd_set_nrthreads(n, nthreads, net);
 	if (error)
 		goto out_put;
+	nfsd_update_nets();
 	error = serv->sv_nrthreads;
 out_put:
 	if (serv->sv_nrthreads == 0)
