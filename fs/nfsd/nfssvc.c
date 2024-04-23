@@ -994,9 +994,11 @@ static int
 nfsd(void *vrqstp)
 {
 	struct svc_rqst *rqstp = (struct svc_rqst *) vrqstp;
+	struct svc_pool *pool = rqstp->rq_pool;
 	struct svc_xprt *perm_sock = list_entry(rqstp->rq_server->sv_permsocks.next, typeof(struct svc_xprt), xpt_list);
 	struct net *net = perm_sock->xpt_net;
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
+	bool have_mutex = false;
 
 	/* At this point, the thread shares current->fs
 	 * with the init process. We need to create files with the
@@ -1014,7 +1016,33 @@ nfsd(void *vrqstp)
 	 * The main request loop
 	 */
 	while (!svc_thread_should_stop(rqstp)) {
-		svc_recv(rqstp);
+		switch (svc_recv(rqstp)) {
+		case -ETIMEDOUT: /* Nothing to do */
+			if (mutex_trylock(&nfsd_mutex)) {
+				if (pool->sp_nractual > pool->sp_nrthreads) {
+					set_bit(RQ_VICTIM, &rqstp->rq_flags);
+					pool->sp_nractual -= 1;
+					printk("Kill a victim\n");
+					have_mutex = true;
+				} else
+					mutex_unlock(&nfsd_mutex);
+			} else printk("trylock failed\n");
+			break;
+		case -EBUSY: /* Too much to do */
+			if (pool->sp_nractual < nfsd_max_pool_threads(pool, nn) &&
+			    mutex_trylock(&nfsd_mutex)) {
+				// check no idle threads?
+				if (pool->sp_nractual < nfsd_max_pool_threads(pool,nn)) {
+					printk("start new thread\n");
+					svc_new_thread(rqstp->rq_server, pool);
+				}
+				mutex_unlock(&nfsd_mutex);
+			}
+			clear_bit(SP_TASK_STARTING, &pool->sp_flags);
+			break;
+		default:
+			break;
+		}
 		nfsd_file_net_dispose(nn);
 	}
 
@@ -1022,6 +1050,8 @@ nfsd(void *vrqstp)
 
 	/* Release the thread */
 	svc_exit_thread(rqstp);
+	if (have_mutex)
+		mutex_unlock(&nfsd_mutex);
 	return 0;
 }
 

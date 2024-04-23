@@ -792,45 +792,35 @@ svc_pool_victim(struct svc_serv *serv, struct svc_pool *target_pool,
 	return NULL;
 }
 
-static int
-svc_start_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
+int svc_new_thread(struct svc_serv *serv, struct svc_pool *pool)
 {
 	struct svc_rqst	*rqstp;
 	struct task_struct *task;
-	struct svc_pool *chosen_pool;
-	unsigned int state = serv->sv_nrthreads-1;
 	int node;
 	int err;
 
-	do {
-		nrservs--;
-		chosen_pool = svc_pool_next(serv, pool, &state);
-		node = svc_pool_map_get_node(chosen_pool->sp_id);
+	node = svc_pool_map_get_node(pool->sp_id);
 
-		serv->sv_nrthreads += 1;
-		chosen_pool->sp_nrthreads += 1;
+	rqstp = svc_prepare_thread(serv, pool, node);
+	if (!rqstp)
+		return -ENOMEM;
+	set_bit(SP_TASK_STARTING, &pool->sp_flags);
+	task = kthread_create_on_node(serv->sv_threadfn, rqstp,
+				      node, "%s", serv->sv_name);
+	if (IS_ERR(task)) {
+		clear_bit(SP_TASK_STARTING, &pool->sp_flags);
+		svc_exit_thread(rqstp);
+		return PTR_ERR(task);
+	}
+	serv->sv_nractual += 1;
+	pool->sp_nractual += 1;
 
-		if (chosen_pool->sp_nrthreads <= chosen_pool->sp_nractual)
-			continue;
+	rqstp->rq_task = task;
+	if (serv->sv_nrpools > 1)
+		svc_pool_map_set_cpumask(task, pool->sp_id);
 
-		rqstp = svc_prepare_thread(serv, chosen_pool, node);
-		if (!rqstp)
-			return -ENOMEM;
-		task = kthread_create_on_node(serv->sv_threadfn, rqstp,
-					      node, "%s", serv->sv_name);
-		if (IS_ERR(task)) {
-			svc_exit_thread(rqstp);
-			return PTR_ERR(task);
-		}
-		serv->sv_nractual += 1;
-		chosen_pool->sp_nractual += 1;
-
-		rqstp->rq_task = task;
-		if (serv->sv_nrpools > 1)
-			svc_pool_map_set_cpumask(task, chosen_pool->sp_id);
-
-		svc_sock_update_bufs(serv);
-		wake_up_process(task);
+	svc_sock_update_bufs(serv);
+	wake_up_process(task);
 
 		wait_var_event(&rqstp->rq_err, rqstp->rq_err != -EAGAIN);
 		err = rqstp->rq_err;
@@ -838,9 +828,29 @@ svc_start_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 			svc_exit_thread(rqstp);
 			return err;
 		}
-	} while (nrservs > 0);
-
 	return 0;
+}
+EXPORT_SYMBOL_GPL(svc_new_thread);
+
+static int
+svc_start_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
+{
+	unsigned int state = serv->sv_nrthreads-1;
+	int err = 0;
+
+	while (!err && nrservs--) {
+		struct svc_pool *chosen_pool = svc_pool_next(serv, pool, &state);
+
+		serv->sv_nrthreads += 1;
+		chosen_pool->sp_nrthreads += 1;
+
+		if (chosen_pool->sp_nrthreads <= chosen_pool->sp_nractual)
+			continue;
+
+		err = svc_new_thread(serv, chosen_pool);
+	}
+
+	return err;
 }
 
 static int
