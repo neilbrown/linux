@@ -148,7 +148,7 @@ static inline __be32 check_pseudo_root(struct dentry *dentry,
  */
 static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 				 u32 xid,
-				 struct svc_cred *cred,
+				 struct svc_cred *cred, int nfs_vers,
 				 struct svc_fh *fhp)
 {
 	struct knfsd_fh	*fh = &fhp->fh_handle;
@@ -274,7 +274,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 	fhp->fh_dentry = dentry;
 	fhp->fh_export = exp;
 
-	switch (rqstp->rq_vers) {
+	switch (nfs_vers) {
 	case 4:
 		if (dentry->d_sb->s_export_op->flags & EXPORT_OP_NOATOMIC_ATTR)
 			fhp->fh_no_atomic_attr = true;
@@ -304,6 +304,7 @@ out:
 static __be32
 __fh_verify(struct svc_rqst *rqstp,
 	    struct net *net, u32 xid, struct svc_cred *cred,
+	    int nfs_vers,
 	    struct svc_fh *fhp, umode_t type, int access)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
@@ -315,7 +316,7 @@ __fh_verify(struct svc_rqst *rqstp,
 		cred = &rqstp->rq_cred;
 
 	if (!fhp->fh_dentry) {
-		error = nfsd_set_fh_dentry(rqstp, net, xid, cred, fhp);
+		error = nfsd_set_fh_dentry(rqstp, net, xid, cred, nfs_vers, fhp);
 		if (error)
 			goto out;
 	}
@@ -409,10 +410,15 @@ out:
 __be32
 fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
 {
+	int nfs_vers;
+	if (rqstp->rq_prog == NFS_PROGRAM)
+		nfs_vers = rqstp->rq_vers;
+	else /* must be NLM */
+		nfs_vers = rqstp->rq_vers == 4 ? 3 : 2;
 	__be32 error;
 
 	trace_nfsd_fh_verify(rqstp, fhp, type, access);
-	error = __fh_verify(rqstp, SVC_NET(rqstp), rqstp->rq_xid, &rqstp->rq_cred,
+	error = __fh_verify(rqstp, SVC_NET(rqstp), rqstp->rq_xid, &rqstp->rq_cred, nfs_vers,
 			   fhp, type, access);
 	trace_nfsd_fh_verify_err(rqstp, fhp, type, access, error);
 	return error;
