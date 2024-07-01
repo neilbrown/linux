@@ -149,6 +149,8 @@ static inline __be32 check_pseudo_root(struct dentry *dentry,
 static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 				 u32 xid,
 				 struct svc_cred *cred, int nfs_vers,
+				 struct auth_domain *client,
+				 struct auth_domain *gssclient,
 				 struct svc_fh *fhp)
 {
 	struct knfsd_fh	*fh = &fhp->fh_handle;
@@ -192,7 +194,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 	if (data_left < 0)
 		return error;
 	exp = rqst_exp_find(&rqstp->rq_chandle, net,
-			    rqstp->rq_client, rqstp->rq_gssclient,
+			    client, gssclient,
 			    fh->fh_fsid_type, fh->fh_fsid);
 	fid = (struct fid *)(fh->fh_fsid + len);
 
@@ -304,7 +306,8 @@ out:
 static __be32
 __fh_verify(struct svc_rqst *rqstp,
 	    struct net *net, u32 xid, struct svc_cred *cred,
-	    int nfs_vers,
+	    int nfs_vers, struct auth_domain *client,
+	    struct auth_domain *gssclient,
 	    struct svc_fh *fhp, umode_t type, int access)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
@@ -316,7 +319,8 @@ __fh_verify(struct svc_rqst *rqstp,
 		cred = &rqstp->rq_cred;
 
 	if (!fhp->fh_dentry) {
-		error = nfsd_set_fh_dentry(rqstp, net, xid, cred, nfs_vers, fhp);
+		error = nfsd_set_fh_dentry(rqstp, net, xid, cred, nfs_vers,
+					   client, gssclient, fhp);
 		if (error)
 			goto out;
 	}
@@ -419,6 +423,8 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
 
 	trace_nfsd_fh_verify(rqstp, fhp, type, access);
 	error = __fh_verify(rqstp, SVC_NET(rqstp), rqstp->rq_xid, &rqstp->rq_cred, nfs_vers,
+			   rqstp->rq_client,
+			   rqstp->rq_gssclient,
 			   fhp, type, access);
 	trace_nfsd_fh_verify_err(rqstp, fhp, type, access, error);
 	return error;
