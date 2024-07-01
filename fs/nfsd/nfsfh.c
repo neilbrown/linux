@@ -87,23 +87,28 @@ nfsd_mode_check(struct dentry *dentry, umode_t requested)
 	return nfserr_wrong_type;
 }
 
-static bool nfsd_originating_port_ok(struct svc_rqst *rqstp, int flags)
+static bool nfsd_originating_port_ok(struct svc_rqst *rqstp,
+				     struct svc_export *exp)
 {
-	if (flags & NFSEXP_INSECURE_PORT)
+	struct svc_cred *cred = &rqstp->rq_cred;
+
+	if (nfsexp_flags(cred, exp) & NFSEXP_INSECURE_PORT)
 		return true;
 	/* We don't require gss requests to use low ports: */
-	if (rqstp->rq_cred.cr_flavor >= RPC_AUTH_GSS)
+	if (cred->cr_flavor >= RPC_AUTH_GSS)
 		return true;
 	return test_bit(RQ_SECURE, &rqstp->rq_flags);
 }
 
 static __be32 nfsd_setuser_and_check_port(struct svc_rqst *rqstp,
+					  struct svc_cred *cred,
 					  struct svc_export *exp)
 {
-	int flags = nfsexp_flags(&rqstp->rq_cred, exp);
+	if (!cred)
+		cred = &rqstp->rq_cred;
 
 	/* Check if the request originated from a secure port. */
-	if (!nfsd_originating_port_ok(rqstp, flags)) {
+	if (rqstp && !nfsd_originating_port_ok(rqstp, exp)) {
 		RPC_IFDEBUG(char buf[RPC_MAX_ADDRBUFLEN]);
 		dprintk("nfsd: request from insecure port %s!\n",
 		        svc_print_addr(rqstp, buf, sizeof(buf)));
@@ -111,7 +116,7 @@ static __be32 nfsd_setuser_and_check_port(struct svc_rqst *rqstp,
 	}
 
 	/* Set user creds for this exportpoint */
-	return nfserrno(nfsd_setuser(&rqstp->rq_cred, exp));
+	return nfserrno(nfsd_setuser(cred, exp));
 }
 
 static inline __be32 check_pseudo_root(struct dentry *dentry,
@@ -143,6 +148,7 @@ static inline __be32 check_pseudo_root(struct dentry *dentry,
  */
 static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 				 u32 xid,
+				 struct svc_cred *cred,
 				 struct svc_fh *fhp)
 {
 	struct knfsd_fh	*fh = &fhp->fh_handle;
@@ -221,7 +227,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 		put_cred(override_creds(new));
 		put_cred(new);
 	} else {
-		error = nfsd_setuser_and_check_port(rqstp, exp);
+		error = nfsd_setuser_and_check_port(rqstp, cred, exp);
 		if (error)
 			goto out;
 	}
@@ -296,7 +302,8 @@ out:
 }
 
 static __be32
-__fh_verify(struct svc_rqst *rqstp, struct net *net, u32 xid,
+__fh_verify(struct svc_rqst *rqstp,
+	    struct net *net, u32 xid, struct svc_cred *cred,
 	    struct svc_fh *fhp, umode_t type, int access)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
@@ -304,8 +311,11 @@ __fh_verify(struct svc_rqst *rqstp, struct net *net, u32 xid,
 	struct dentry	*dentry;
 	__be32		error;
 
+	if (!cred)
+		cred = &rqstp->rq_cred;
+
 	if (!fhp->fh_dentry) {
-		error = nfsd_set_fh_dentry(rqstp, net, xid, fhp);
+		error = nfsd_set_fh_dentry(rqstp, net, xid, cred, fhp);
 		if (error)
 			goto out;
 	}
@@ -332,7 +342,7 @@ __fh_verify(struct svc_rqst *rqstp, struct net *net, u32 xid,
 	if (error)
 		goto out;
 
-	error = nfsd_setuser_and_check_port(rqstp, exp);
+	error = nfsd_setuser_and_check_port(rqstp, cred, exp);
 	if (error)
 		goto out;
 
@@ -362,7 +372,7 @@ __fh_verify(struct svc_rqst *rqstp, struct net *net, u32 xid,
 
 skip_pseudoflavor_check:
 	/* Finally, check access permissions. */
-	error = nfsd_permission(&rqstp->rq_cred, exp, dentry, access);
+	error = nfsd_permission(cred, exp, dentry, access);
 out:
 	if (error == nfserr_stale)
 		nfsd_stats_fh_stale_inc(nn, exp);
@@ -402,7 +412,8 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
 	__be32 error;
 
 	trace_nfsd_fh_verify(rqstp, fhp, type, access);
-	error = __fh_verify(rqstp, SVC_NET(rqstp), rqstp->rq_xid, fhp, type, access);
+	error = __fh_verify(rqstp, SVC_NET(rqstp), rqstp->rq_xid, &rqstp->rq_cred,
+			   fhp, type, access);
 	trace_nfsd_fh_verify_err(rqstp, fhp, type, access, error);
 	return error;
 }
