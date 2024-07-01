@@ -217,6 +217,11 @@ extern char * SVCFH_fmt(struct svc_fh *fhp);
  * Function prototypes
  */
 __be32	fh_verify(struct svc_rqst *, struct svc_fh *, umode_t, int);
+__be32	__fh_verify(struct svc_rqst *rqstp,
+		    struct net *net, u32 xid, struct svc_cred *cred,
+		    int nfs_vers, struct auth_domain *client,
+		    struct auth_domain *gssclient,
+		    struct svc_fh *fhp, umode_t type, int access);
 __be32	fh_compose(struct svc_fh *, struct svc_export *, struct dentry *, struct svc_fh *);
 __be32	fh_update(struct svc_fh *);
 void	fh_put(struct svc_fh *);

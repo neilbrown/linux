@@ -303,7 +303,7 @@ out:
 	return error;
 }
 
-static __be32
+__be32
 __fh_verify(struct svc_rqst *rqstp,
 	    struct net *net, u32 xid, struct svc_cred *cred,
 	    int nfs_vers, struct auth_domain *client,
