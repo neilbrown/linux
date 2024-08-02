@@ -142,6 +142,7 @@ static inline __be32 check_pseudo_root(struct dentry *dentry,
  * fh_dentry.
  */
 static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
+				 u32 xid,
 				 struct svc_fh *fhp)
 {
 	struct knfsd_fh	*fh = &fhp->fh_handle;
@@ -191,7 +192,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 
 	error = nfserr_stale;
 	if (IS_ERR(exp)) {
-		trace_nfsd_set_fh_dentry_badexport(rqstp, fhp, PTR_ERR(exp));
+		trace_nfsd_set_fh_dentry_badexport(xid, fhp, PTR_ERR(exp));
 
 		if (PTR_ERR(exp) == -ENOENT)
 			return error;
@@ -239,7 +240,7 @@ static __be32 nfsd_set_fh_dentry(struct svc_rqst *rqstp, struct net *net,
 						data_left, fileid_type, 0,
 						nfsd_acceptable, exp);
 		if (IS_ERR_OR_NULL(dentry)) {
-			trace_nfsd_set_fh_dentry_badhandle(rqstp, fhp,
+			trace_nfsd_set_fh_dentry_badhandle(xid, fhp,
 					dentry ?  PTR_ERR(dentry) : -ESTALE);
 			switch (PTR_ERR(dentry)) {
 			case -ENOMEM:
@@ -295,7 +296,7 @@ out:
 }
 
 static __be32
-__fh_verify(struct svc_rqst *rqstp, struct net *net,
+__fh_verify(struct svc_rqst *rqstp, struct net *net, u32 xid,
 	    struct svc_fh *fhp, umode_t type, int access)
 {
 	struct nfsd_net *nn = net_generic(net, nfsd_net_id);
@@ -304,7 +305,7 @@ __fh_verify(struct svc_rqst *rqstp, struct net *net,
 	__be32		error;
 
 	if (!fhp->fh_dentry) {
-		error = nfsd_set_fh_dentry(rqstp, net, fhp);
+		error = nfsd_set_fh_dentry(rqstp, net, xid, fhp);
 		if (error)
 			goto out;
 	}
@@ -401,7 +402,7 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, umode_t type, int access)
 	__be32 error;
 
 	trace_nfsd_fh_verify(rqstp, fhp, type, access);
-	error = __fh_verify(rqstp, SVC_NET(rqstp), fhp, type, access);
+	error = __fh_verify(rqstp, SVC_NET(rqstp), rqstp->rq_xid, fhp, type, access);
 	trace_nfsd_fh_verify_err(rqstp, fhp, type, access, error);
 	return error;
 }
