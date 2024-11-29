@@ -249,6 +249,13 @@ enum dentry_flags {
 #define DCACHE_MANAGED_DENTRY \
 	(DCACHE_MOUNTED|DCACHE_NEED_AUTOMOUNT|DCACHE_MANAGE_TRANSIT)
 
+/* Nesting levels for DCACHE_LOCKED */
+enum {
+	DLOCK_NORMAL,
+	DLOCK_RENAME,		/* dentry with higher address in rename */
+	DLOCK_DYING_WAIT,	/* child of a locked parent that is dying */
+};
+
 /*
  * These are the low-level FS interfaces to the dcache..
  */

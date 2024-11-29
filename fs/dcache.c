@@ -2695,6 +2695,28 @@ static void __d_rehash(struct dentry *entry)
 	hlist_bl_nulls_lock_add_head(&entry->d_hash, b, d_nulls(hash));
 }
 
+/*
+ * dentry locking for updates.
+ * When modifying a directory the target dentry will be locked by
+ * setting DCACHE_LOCKED under ->d_lock.  If it is already set,
+ * DCACHE_LOCK_WAITERS is set to ensure a wakeup is sent, and we wait
+ * using wait_var_event_any_lock().
+ * Conceptually the name in the parent is locked, so if a dentry has no
+ * name or parent is cannot be locked.  So an IS_ROOT() dentry is never
+ * locked.
+ */
+
+static bool check_dentry_locked(struct dentry *de)
+{
+	if (d_unhashed(de))
+		return false;
+	if (!(de->d_flags & DCACHE_LOCKED))
+		return false;
+	if (!(de->d_flags & DCACHE_LOCK_WAITERS))
+		de->d_flags |= DCACHE_LOCK_WAITERS;
+	return true;
+}
+
 void d_wait_locked(struct dentry *dentry, unsigned int subclass)
 {
 	if (likely(dentry->d_flags & DCACHE_LOCKED)) {
@@ -2710,10 +2732,173 @@ void d_wait_locked(struct dentry *dentry, unsigned int subclass)
 
 		dentry->d_flags |= DCACHE_LOCK_WAITERS;
 		wait_var_event_spinlock(&dentry->d_flags,
-					!(dentry->d_flags & DCACHE_LOCKED) ||
-					d_unhashed(dentry),
+					!check_dentry_locked(dentry),
 					&dentry->d_lock);
 	}
+}
+
+static bool __dentry_lock(struct dentry *dentry,
+			  struct dentry *base, const struct qstr *last,
+			  unsigned int subclass, unsigned int seq,
+			  unsigned int lookup_flags)
+{
+	struct dentry *parent;
+	struct inode *dir;
+	int err;
+
+	if (d_in_lookup(dentry))
+		/* always already locked */
+		return true;
+retry:
+	lock_acquire_exclusive(&dentry->lock_map, subclass, 0, NULL, _THIS_IP_);
+	spin_lock(&dentry->d_lock);
+	err = wait_var_event_any_lock(&dentry->d_flags,
+				      !check_dentry_locked(dentry),
+				      &dentry->d_lock, spin, TASK_KILLABLE);
+	if (err ||
+	    !dentry_matches(dentry, base, last, seq) ||
+	    ((lookup_flags & LOOKUP_EXCL) && dentry->d_inode)) {
+		spin_unlock(&dentry->d_lock);
+		lock_map_release(&dentry->lock_map);
+		return false;
+	}
+	parent = dentry->d_parent;
+	/*
+	 * memory barrier ensures rmdir_lock() will see the lock,
+	 * or we will subsequently see S_DYING or S_DEAD
+	 */
+	smp_store_mb(dentry->d_flags, dentry->d_flags | DCACHE_LOCKED);
+	if (!(parent->d_inode->i_flags & (S_DYING | S_DEAD))) {
+		spin_unlock(&dentry->d_lock);
+		return true;
+	}
+	/*
+	 * Cannot lock while parent is dying.  If parent is dying
+	 * we normally wait, but for DLOCK_RENAME there is already
+	 * a locked dentry which could have the same parent, so
+	 * we need to fail and trigger a retry.
+	 */
+	dentry->d_flags &= ~DCACHE_LOCKED;
+	if (IS_DEADDIR(parent->d_inode) || subclass == DLOCK_RENAME) {
+		spin_unlock(&dentry->d_lock);
+		lock_map_release(&dentry->lock_map);
+		return false;
+	}
+	spin_unlock(&dentry->d_lock);
+	lock_map_release(&dentry->lock_map);
+
+	parent = dget_parent(dentry);
+	dir = parent->d_inode;
+
+	err = wait_var_event_killable(&dir->i_flags,
+				      !(dir->i_flags & S_DYING));
+	dput(parent);
+	if (err)
+		return false;
+
+	goto retry;
+}
+
+/**
+ * dentry_lock - lock a dentry in preparation for create/remove/rename
+ * @dentry:	the dentry to be locked
+ * @base:	the parent the dentry must still have after being locked, or %NULL
+ * @last:	the name the dentry must still have after being locked, or %NULL
+ * @seq:	rename_lock seq from before lookup, only if @base not %NULL.
+ * @lookup_flags: LOOKUP_EXCL if dentry must remain negative
+ *
+ * This function locks a dentry in preparation for create/remove/rename.
+ * While the lock is held no other process will change the parent, name,
+ * or inode of this dentry.
+ * The only case where a process might hold locks on two dentries is when
+ * performing a rename operation.  In that case DCACHE_RENAME_LOCK must
+ * already be set so there is no risk of AB-BA deadlock.
+ *
+ * Returns: %true if lock was successfully applied, or %false if the
+ * process was signalled or if @base and @last are given but the dentry
+ * was renamed or unlinked while waiting for the lock.
+ */
+bool dentry_lock(struct dentry *dentry,
+		 struct dentry *base, const struct qstr *last,
+		 unsigned int seq, unsigned int lookup_flags)
+{
+	return __dentry_lock(dentry, base, last, DLOCK_NORMAL, seq,
+			     lookup_flags);
+}
+
+static bool dentry_lock_nested(struct dentry *dentry,
+			       struct dentry *base, const struct qstr *last,
+			       unsigned int seq, unsigned int lookup_flags)
+{
+	return __dentry_lock(dentry, base, last, DLOCK_RENAME, seq,
+			     lookup_flags);
+}
+
+/**
+ * dentry_trylock - attempt to lock a dentry without waiting
+ * @dentry:	the dentry to be locked
+ *
+ * This function locks a dentry in preparation for create/remove/rename if it
+ * is not already locked.
+ *
+ * Returns: %true if the dentry was not locked but now is.  %false if
+ * the dentry was already locked.
+ */
+bool dentry_trylock(struct dentry *dentry)
+{
+	int ret = false;
+
+	if (d_in_lookup(dentry))
+		/* always already locked */
+		return true;
+
+	spin_lock(&dentry->d_lock);
+	if (!(dentry->d_flags & DCACHE_LOCKED)) {
+		lock_map_acquire_try(&dentry->lock_map);
+		dentry->d_flags |= DCACHE_LOCKED;
+		ret = true;
+	}
+	spin_unlock(&dentry->d_lock);
+
+	return ret;
+}
+
+bool dentry_lock_two(struct dentry *d1, struct qstr *n1,
+		     struct dentry *d2, struct qstr *n2,
+		     unsigned int seq, unsigned int lookup_flags2)
+{
+	/*
+	 * This is the only place where two dentires are locked, though
+	 * rmdir_lock() will wait for a child to unlock while the parent
+	 * is locked.
+	 * Both dentries must have DCACHE_RENAME_LOCK set so the
+	 * parents are stable, though the name might have changed since lookup.
+	 * DCACHE_RENAME_LOCK ensures no other thread could try to
+	 * lock both of these, so it is safe to lock in any order.
+	 * Wait for S_DYING on the second dentry before taking any lock
+	 * as dentry_lock_nested() won't wait, it will fail and we will retry.
+	 *
+	 * d2 could already be locked if in-lookup, so we lock it
+	 * first as it is never safe to call dentry_lock() while holding
+	 * a lock on another dentry in the same dir, due to S_DYING.
+	 */
+	struct dentry *p1 = d1->d_parent, *p2 = d2->d_parent;
+
+	if (!d_in_lookup(d2)) {
+		wait_var_event(&p1->d_inode->i_flags,
+			       !(p1->d_inode->i_flags & S_DYING));
+		if (!dentry_lock(d2, p2, n2, seq, lookup_flags2))
+			return false;
+	}
+	/* d2 is locked */
+	if (d1 != d2) {
+		if (!dentry_lock_nested(d1, p1, n1, seq, 0)) {
+			dentry_unlock(d2);
+			return false;
+		}
+	}
+	/* Both are locked */
+	return true;
 }
 
 static void __d_lock_unhash_wake(struct dentry *dentry)
@@ -2857,7 +3042,7 @@ retry:
 	 * somebody is likely to be still doing lookup for it;
 	 * wait for them to finish
 	 */
-	d_wait_locked(dentry, 0);
+	d_wait_locked(dentry, DLOCK_NORMAL);
 	/*
 	 * it's not in-lookup anymore.  We dropped the lock and d_seq
 	 * isn't much use as it is likely that an inode was attached.

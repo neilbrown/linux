@@ -244,6 +244,13 @@ extern struct dentry *d_lookup(const struct dentry *, const struct qstr *);
 extern struct dentry *__d_lookup_rcu(const struct dentry *parent,
 				const struct qstr *name, unsigned *seq);
 void d_wait_locked(struct dentry *dentry, unsigned int subclass);
+bool dentry_trylock(struct dentry *dentry);
+bool dentry_lock(struct dentry *dentry,
+		 struct dentry *base, const struct qstr *last,
+		 unsigned int seq, unsigned int lookup_flags);
+bool dentry_lock_two(struct dentry *d1, struct qstr *n1,
+		     struct dentry *d2, struct qstr *n2,
+		     unsigned int seq, unsigned int lookup_flags2);
 #define D_LOOKUP_NEEDS_RETRY ((void*)1)
 
 bool dentry_matches(struct dentry *dentry,

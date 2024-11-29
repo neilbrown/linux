@@ -1900,7 +1900,8 @@ again:
 		dget_dlock(child);
 		spin_unlock(&dentry->d_lock);
 
-		d_wait_locked(child, 1);
+		d_wait_locked(child, DLOCK_DYING_WAIT);
+
 		spin_unlock(&child->d_lock);
 		dput(child);
 		goto again;
