@@ -1779,13 +1779,14 @@ static struct dentry *lookup_dcache(const struct qstr *name,
 }
 
 /*
- * Parent directory has inode locked exclusive.  This is one
- * and only case when ->lookup() gets called on non in-lookup
- * dentries - as the matter of fact, this only gets called
- * when directory is guaranteed to have no in-lookup children
- * at all.
- * Will return -ENOENT if name isn't found and LOOKUP_CREATE wasn't passed.
- * Will return -EEXIST if name is found and LOOKUP_EXCL was passed.
+ * Parent directory has inode locked.
+ * If Lookup_EXCL or LOOKUP_RENAME_TARGET is set
+ * d_lookup_done() must be called before the dentry is dput()
+ * If the dentry is not d_in_lookup():
+ *   Will return -ENOENT if name isn't found and LOOKUP_CREATE wasn't passed.
+ *   Will return -EEXIST if name is found and LOOKUP_EXCL was passed.
+ * If it is d_in_lookup() then these conditions can only be checked by the
+ * file system when carrying out the intent (create or rename).
  */
 static struct dentry *lookup_one_qstr_excl(const struct qstr *name,
 					   struct dentry *base, unsigned int flags)
@@ -1803,17 +1804,26 @@ static struct dentry *lookup_one_qstr_excl(const struct qstr *name,
 	if (unlikely(IS_DEADDIR(dir)))
 		return ERR_PTR(-ENOENT);
 
-	dentry = d_alloc(base, name);
-	if (unlikely(!dentry))
-		return ERR_PTR(-ENOMEM);
+	dentry = d_alloc_parallel(base, name);
+	if (unlikely(IS_ERR(dentry)))
+		return dentry;
+	if (unlikely(!d_in_lookup(dentry)))
+		/* Raced with another thread which did the lookup */
+		goto found;
 
 	old = dir->i_op->lookup(dir, dentry, flags);
 	if (unlikely(old)) {
+		d_lookup_done(dentry);
 		dput(dentry);
 		dentry = old;
 	}
 found:
 	if (IS_ERR(dentry))
+		return dentry;
+	if (d_in_lookup(dentry))
+		/* We cannot check for errors - the caller will have to
+		 * wait for any create-etc attempt to get relevant errors.
+		 */
 		return dentry;
 	if (d_is_negative(dentry) && !(flags & LOOKUP_CREATE)) {
 		dput(dentry);
@@ -2932,6 +2942,8 @@ static struct dentry *__start_dirop(struct dentry *parent, struct qstr *name,
  * The lookup is performed and necessary locks are taken so that, on success,
  * the returned dentry can be operated on safely.
  * The qstr must already have the hash value calculated.
+ * The dentry may be d_in_lookup() if %LOOKUP_EXCL or %LOOKUP_RENAME_TARGET
+ * is given, depending on the filesystem.
  *
  * Returns: a locked dentry, or an error.
  *
@@ -2953,6 +2965,7 @@ void end_dirop(struct dentry *de)
 {
 	if (!IS_ERR(de)) {
 		inode_unlock(de->d_parent->d_inode);
+		d_lookup_done(de);
 		dput(de);
 	}
 }
@@ -3859,8 +3872,10 @@ __start_renaming(struct renamedata *rd, int lookup_flags,
 	return 0;
 
 out_dput_d2:
+	d_lookup_done(d2);
 	dput(d2);
 out_dput_d1:
+	d_lookup_done(d1);
 	dput(d1);
 out_unlock:
 	unlock_rename(rd->old_parent, rd->new_parent);
@@ -3955,6 +3970,7 @@ __start_renaming_dentry(struct renamedata *rd, int lookup_flags,
 	return 0;
 
 out_dput_d2:
+	d_lookup_done(d2);
 	dput(d2);
 out_unlock:
 	unlock_rename(old_dentry->d_parent, rd->new_parent);
@@ -4064,6 +4080,8 @@ EXPORT_SYMBOL(start_renaming_two_dentries);
 
 void end_renaming(struct renamedata *rd)
 {
+	d_lookup_done(rd->old_dentry);
+	d_lookup_done(rd->new_dentry);
 	unlock_rename(rd->old_parent, rd->new_parent);
 	dput(rd->old_dentry);
 	dput(rd->new_dentry);

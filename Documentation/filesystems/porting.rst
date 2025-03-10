@@ -1438,3 +1438,17 @@ start_creating() or similar instead.
 d_alloc() is no longer exported as its use can be racy.  Use d_alloc_name()
 when object creation is controlled separately from standard filesystem interface,
 and d_alloc_parallel() or d_alloc_trylock() when standard interfaces can be used.
+
+---
+
+**mandatory**
+
+All start_creating and start_renaming functions may return a
+d_in_lookup() dentry if passed "O_CREATE|O_EXCL" or "O_RENAME_TARGET".
+end_dirop() calls the necessary d_lookup_done().  If the caller
+*knows* which filesystem is being used, it may know that this is not
+possible.  Otherwise it must be careful testing if the dentry is
+positive or negative as the lookup may not have been performed yet.
+
+inode_operations.lookup() is now only ever called with a d_in_lookup()
+dentry.

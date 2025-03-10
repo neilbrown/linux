@@ -2422,7 +2422,6 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 			struct qstr *name, unsigned int lookup_flags)
 {
 	struct dentry *found, *res;
-	bool must_unlock = false;
 
 	/*
 	 * First check if a dentry matching the name already exists,
@@ -2433,32 +2432,23 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 		iput(inode);
 		return found;
 	}
-	if (d_in_lookup(dentry)) {
-		/*
-		 * We are holding parent lock and so don't want to wait
-		 * for a d_in_lookup() dentry.  We can safely drop the
-		 * parent lock and reclaim it as we have exclusive
-		 * access to dentry as it is d_in_lookup() (so
-		 * ->d_parent is stable) and we are near the end
-		 * ->lookup() and will shortly drop the lock anyway.
-		 * We cannot retake the lock while the new dentry is in-lookup
-		 */
-		if (lookup_flags & LOOKUP_SHARED)
-			inode_unlock_shared(d_inode(dentry->d_parent));
-		else
-			inode_unlock(d_inode(dentry->d_parent));
-		must_unlock = true;
-		found = d_alloc_parallel(dentry->d_parent, name);
-		if (IS_ERR(found) || !d_in_lookup(found)) {
-			iput(inode);
-			goto out_unlock;
-		}
-	} else {
-		found = d_alloc(dentry->d_parent, name);
-		if (!found) {
-			iput(inode);
-			return ERR_PTR(-ENOMEM);
-		}
+	/*
+	 * We are holding parent lock and so don't want to wait
+	 * for a d_in_lookup() dentry.  We can safely drop the
+	 * parent lock and reclaim it as we have exclusive
+	 * access to dentry as it is d_in_lookup() (so
+	 * ->d_parent is stable) and we are near the end
+	 * ->lookup() and will shortly drop the lock anyway.
+	 * We cannot retake the lock while the new dentry is in-lookup
+	 */
+	if (lookup_flags & LOOKUP_SHARED)
+		inode_unlock_shared(d_inode(dentry->d_parent));
+	else
+		inode_unlock(d_inode(dentry->d_parent));
+	found = d_alloc_parallel(dentry->d_parent, name);
+	if (IS_ERR(found) || !d_in_lookup(found)) {
+		iput(inode);
+		goto out_unlock;
 	}
 	res = d_splice_alias(inode, found);
 	if (res) {
@@ -2466,8 +2456,6 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 		dput(found);
 		found = res;
 	}
-	if (!must_unlock)
-		return found;
 out_unlock:
 	d_lookup_done(dentry);
 	if (lookup_flags & LOOKUP_SHARED)
