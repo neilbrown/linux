@@ -1452,3 +1452,13 @@ positive or negative as the lookup may not have been performed yet.
 
 inode_operations.lookup() is now only ever called with a d_in_lookup()
 dentry.
+
+---
+
+**mandatory**
+
+Code that might set %S_DEAD must use rmdir_lock() on the dentry rather
+than inode_lock() on the inode.  This both locks the inode and waits for
+any child dentrys which are locked, to be unlocked.  rmdir_unlock() is
+then called after %S_DEAD has been set, or after it has been decided not
+to set it.

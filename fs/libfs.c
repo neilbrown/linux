@@ -532,9 +532,13 @@ static void __simple_recursive_removal(struct dentry *dentry,
 		struct dentry *victim = NULL, *child;
 		struct inode *inode = this->d_inode;
 
-		inode_lock_nested(inode, I_MUTEX_CHILD);
-		if (d_is_dir(this))
+		if (d_is_dir(this)) {
+			rmdir_lock(this, I_MUTEX_CHILD);
 			inode->i_flags |= S_DEAD;
+			rmdir_unlock(this);
+		}
+
+		inode_lock_nested(inode, I_MUTEX_CHILD);
 		while ((child = find_next_child(this, victim)) == NULL) {
 			// kill and ascend
 			// update metadata while it's still locked

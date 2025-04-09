@@ -147,6 +147,9 @@ static inline void end_removing(struct dentry *child)
 	end_dirop(child);
 }
 
+void rmdir_lock(struct dentry *dentry, int class);
+void rmdir_unlock(struct dentry *dentry);
+
 extern int follow_down_one(struct path *);
 extern int follow_down(struct path *path, unsigned int flags);
 extern int follow_up(struct path *);

@@ -269,13 +269,14 @@ int afs_silly_iput(struct dentry *dentry, struct inode *inode)
 
 	_enter("%p{%pd},%llx", dentry, dentry, vnode->fid.vnode);
 
-	down_read(&dvnode->rmdir_lock);
-
+	/*
+	 * This will fail if directory has already been removed,
+	 * and if it succeeds, then rmdir will be blocked until
+	 * d_lookup_done() is called on this alias.
+	 */
 	alias = d_alloc_parallel(dentry->d_parent, &dentry->d_name);
-	if (IS_ERR(alias)) {
-		up_read(&dvnode->rmdir_lock);
+	if (IS_ERR(alias))
 		return 0;
-	}
 
 	if (!d_in_lookup(alias)) {
 		/* We raced with lookup...  See if we need to transfer the
@@ -289,7 +290,6 @@ int afs_silly_iput(struct dentry *dentry, struct inode *inode)
 			ret = 1;
 		}
 		spin_unlock(&alias->d_lock);
-		up_read(&dvnode->rmdir_lock);
 		dput(alias);
 		return ret;
 	}
@@ -306,7 +306,6 @@ int afs_silly_iput(struct dentry *dentry, struct inode *inode)
 	spin_unlock(&vnode->lock);
 
 	afs_do_silly_unlink(dvnode, vnode, dentry, dvnode->silly_key);
-	up_read(&dvnode->rmdir_lock);
 	d_lookup_done(alias);
 	dput(alias);
 	return 1;

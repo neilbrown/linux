@@ -66,7 +66,6 @@ static void nfs_async_unlink_release(void *calldata)
 	struct dentry *dentry = data->dentry;
 	struct super_block *sb = dentry->d_sb;
 
-	up_read_non_owner(&NFS_I(d_inode(dentry->d_parent))->rmdir_sem);
 	d_lookup_acquire(dentry);
 	d_lookup_done(dentry);
 	nfs_free_unlinkdata(data);
@@ -121,16 +120,18 @@ static void nfs_do_call_unlink(struct inode *inode, struct nfs_unlinkdata *data)
 
 static int nfs_call_unlink(struct dentry *dentry, struct inode *inode, struct nfs_unlinkdata *data)
 {
-	struct inode *dir = d_inode(dentry->d_parent);
 	struct dentry *alias;
 
-	down_read_non_owner(&NFS_I(dir)->rmdir_sem);
+	/*
+	 * This will fail if directory has already been removed,
+	 * and if it succeeds, then rmdir will be blocked until
+	 * d_lookup_done() is called on this alias.
+	 */
 	data->args.name.hash = full_name_hash(dentry->d_parent,
 					      data->args.name.name,
 					      data->args.name.len);
 	alias = d_alloc_parallel(dentry->d_parent, &data->args.name);
 	if (IS_ERR(alias)) {
-		up_read_non_owner(&NFS_I(dir)->rmdir_sem);
 		return 0;
 	}
 	if (!d_in_lookup(alias)) {
@@ -153,7 +154,6 @@ static int nfs_call_unlink(struct dentry *dentry, struct inode *inode, struct nf
 			ret = 0;
 		spin_unlock(&alias->d_lock);
 		dput(alias);
-		up_read_non_owner(&NFS_I(dir)->rmdir_sem);
 		/*
 		 * If we'd displaced old cached devname, free it.  At that
 		 * point dentry is definitely not a root, so we won't need

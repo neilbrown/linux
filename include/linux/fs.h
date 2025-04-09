@@ -2132,6 +2132,7 @@ extern loff_t vfs_dedupe_file_range_one(struct file *src_file, loff_t src_pos,
 #define S_CASEFOLD	(1 << 15) /* Casefolded file */
 #define S_VERITY	(1 << 16) /* Verity file (using fs/verity/) */
 #define S_KERNEL_FILE	(1 << 17) /* File is in use by the kernel (eg. fs/cachefiles) */
+#define S_DYING		(1 << 18) /* dir is locked ready to set S_DEAD */
 #define S_ANON_INODE	(1 << 19) /* Inode is an anonymous inode */
 
 /*

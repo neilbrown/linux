@@ -11,6 +11,7 @@
 #undef DEBUG
 
 #include <linux/fs.h>
+#include <linux/namei.h>
 #include <linux/fsnotify.h>
 #include <linux/mount.h>
 #include <linux/module.h>
@@ -677,13 +678,11 @@ static void detach_groups(struct dentry *dentry)
 		child = dget(sd->s_dentry);
 		spin_unlock(&configfs_dirent_lock);
 
-		inode_lock(d_inode(child));
-
+		rmdir_lock(child, I_MUTEX_NORMAL);
 		configfs_detach_group(child);
 		d_inode(child)->i_flags |= S_DEAD;
 		dont_mount(child);
-
-		inode_unlock(d_inode(child));
+		rmdir_unlock(child);
 
 		d_delete(child);
 		dput(child);
@@ -867,11 +866,11 @@ static int configfs_attach_item(struct config_item *item,
 			 * the VFS may already have hit and used them. Thus,
 			 * we must lock them as rmdir() would.
 			 */
-			inode_lock(d_inode(dentry));
+			rmdir_lock(dentry, I_MUTEX_NORMAL);
 			configfs_detach_item(dentry);
 			d_inode(dentry)->i_flags |= S_DEAD;
 			dont_mount(dentry);
-			inode_unlock(d_inode(dentry));
+			rmdir_unlock(dentry);
 			d_delete(dentry);
 		}
 	}
@@ -907,7 +906,7 @@ static int configfs_attach_group(struct config_item *item,
 		 * We must also lock the inode to remove it safely in case of
 		 * error, as rmdir() would.
 		 */
-		inode_lock_nested(d_inode(dentry), I_MUTEX_CHILD);
+		rmdir_lock(dentry, I_MUTEX_CHILD);
 		configfs_adjust_dir_dirent_depth_before_populate(sd);
 		ret = populate_groups(to_config_group(item), frag);
 		if (ret) {
@@ -916,7 +915,7 @@ static int configfs_attach_group(struct config_item *item,
 			dont_mount(dentry);
 		}
 		configfs_adjust_dir_dirent_depth_after_populate(sd);
-		inode_unlock(d_inode(dentry));
+		rmdir_unlock(dentry);
 		if (ret)
 			d_delete(dentry);
 	}
@@ -1804,7 +1803,8 @@ void configfs_unregister_group(struct config_group *group)
 	frag->frag_dead = true;
 	up_write(&frag->frag_sem);
 
-	inode_lock_nested(d_inode(parent), I_MUTEX_PARENT);
+	rmdir_lock(dentry, I_MUTEX_PARENT);
+
 	spin_lock(&configfs_dirent_lock);
 	configfs_detach_prep(sd, NULL);
 	spin_unlock(&configfs_dirent_lock);
@@ -1814,7 +1814,7 @@ void configfs_unregister_group(struct config_group *group)
 	dont_mount(dentry);
 	d_drop(dentry);
 	fsnotify_rmdir(d_inode(parent), dentry);
-	inode_unlock(d_inode(parent));
+	rmdir_unlock(dentry);
 
 	dput(dentry);
 
@@ -1947,7 +1947,7 @@ void configfs_unregister_subsystem(struct configfs_subsystem *subsys)
 
 	inode_lock_nested(d_inode(root),
 			  I_MUTEX_PARENT);
-	inode_lock_nested(d_inode(dentry), I_MUTEX_CHILD);
+	rmdir_lock(dentry, I_MUTEX_CHILD);
 	mutex_lock(&configfs_symlink_mutex);
 	spin_lock(&configfs_dirent_lock);
 	if (configfs_detach_prep(sd, NULL)) {
@@ -1958,7 +1958,7 @@ void configfs_unregister_subsystem(struct configfs_subsystem *subsys)
 	configfs_detach_group(dentry);
 	d_inode(dentry)->i_flags |= S_DEAD;
 	dont_mount(dentry);
-	inode_unlock(d_inode(dentry));
+	rmdir_unlock(dentry);
 
 	d_drop(dentry);
 	fsnotify_rmdir(d_inode(root), dentry);

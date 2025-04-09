@@ -419,7 +419,6 @@ static void nfs_inode_init_dir(struct nfs_inode *nfsi)
 {
 	nfsi->cache_change_attribute = 0;
 	memset(nfsi->cookieverf, 0, sizeof(nfsi->cookieverf));
-	init_rwsem(&nfsi->rmdir_sem);
 }
 
 /*

@@ -1806,8 +1806,6 @@ static struct dentry *lookup_one_qstr(const struct qstr *name,
 
 	/* Don't create child dentry for a dead directory. */
 	dir = base->d_inode;
-	if (unlikely(IS_DEADDIR(dir)))
-		return ERR_PTR(-ENOENT);
 
 	dentry = d_alloc_parallel(base, name);
 	if (unlikely(IS_ERR(dentry)))
@@ -1844,6 +1842,86 @@ found:
 	}
 	return dentry;
 }
+
+/**
+ * rmdir_lock - wait for all operations in directory to complete, then lock it.
+ * @dentry: dentry for the directory
+ * @class: inode locking subclass
+ *
+ * When removing a directory it is necessary to wait for pending operations
+ * (e.g. create) in the directory to complete and to block further operations.
+ * rmdir_lock() achieves this by marking the inode as dying and waiting
+ * for any locked children to unlock.
+ *
+ * If removal of the directory is successeful, S_DEAD should be set. In any case
+ * rmdir_unlock() must be called after either success or failure.
+ *
+ * The callers must have exclusive access to the dentry such that another
+ * thread cannot call rmdir_lock().
+ */
+void rmdir_lock(struct dentry *dentry, int class)
+{
+	struct dentry *child;
+	struct inode *dir = dentry->d_inode;
+
+	inode_lock_nested(dir, class);
+	/* memory barrier matches that in __d_alloc_parallel() */
+	smp_store_mb(dir->i_flags, dir->i_flags | S_DYING);
+	inode_unlock(dir);
+
+	/*
+	 * Any attempt to add d_in_lookup() child will now block on parent
+	 * having S_DYING.  Must wait for any d_in_lookup() children to be
+	 * unlocked.
+	 */
+again:
+	spin_lock(&dentry->d_lock);
+	for (child = d_first_child(dentry); child;
+	     child = d_next_sibling(child)) {
+		if (unlikely(child->d_flags & DCACHE_DENTRY_CURSOR) ||
+		    d_count(child) <= 0)
+			/* untouchable */
+			continue;
+		if (!d_in_lookup(child) ||
+		    hlist_bl_unhashed(&child->d_in_lookup_hash))
+			/* Not interesting */
+			continue;
+
+		spin_lock_nested(&child->d_lock, DENTRY_D_LOCK_NESTED);
+		/* Recheck under lock */
+		if (d_count(child) <= 0 ||
+		    !d_in_lookup(child) ||
+		    hlist_bl_unhashed(&child->d_in_lookup_hash)) {
+			spin_unlock(&child->d_lock);
+			continue;
+		}
+		dget_dlock(child);
+		spin_unlock(&dentry->d_lock);
+
+		d_wait_lookup(child, 1);
+		spin_unlock(&child->d_lock);
+		dput(child);
+		goto again;
+	}
+	spin_unlock(&dentry->d_lock);
+	inode_lock_nested(dir, class);
+}
+EXPORT_SYMBOL(rmdir_lock);
+
+/**
+ * rmdir_unlock - remove the block imposed by rmdir_lock()
+ * @dentry: dentry for directory
+ *
+ * Every call to rmdir_lock() must be paired with a call to rmdir_unlock().
+ */
+void rmdir_unlock(struct dentry *dentry)
+{
+	struct inode *dir = dentry->d_inode;
+
+	store_release_wake_up(&dir->i_flags, dir->i_flags & ~S_DYING);
+	inode_unlock(dentry->d_inode);
+}
+EXPORT_SYMBOL(rmdir_unlock);
 
 /**
  * lookup_fast - do fast lockless (but racy) lookup of a dentry
@@ -1916,9 +1994,6 @@ static struct dentry *lookup_slow(const struct qstr *name,
 	struct dentry *dentry, *old;
 	struct inode *inode = dir->d_inode;
 
-	/* Don't go there if it's already dead */
-	if (unlikely(IS_DEADDIR(inode)))
-		return ERR_PTR(-ENOENT);
 again:
 	dentry = d_alloc_parallel(dir, name);
 	if (IS_ERR(dentry))
@@ -1935,10 +2010,7 @@ again:
 			dentry = ERR_PTR(error);
 		}
 	} else {
-		if (unlikely(IS_DEADDIR(inode)))
-			old = ERR_PTR(-ENOENT);
-		else
-			old = inode->i_op->lookup(inode, dentry,
+		old = inode->i_op->lookup(inode, dentry,
 						  flags);
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
@@ -3889,6 +3961,14 @@ retry:
 	    !dentry_matches(d2, rd->new_parent, new_last, seq)) {
 		/* d2 was moved/removed/instantiated before lock - repeat lookup */
 		unlock_rename(old_dentry->d_parent, rd->new_parent);
+		/*
+		 * If d1 is still d_in_lookup() and rmdir_lock() sets
+		 * S_DYING about now we can deadlock.  That should be
+		 * impossible as none of the lookup flags might cause
+		 * an fs to delay the lookup, but let's warn just in
+		 * case.
+		 */
+		WARN_ON_ONCE(d_in_lookup(d2));
 		d_lookup_done(d2); dput(d2);
 		dput(trap);
 		goto retry;
@@ -5426,7 +5506,7 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 		return -EPERM;
 
 	dget(dentry);
-	inode_lock(dentry->d_inode);
+	rmdir_lock(dentry, I_MUTEX_NORMAL);
 
 	error = -EBUSY;
 	if (is_local_mountpoint(dentry) ||
@@ -5451,7 +5531,7 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 	detach_mounts(dentry);
 
 out:
-	inode_unlock(dentry->d_inode);
+	rmdir_unlock(dentry);
 	dput(dentry);
 	if (!error)
 		d_delete_notify(dir, dentry);
@@ -6016,7 +6096,7 @@ int vfs_rename(struct renamedata *rd)
 	bool new_is_dir = false;
 	unsigned max_links = new_dir->i_sb->s_max_links;
 	struct name_snapshot old_name;
-	bool lock_old_subdir, lock_new_subdir;
+	bool lock_old_subdir, lock_new_subdir, rmdir_lock_new_subdir;
 
 	if (source == target)
 		return 0;
@@ -6075,7 +6155,7 @@ int vfs_rename(struct renamedata *rd)
 	 * rename or cross-directory exchange since its parent changes.
 	 * The target subdirectory needs to be locked on cross-directory
 	 * exchange due to parent change and on any rename due to becoming
-	 * a victim.
+	 * a victim.  When a dir is a victim it must be locked with rmdir_lock().
 	 * Non-directories need locking in all cases (for NFS reasons);
 	 * they get locked after any subdirectories (in inode address order).
 	 *
@@ -6084,13 +6164,18 @@ int vfs_rename(struct renamedata *rd)
 	 */
 	lock_old_subdir = new_dir != old_dir;
 	lock_new_subdir = new_dir != old_dir || !(flags & RENAME_EXCHANGE);
+	rmdir_lock_new_subdir = !(flags & RENAME_EXCHANGE) && new_is_dir;
 	if (is_dir) {
 		if (lock_old_subdir)
 			inode_lock_nested(source, I_MUTEX_CHILD);
-		if (target && (!new_is_dir || lock_new_subdir))
+		if (rmdir_lock_new_subdir)
+			rmdir_lock(new_dentry, I_MUTEX_NORMAL);
+		else if (target && (!new_is_dir || lock_new_subdir))
 			inode_lock(target);
 	} else if (new_is_dir) {
-		if (lock_new_subdir)
+		if (rmdir_lock_new_subdir)
+			rmdir_lock(new_dentry, I_MUTEX_CHILD);
+		else if (lock_new_subdir)
 			inode_lock_nested(target, I_MUTEX_CHILD);
 		inode_lock(source);
 	} else {
@@ -6156,7 +6241,9 @@ int vfs_rename(struct renamedata *rd)
 out:
 	if (!is_dir || lock_old_subdir)
 		inode_unlock(source);
-	if (target && (!new_is_dir || lock_new_subdir))
+	if (rmdir_lock_new_subdir)
+		rmdir_unlock(new_dentry);
+	else if (target && (!new_is_dir || lock_new_subdir))
 		inode_unlock(target);
 	dput(new_dentry);
 	if (!error) {

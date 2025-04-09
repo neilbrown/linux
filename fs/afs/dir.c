@@ -1418,20 +1418,12 @@ static void afs_rmdir_edit_dir(struct afs_operation *op)
 	fscache_end_operation(&cres);
 }
 
-static void afs_rmdir_put(struct afs_operation *op)
-{
-	_enter("op=%08x", op->debug_id);
-	if (op->file[1].vnode)
-		up_write(&op->file[1].vnode->rmdir_lock);
-}
-
 static const struct afs_operation_ops afs_rmdir_operation = {
 	.issue_afs_rpc	= afs_fs_remove_dir,
 	.issue_yfs_rpc	= yfs_fs_remove_dir,
 	.success	= afs_rmdir_success,
 	.aborted	= afs_check_for_remote_deletion,
 	.edit_dir	= afs_rmdir_edit_dir,
-	.put		= afs_rmdir_put,
 };
 
 /*
@@ -1469,9 +1461,6 @@ static int afs_rmdir(struct inode *dir, struct dentry *dentry)
 	}
 
 	if (vnode) {
-		ret = down_write_killable(&vnode->rmdir_lock);
-		if (ret < 0)
-			goto error;
 		op->file[1].vnode = vnode;
 	}
 

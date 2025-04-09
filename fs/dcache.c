@@ -2670,7 +2670,7 @@ static inline void end_dir_add(struct inode *dir, unsigned int n)
 	preempt_enable_nested();
 }
 
-static void d_wait_lookup(struct dentry *dentry)
+void d_wait_lookup(struct dentry *dentry, unsigned int subclass)
 {
 	if (likely(d_in_lookup(dentry))) {
 		/*
@@ -2678,7 +2678,8 @@ static void d_wait_lookup(struct dentry *dentry)
 		 * dropping ->d_lock, but won't actually take it.
 		 */
 		spin_release(&dentry->d_lock.dep_map, _THIS_IP_);
-		lock_map_acquire(&dentry->lookup_map);
+		lock_acquire_exclusive(&dentry->lookup_map, subclass,
+				       0, NULL, _THIS_IP_);
 		lock_map_release(&dentry->lookup_map);
 		spin_acquire(&dentry->d_lock.dep_map, 0, 1, _THIS_IP_);
 
@@ -2686,6 +2687,14 @@ static void d_wait_lookup(struct dentry *dentry)
 		wait_var_event_spinlock(&dentry->d_flags,
 					!d_in_lookup(dentry),
 					&dentry->d_lock);
+	}
+}
+
+static inline void __d_wake_in_lookup_waiters(struct dentry *dentry)
+{
+	if (dentry->d_flags & DCACHE_LOOKUP_WAITERS) {
+		wake_up_var_locked(&dentry->d_flags, &dentry->d_lock);
+		dentry->d_flags &= ~DCACHE_LOOKUP_WAITERS;
 	}
 }
 
@@ -2743,6 +2752,7 @@ struct dentry *__d_alloc_parallel(struct dentry *parent,
 		return ERR_PTR(-ENOMEM);
 
 	new->d_flags |= DCACHE_PAR_LOOKUP;
+	INIT_HLIST_BL_NODE(&new->d_in_lookup_hash);
 	spin_lock(&parent->d_lock);
 	new->d_parent = parent;
 	if (hlist_empty(&parent->d_children))
@@ -2753,6 +2763,10 @@ struct dentry *__d_alloc_parallel(struct dentry *parent,
 	spin_unlock(&parent->d_lock);
 
 retry:
+	if (parent->d_inode->i_flags & S_DEAD) {
+		dput(new);
+		return ERR_PTR(-ENOENT);
+	}
 	seq = smp_load_acquire(&parent->d_inode->i_dir_seq);
 	r_seq = read_seqbegin(&parent->d_sb->s_rename_lock);
 	rcu_read_lock();
@@ -2819,7 +2833,7 @@ retry:
 		 * pin it and wait for them to finish
 		 */
 		dget_dlock(dentry);
-		d_wait_lookup(dentry);
+		d_wait_lookup(dentry, 0);
 		/*
 		 * it's not in-lookup anymore; in principle we should repeat
 		 * everything from dcache lookup, but it's likely to be what
@@ -2840,6 +2854,26 @@ retry:
 		return dentry;
 	}
 	hlist_bl_add_head(&new->d_in_lookup_hash, b);
+	/*
+	 * memory barrier ensures rmdir_lock() will see that we
+	 * are hashed if we see S_DYING
+	 */
+	smp_mb();
+	if (parent->d_inode->i_flags & (S_DYING | S_DEAD)) {
+		struct inode *dir = parent->d_inode;
+
+		__hlist_bl_del(&new->d_in_lookup_hash);
+		INIT_HLIST_BL_NODE(&new->d_in_lookup_hash);
+		hlist_bl_unlock(b);
+		/* rmdir_lock() might be waiting already ! */
+		if (new->d_flags & DCACHE_LOOKUP_WAITERS) {
+			spin_lock(&new->d_lock);
+			__d_wake_in_lookup_waiters(new);
+			spin_unlock(&new->d_lock);
+		}
+		wait_var_event(&dir->i_flags, !(dir->i_flags & S_DYING));
+		goto retry;
+	}
 	hlist_bl_unlock(b);
 	lock_map_acquire_try(&new->lookup_map);
 	return new;
@@ -2944,14 +2978,6 @@ static void __d_lookup_unhash(struct dentry *dentry)
 	__hlist_bl_del(&dentry->d_in_lookup_hash);
 	hlist_bl_unlock(b);
 	dentry->waiters = NULL;
-}
-
-static inline void __d_wake_in_lookup_waiters(struct dentry *dentry)
-{
-	if (dentry->d_flags & DCACHE_LOOKUP_WAITERS) {
-		wake_up_var_locked(&dentry->d_flags, &dentry->d_lock);
-		dentry->d_flags &= ~DCACHE_LOOKUP_WAITERS;
-	}
 }
 
 void __d_lookup_unhash_wake(struct dentry *dentry)

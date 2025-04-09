@@ -202,9 +202,6 @@ struct nfs_inode {
 			 * operations
 			 */
 			__be32		cookieverf[NFS_DIR_VERIFIER_SIZE];
-			/* Readers: in-flight sillydelete RPC calls */
-			/* Writers: rmdir */
-			struct rw_semaphore	rmdir_sem;
 		};
 		/* Regular file */
 		struct {
