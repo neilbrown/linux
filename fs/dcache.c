@@ -3098,8 +3098,9 @@ static void copy_name(struct dentry *dentry, struct dentry *target)
  *
  * Update the dcache to reflect the move of a file name. Negative dcache
  * entries should not be moved in this way. Caller must hold s_rename_lock, the
- * i_rwsem of the source and target directories (exclusively), and the sb->
- * s_vfs_rename_mutex if they differ. See lock_rename().
+ * i_rwsem of the source and target directories (exclusively), and either
+ * DCACHE_RENAME_LOCK must be set on any dentry which will change ->d_parent,
+ * or it was confirmed NOT to be set since rename_lock was taken.
  *
  * If @dentry and @target have the same parent, then neither is
  * moved in the d_sib list.
@@ -3354,12 +3355,11 @@ struct dentry *d_ancestor(struct dentry *p1, struct dentry *p2)
  * It assumes that the caller is already holding
  * dentry->d_parent->d_inode->i_rwsem, and s_rename_lock
  *
- * Note: If ever the locking in lock_rename() changes, then please
+ * Note: If ever the locking in rename_lookup() changes, then please
  * remember to update this too...
  */
 static int __d_unalias(struct dentry *dentry, struct dentry *alias)
 {
-	struct mutex *m1 = NULL;
 	struct rw_semaphore *m2 = NULL;
 	int ret = -ESTALE;
 
@@ -3367,10 +3367,14 @@ static int __d_unalias(struct dentry *dentry, struct dentry *alias)
 	if (alias->d_parent == dentry->d_parent)
 		goto out_unalias;
 
-	/* See lock_rename() */
-	if (!mutex_trylock(&dentry->d_sb->s_vfs_rename_mutex))
+	/*
+	 * See ancestors_lock()
+	 * As we hold rename_lock throughout we don't actually
+	 * need to set DCACHE_RENAME_LOCK
+	 */
+	if (alias->d_flags & DCACHE_RENAME_LOCK)
 		goto out_err;
-	m1 = &dentry->d_sb->s_vfs_rename_mutex;
+
 	if (!inode_trylock_shared(alias->d_parent->d_inode))
 		goto out_err;
 	m2 = &alias->d_parent->d_inode->i_rwsem;
@@ -3385,8 +3389,6 @@ out_unalias:
 out_err:
 	if (m2)
 		up_read(m2);
-	if (m1)
-		mutex_unlock(m1);
 	return ret;
 }
 

@@ -2013,8 +2013,6 @@ static int __cifs_unlink(struct inode *dir, struct dentry *dentry, bool sillyren
 		goto unlink_out;
 	}
 
-	/* Unlink can be called from rename so we can not take the
-	 * sb->s_vfs_rename_mutex here */
 	full_path = build_path_from_dentry(dentry, page);
 	if (IS_ERR(full_path)) {
 		rc = PTR_ERR(full_path);

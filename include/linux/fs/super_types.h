@@ -220,7 +220,7 @@ struct super_block {
 	 * The next field is for VFS *only*. No filesystems have any business
 	 * even looking at it. You had been warned.
 	 */
-	struct mutex				s_vfs_rename_mutex;	/* Kludge */
+	struct wait_queue_head s_vfs_rename_wq;	/* waiting for DCACHE_RENAME_LOCK to clear */
 
 	/*
 	 * When any ->d_parent in the filesystem changes, ->s_rename_lock

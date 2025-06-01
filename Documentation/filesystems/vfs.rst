@@ -122,7 +122,6 @@ members are defined:
 
 		struct lock_class_key s_lock_key;
 		struct lock_class_key s_umount_key;
-		struct lock_class_key s_vfs_rename_key;
 		struct lock_class_key s_writers_key[SB_FREEZE_LEVELS];
 
 		struct lock_class_key i_lock_key;
@@ -162,7 +161,7 @@ members are defined:
 ``fs_supers``
 	for internal VFS use: hlist of filesystem instances (superblocks)
 
-  s_lock_key, s_umount_key, s_vfs_rename_key, s_writers_key,
+  s_lock_key, s_umount_key, s_writers_key,
   i_lock_key, i_mutex_key, invalidate_lock_key, i_mutex_dir_key: lockdep-specific
 
 The Superblock Object

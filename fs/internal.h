@@ -72,6 +72,14 @@ int lookup_noperm_common(struct qstr *qname, struct dentry *base);
 
 void __init filename_init(void);
 
+static inline void ancestor_unlock_one(struct dentry *d)
+{
+	spin_lock(&d->d_lock);
+	WARN_ON_ONCE(!(d->d_flags & DCACHE_RENAME_LOCK));
+	d->d_flags &= ~DCACHE_RENAME_LOCK;
+	spin_unlock(&d->d_lock);
+}
+
 /*
  * namespace.c
  */

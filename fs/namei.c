@@ -3688,101 +3688,175 @@ int may_create_dentry(struct mnt_idmap *idmap,
 }
 EXPORT_SYMBOL(may_create_dentry);
 
-// p1 != p2, both are on the same filesystem, ->s_vfs_rename_mutex is held
-static struct dentry *lock_two_directories(struct dentry *p1, struct dentry *p2)
-{
-	struct dentry *p = p1, *q = p2, *r;
-
-	while ((r = p->d_parent) != p2 && r != p)
-		p = r;
-	if (r == p2) {
-		// p is a child of p2 and an ancestor of p1 or p1 itself
-		inode_lock_nested(p2->d_inode, I_MUTEX_PARENT);
-		inode_lock_nested(p1->d_inode, I_MUTEX_PARENT2);
-		return p;
-	}
-	// p is the root of connected component that contains p1
-	// p2 does not occur on the path from p to p1
-	while ((r = q->d_parent) != p1 && r != p && r != q)
-		q = r;
-	if (r == p1) {
-		// q is a child of p1 and an ancestor of p2 or p2 itself
-		inode_lock_nested(p1->d_inode, I_MUTEX_PARENT);
-		inode_lock_nested(p2->d_inode, I_MUTEX_PARENT2);
-		return q;
-	} else if (likely(r == p)) {
-		// both p2 and p1 are descendents of p
-		inode_lock_nested(p1->d_inode, I_MUTEX_PARENT);
-		inode_lock_nested(p2->d_inode, I_MUTEX_PARENT2);
-		return NULL;
-	} else { // no common ancestor at the time we'd been called
-		mutex_unlock(&p1->d_sb->s_vfs_rename_mutex);
-		return ERR_PTR(-EXDEV);
-	}
-}
-
 /*
  * p1 and p2 should be directories on the same fs.
+ * If they are different then they and any ancestors below
+ * the first common ancestor must have DCACHE_RENAME_LOCK set.
  */
-static struct dentry *lock_rename(struct dentry *p1, struct dentry *p2)
+static void lock_rename(struct dentry *p1, struct dentry *p2)
 {
-	if (p1 == p2) {
-		inode_lock_nested(p1->d_inode, I_MUTEX_PARENT);
-		return NULL;
-	}
-
-	mutex_lock(&p1->d_sb->s_vfs_rename_mutex);
-	return lock_two_directories(p1, p2);
-}
-
-/*
- * c1 and p2 should be on the same fs.
- */
-static struct dentry *lock_rename_child(struct dentry *c1, struct dentry *p2)
-{
-	if (READ_ONCE(c1->d_parent) == p2) {
-		/*
-		 * hopefully won't need to touch ->s_vfs_rename_mutex at all.
-		 */
-		inode_lock_nested(p2->d_inode, I_MUTEX_PARENT);
-		/*
-		 * now that p2 is locked, nobody can move in or out of it,
-		 * so the test below is safe.
-		 */
-		if (likely(c1->d_parent == p2))
-			return NULL;
-
-		/*
-		 * c1 got moved out of p2 while we'd been taking locks;
-		 * unlock and fall back to slow case.
-		 */
-		inode_unlock(p2->d_inode);
-	}
-
-	mutex_lock(&c1->d_sb->s_vfs_rename_mutex);
-	/*
-	 * nobody can move out of any directories on this fs.
-	 */
-	if (likely(c1->d_parent != p2))
-		return lock_two_directories(c1->d_parent, p2);
-
-	/*
-	 * c1 got moved into p2 while we were taking locks;
-	 * we need p2 locked and ->s_vfs_rename_mutex unlocked,
-	 * for consistency with lock_rename().
-	 */
-	inode_lock_nested(p2->d_inode, I_MUTEX_PARENT);
-	mutex_unlock(&c1->d_sb->s_vfs_rename_mutex);
-	return NULL;
+	inode_lock_nested(p1->d_inode, I_MUTEX_PARENT);
+	if (p1 != p2)
+		inode_lock_nested(p2->d_inode, I_MUTEX_PARENT2);
 }
 
 static void unlock_rename(struct dentry *p1, struct dentry *p2)
 {
 	inode_unlock(p1->d_inode);
-	if (p1 != p2) {
+	if (p1 != p2)
 		inode_unlock(p2->d_inode);
-		mutex_unlock(&p1->d_sb->s_vfs_rename_mutex);
+}
+
+static void wait_not_renaming(struct dentry *d)
+{
+	spin_lock(&d->d_lock);
+	wait_event_cmd(d->d_sb->s_vfs_rename_wq,
+		       !(d->d_flags & DCACHE_RENAME_LOCK),
+		       spin_unlock(&d->d_lock), spin_lock(&d->d_lock));
+	spin_unlock(&d->d_lock);
+}
+
+static void ancestor_unlock(struct dentry *dir1, struct dentry *dir2,
+			    struct dentry *ancestor,
+			    struct dentry *d1, struct dentry *d2)
+{
+	struct super_block *sb = dir1->d_sb;
+	struct dentry *d;
+
+	if (!ancestor)
+		return;
+
+	read_seqlock_excl(&sb->s_rename_lock);
+	for (d = dir1; d != ancestor; d = d->d_parent)
+		ancestor_unlock_one(d);
+	for (d = dir2; d != ancestor; d = d->d_parent)
+		ancestor_unlock_one(d);
+	ancestor_unlock_one(d1);
+	ancestor_unlock_one(d2);
+	read_sequnlock_excl(&sb->s_rename_lock);
+	/* We don't send any wakeup until all dentries have been unlocked */
+	wake_up(&dir1->d_sb->s_vfs_rename_wq);
+}
+
+/*
+ * Find the nearest common ancestor of d1 and d2, and report
+ * if any of the children of the ancestor which are in the line
+ * to d1 or d2 are locked for rename - i.e. have DCACHE_RENAME_LOCK set.
+ */
+static struct dentry *common_ancestor(struct dentry *d1, struct dentry *d2,
+				      struct dentry **locked)
+		__must_hold(&rename_lock->lock)
+{
+	*locked = NULL;
+	/* optimise common case of a common parent or avoid calculating depth */
+	if (d1->d_parent != d2->d_parent) {
+		struct dentry *p, *q;
+		int depth1 = 0, depth2 = 0;
+
+		/* Find depth of each and compare ancestors of equal depth */
+		for (p = d1; !IS_ROOT(p); p = p->d_parent)
+			depth1 += 1;
+		for (q = d2; !IS_ROOT(q); q = q->d_parent)
+			depth2 += 1;
+		if (p != q)
+			/* Different root! */
+			return NULL;
+		while (depth1 > depth2) {
+			if (d1->d_flags & DCACHE_RENAME_LOCK)
+				*locked = d1;
+			d1 = d1->d_parent;
+			depth1 -= 1;
+		}
+		while (depth2 > depth1) {
+			if (d2->d_flags & DCACHE_RENAME_LOCK)
+				*locked = d2;
+			d2 = d2->d_parent;
+			depth2 -= 1;
+		}
 	}
+	/* d1 and d2 are now same depth from root (p,q) */
+	while (d1 != d2) {
+		if (d1->d_flags & DCACHE_RENAME_LOCK)
+			*locked = d1;
+		if (d2->d_flags & DCACHE_RENAME_LOCK)
+			*locked = d2;
+		d1 = d1->d_parent;
+		d2 = d2->d_parent;
+	}
+	return d1;
+}
+
+/**
+ * ancestors_lock: Lock all ancestors below nearest common ancestor for rename
+ * @d1:   the dentry to be moved
+ * @d2:   the dentry where it should be move to (or exchanged with)
+ * @p1:   the parent of @d1 at time of lookup - or %NULL.
+ * @p2:   the parent of @d2 at time of lookup - or %NULL.
+ *
+ * The ancestors of @d1 and @d1, below the first common ancestor, will
+ * be locked against rename, and no directory between either target and
+ * the ancestor will be the ancestor of an active rename.  This ensures
+ * that the common ancestor will continue to be the common ancestor, and
+ * that there will be no concurrent rename with the same ancestor.
+ *
+ * Returns:
+ *    The ancestor - not refcounted, or:
+ *    -EXDEV if there is no common ancestor
+ *    -EINVAL if the first dentry is the common ancestor -
+ *		you cannot move a directory into a descendent
+ *    -ENOTEMPTY if the second dentry is the common ancestor -
+ *		the target directory must usually be empty.
+ *    -EAGAIN if either dir was renamed out of its parent before
+ *		locks could be taken.
+ * Note that these errors might later be adjusted for RENAME_EXCHANGE
+ */
+static struct dentry *ancestors_lock(struct dentry *d1, struct dentry *d2,
+				     struct dentry *p1, struct dentry *p2)
+{
+	struct dentry *locked = NULL, *ancestor;
+	struct super_block *sb = d1->d_sb;
+
+again:
+	if (locked) {
+		wait_not_renaming(locked);
+		dput(locked);
+		locked = NULL;
+	}
+
+	/* guard(read_seqlock_excl)(&rename_lock); */
+	guard(spinlock)(&sb->s_rename_lock.lock);
+	if (p1 && d1->d_parent != p1)
+		return ERR_PTR(-EAGAIN);
+	if (p2 && d2->d_parent != p2)
+		return ERR_PTR(-EAGAIN);
+	ancestor = common_ancestor(d1, d2, &locked);
+	if (!ancestor)
+		return ERR_PTR(-EXDEV);
+	if (ancestor == d1)
+		return ERR_PTR(-EINVAL);
+	if (ancestor == d2)
+		return ERR_PTR(-ENOTEMPTY);
+	if (locked) {
+		dget(locked);
+		goto again;
+	}
+	/*
+	 * Nothing from d1,d2 up to ancestor can have DCACHE_RENAME_LOCK
+	 * as we hold rename_lock and nothing was reported in "locked".
+	 */
+	while (d1 != ancestor) {
+		spin_lock(&d1->d_lock);
+		d1->d_flags |= DCACHE_RENAME_LOCK;
+		spin_unlock(&d1->d_lock);
+		d1 = d1->d_parent;
+	}
+	while (d2 != ancestor) {
+		spin_lock(&d2->d_lock);
+		d2->d_flags |= DCACHE_RENAME_LOCK;
+		spin_unlock(&d2->d_lock);
+		d2 = d2->d_parent;
+	}
+	return ancestor;
 }
 
 /**
@@ -3810,8 +3884,7 @@ static int
 __start_renaming(struct renamedata *rd, int lookup_flags,
 		 struct qstr *old_last, struct qstr *new_last)
 {
-	struct dentry *trap;
-	struct dentry *d1, *d2;
+	struct dentry *d1, *d2, *ancestor;
 	int target_flags = LOOKUP_RENAME_TARGET | LOOKUP_CREATE;
 	struct super_block *sb = rd->new_parent->d_sb;
 	unsigned int seq;
@@ -3836,43 +3909,44 @@ retry:
 	if (IS_ERR(d2))
 		goto out_dput_d1;
 
-	trap = lock_rename(rd->old_parent, rd->new_parent);
-	err = PTR_ERR(trap);
-	if (IS_ERR(trap))
-		goto out_unlock;
+	ancestor = ancestors_lock(d1, d2, rd->old_parent, rd->new_parent);
+	err = PTR_ERR(ancestor);
+	if (IS_ERR(ancestor)) {
+		if (err == -EAGAIN) {
+			/* parent changed */
+			d_lookup_done(d1); dput(d1);
+			d_lookup_done(d2); dput(d2);
+			goto retry;
+		}
+		if (err == -ENOTEMPTY && (rd->flags & RENAME_EXCHANGE))
+			err = -EINVAL;
+		goto out_dput_d2;
+	}
 
+	/*
+	 * Directories are neither the ancestor of the other, and neither
+	 * is involved in a concurrent rename, so locking is safe
+	 */
+	lock_rename(rd->old_parent, rd->new_parent);
 	if (((target_flags & LOOKUP_EXCL) && d2->d_inode) ||
 	    (unlikely(!dentry_matches(d1, rd->old_parent, old_last, seq) ||
 		      !dentry_matches(d2, rd->new_parent, new_last, seq)))) {
 		unlock_rename(rd->old_parent, rd->new_parent);
+		ancestor_unlock(rd->old_parent, rd->new_parent, ancestor,
+			d1, d2);
 		d_lookup_done(d1); dput(d1);
 		d_lookup_done(d2); dput(d2);
-		dput(trap);
 		goto retry;
-	}
-
-	if (d1 == trap) {
-		/* source is an ancestor of target */
-		err = -EINVAL;
-		goto out_unlock;
-	}
-
-	if (d2 == trap) {
-		/* target is an ancestor of source */
-		if (rd->flags & RENAME_EXCHANGE)
-			err = -EINVAL;
-		else
-			err = -ENOTEMPTY;
-		goto out_unlock;
 	}
 
 	rd->old_dentry = d1;
 	rd->new_dentry = d2;
 	dget(rd->old_parent);
+	rd->ancestor = ancestor;
+
 	return 0;
 
-out_unlock:
-	unlock_rename(rd->old_parent, rd->new_parent);
+out_dput_d2:
 	d_lookup_done(d2);
 	dput(d2);
 out_dput_d1:
@@ -3922,8 +3996,7 @@ static int
 __start_renaming_dentry(struct renamedata *rd, int lookup_flags,
 			struct dentry *old_dentry, struct qstr *new_last)
 {
-	struct dentry *trap;
-	struct dentry *d2;
+	struct dentry *d2, *ancestor;
 	int target_flags = LOOKUP_RENAME_TARGET | LOOKUP_CREATE;
 	unsigned int seq;
 	struct super_block *sb = rd->new_parent->d_sb;
@@ -3946,17 +4019,28 @@ retry:
 	 * Already have the old_dentry - need to be sure to lock
 	 * the correct parent
 	 */
-	trap = lock_rename_child(old_dentry, rd->new_parent);
-	err = PTR_ERR(trap);
-	if (IS_ERR(trap))
+	ancestor = ancestors_lock(old_dentry, d2, rd->old_parent, rd->new_parent);
+	err = PTR_ERR(ancestor);
+	if (IS_ERR(ancestor)) {
+		if (rd->old_parent && old_dentry->d_parent != rd->old_parent)
+			/* retrying cannot help in this case */
+			err = -EINVAL;
+		if (err == -EAGAIN) {
+			/* parent changed */
+			d_lookup_done(d2); dput(d2);
+			goto retry;
+		}
+		if (err == -ENOTEMPTY && (rd->flags & RENAME_EXCHANGE))
+			err = -EINVAL;
 		goto out_dput_d2;
+	}
+
+	lock_rename(old_dentry->d_parent, rd->new_parent);
 
 	if (!dentry_matches(old_dentry, rd->old_parent, NULL, seq)) {
-		/* dentry was removed, or moved and explicit parent requested */
 		err = -EINVAL;
 		goto out_unlock;
 	}
-
 	if (((target_flags & LOOKUP_EXCL) && d2->d_inode) ||
 	    !dentry_matches(d2, rd->new_parent, new_last, seq)) {
 		/* d2 was moved/removed/instantiated before lock - repeat lookup */
@@ -3970,23 +4054,7 @@ retry:
 		 */
 		WARN_ON_ONCE(d_in_lookup(d2));
 		d_lookup_done(d2); dput(d2);
-		dput(trap);
 		goto retry;
-	}
-
-	if (old_dentry == trap) {
-		/* source is an ancestor of target */
-		err = -EINVAL;
-		goto out_unlock;
-	}
-
-	if (d2 == trap) {
-		/* target is an ancestor of source */
-		if (rd->flags & RENAME_EXCHANGE)
-			err = -EINVAL;
-		else
-			err = -ENOTEMPTY;
-		goto out_unlock;
 	}
 
 	rd->old_dentry = dget(old_dentry);
@@ -4058,35 +4126,21 @@ int
 start_renaming_two_dentries(struct renamedata *rd,
 			    struct dentry *old_dentry, struct dentry *new_dentry)
 {
-	struct dentry *trap;
+	struct dentry *ancestor;
 	int err;
 
-	/* Already have the dentry - need to be sure to lock the correct parent */
-	trap = lock_rename_child(old_dentry, rd->new_parent);
-	if (IS_ERR(trap))
-		return PTR_ERR(trap);
+	ancestor = ancestors_lock(old_dentry, new_dentry,
+				  rd->old_parent, rd->new_parent);
+	if (IS_ERR(ancestor))
+		return PTR_ERR(ancestor);
+	lock_rename(old_dentry->d_parent, new_dentry->d_parent);
 	err = -EINVAL;
-	if (d_unhashed(old_dentry) ||
-	    (rd->old_parent && rd->old_parent != old_dentry->d_parent))
-		/* old_dentry was removed, or moved and explicit parent requested */
+	if (d_unhashed(old_dentry))
+		/* old_dentry was removed */
 		goto out_unlock;
-	if (d_unhashed(new_dentry) ||
-	    rd->new_parent != new_dentry->d_parent)
-		/* new_dentry was removed or moved */
+	if (d_unhashed(new_dentry))
+		/* new_dentry was removed */
 		goto out_unlock;
-
-	if (old_dentry == trap)
-		/* source is an ancestor of target */
-		goto out_unlock;
-
-	if (new_dentry == trap) {
-		/* target is an ancestor of source */
-		if (rd->flags & RENAME_EXCHANGE)
-			err = -EINVAL;
-		else
-			err = -ENOTEMPTY;
-		goto out_unlock;
-	}
 
 	err = -EEXIST;
 	if (d_is_positive(new_dentry) && (rd->flags & RENAME_NOREPLACE))
@@ -4098,7 +4152,9 @@ start_renaming_two_dentries(struct renamedata *rd,
 	return 0;
 
 out_unlock:
-	unlock_rename(old_dentry->d_parent, rd->new_parent);
+	unlock_rename(old_dentry->d_parent, new_dentry->d_parent);
+	ancestor_unlock(rd->old_parent, rd->new_parent, ancestor,
+			old_dentry, new_dentry);
 	return err;
 }
 EXPORT_SYMBOL(start_renaming_two_dentries);
@@ -4107,6 +4163,10 @@ void end_renaming(struct renamedata *rd)
 {
 	d_lookup_done(rd->old_dentry);
 	d_lookup_done(rd->new_dentry);
+
+	ancestor_unlock(rd->old_parent, rd->new_parent, rd->ancestor,
+			rd->old_dentry, rd->new_dentry);
+
 	unlock_rename(rd->old_parent, rd->new_parent);
 	dput(rd->old_dentry);
 	dput(rd->new_dentry);
@@ -6058,20 +6118,19 @@ SYSCALL_DEFINE2(link, const char __user *, oldname, const char __user *, newname
  *
  *	a) we can get into loop creation.
  *	b) race potential - two innocent renames can create a loop together.
- *	   That's where 4.4BSD screws up. Current fix: serialization on
- *	   sb->s_vfs_rename_mutex. We might be more accurate, but that's another
- *	   story.
+ *	   That's where 4.4BSD screws up. Current fix: set DCACHE_RENAME_LOCK
+ *	   on all non-common ancestors so they cannot be renamed.
  *	c) we may have to lock up to _four_ objects - parents and victim (if it exists),
  *	   and source (if it's a non-directory or a subdirectory that moves to
  *	   different parent).
  *	   And that - after we got ->i_rwsem on parents (until then we don't know
  *	   whether the target exists).  Solution: try to be smart with locking
  *	   order for inodes.  We rely on the fact that tree topology may change
- *	   only under ->s_vfs_rename_mutex _and_ that parent of the object we
+ *	   only by under DCACHE_RENAME_LOCK _and_ that parent of the object we
  *	   move will be locked.  Thus we can rank directories by the tree
  *	   (ancestors first) and rank all non-directories after them.
  *	   That works since everybody except rename does "lock parent, lookup,
- *	   lock child" and rename is under ->s_vfs_rename_mutex.
+ *	   lock child" and rename sets DCACHE_RENAME_LOCK.
  *	   HOWEVER, it relies on the assumption that any object with ->lookup()
  *	   has no more than 1 dentry.  If "hybrid" objects will ever appear,
  *	   we'd better make sure that there's no link(2) for them.
@@ -6160,7 +6219,8 @@ int vfs_rename(struct renamedata *rd)
 	 * they get locked after any subdirectories (in inode address order).
 	 *
 	 * NOTE: WE ONLY LOCK UNRELATED DIRECTORIES IN CROSS-DIRECTORY CASE.
-	 * NEVER, EVER DO THAT WITHOUT ->s_vfs_rename_mutex.
+	 * NEVER, EVER DO THAT WITHOUT first setting DCACHE_RENAME_LOCK
+	 * ON BOTH DENTRIES AND THEIR NON-COMMON ANCESTORS.
 	 */
 	lock_old_subdir = new_dir != old_dir;
 	lock_new_subdir = new_dir != old_dir || !(flags & RENAME_EXCHANGE);

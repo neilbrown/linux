@@ -1793,6 +1793,7 @@ struct renamedata {
 	struct dentry *new_parent;
 	struct dentry *new_dentry;
 	struct delegated_inode *delegated_inode;
+	struct dentry *ancestor;
 	unsigned int flags;
 } __randomize_layout;
 
@@ -2146,7 +2147,9 @@ extern loff_t vfs_dedupe_file_range_one(struct file *src_file, loff_t src_pos,
  * Unfortunately, it is possible to change a filesystems flags with it mounted
  * with files in use.  This means that all of the inodes will not have their
  * i_flags updated.  Hence, i_flags no longer inherit the superblock mount
- * flags, so these have to be checked separately. -- rmk@arm.uk.linux.org
+ * flags, so these have to be checked * @ancestor:          Closest common ancestor of @old_dir and @new_dir if those
+ *                     two are differernt.
+ separately. -- rmk@arm.uk.linux.org
  */
 #define __IS_FLG(inode, flg)	((inode)->i_sb->s_flags & (flg))
 
@@ -2324,7 +2327,6 @@ struct file_system_type {
 
 	struct lock_class_key s_lock_key;
 	struct lock_class_key s_umount_key;
-	struct lock_class_key s_vfs_rename_key;
 	struct lock_class_key s_writers_key[SB_FREEZE_LEVELS];
 
 	struct lock_class_key i_lock_key;

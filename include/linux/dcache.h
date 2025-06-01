@@ -240,7 +240,10 @@ enum dentry_flags {
 	DCACHE_DENTRY_CURSOR		= BIT(25),
 	DCACHE_NORCU			= BIT(26),	/* No RCU delay for freeing */
 	DCACHE_PERSISTENT		= BIT(27),
-/* 28, 29, 30 free */
+	DCACHE_RENAME_LOCK		= BIT(28),	/* A directory is being renamed
+							 * into or out-of this tree
+							 */
+/* 29, 30 free */
 	DCACHE_PRIVATE			= BIT(31)	/* fs-specific flag */
 };
 

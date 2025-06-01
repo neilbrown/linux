@@ -566,9 +566,7 @@ static struct dentry *ovl_lookup_real(struct super_block *sb,
 			 * If real has been moved out of 'real_connected',
 			 * we will not find 'real_connected' and hit the layer
 			 * root. In that case, we need to restart connecting.
-			 * This game can go on forever in the worst case. We
-			 * may want to consider taking s_vfs_rename_mutex if
-			 * this happens more than once.
+			 * This game can go on forever in the worst case.
 			 */
 			if (parent == layer->mnt->mnt_root) {
 				dput(connected);
