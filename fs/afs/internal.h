@@ -1764,17 +1764,17 @@ static inline struct inode *AFS_VNODE_TO_I(struct afs_vnode *vnode)
 }
 
 /*
- * Note that a dentry got changed.  We need to set d_fsdata to the data version
+ * Note that a dentry got changed.  We need to set d_time to the data version
  * number derived from the result of the operation.  It doesn't matter if
- * d_fsdata goes backwards as we'll just revalidate.
+ * d_time goes backwards as we'll just revalidate.
  */
 static inline void afs_update_dentry_version(struct afs_operation *op,
 					     struct afs_vnode_param *dir_vp,
 					     struct dentry *dentry)
 {
 	if (!op->cumul_error.error)
-		dentry->d_fsdata =
-			(void *)(unsigned long)dir_vp->scb.status.data_version;
+		dentry->d_time =
+			(unsigned long)dir_vp->scb.status.data_version;
 }
 
 /*
