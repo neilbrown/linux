@@ -236,6 +236,10 @@ extern struct dentry *__d_lookup(const struct dentry *, const struct qstr *);
 extern struct dentry *__d_lookup_rcu(const struct dentry *parent,
 				const struct qstr *name, unsigned *seq);
 
+bool dentry_matches(struct dentry *dentry,
+		    struct dentry *base, const struct qstr *last,
+		    unsigned int seq);
+
 /*
  * pipe.c
  */

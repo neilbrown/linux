@@ -1778,8 +1778,19 @@ static struct dentry *lookup_dcache(const struct qstr *name,
 	return dentry;
 }
 
+static inline bool inode_lock_shared_state(struct inode *inode, unsigned int state)
+{
+	if (state == TASK_KILLABLE) {
+		if (down_read_killable(&inode->i_rwsem) != 0) {
+			return false;
+		}
+	} else {
+		inode_lock_shared(inode);
+	}
+	return true;
+}
+
 /*
- * Parent directory has inode locked.
  * If Lookup_EXCL or LOOKUP_RENAME_TARGET is set
  * d_lookup_done() must be called before the dentry is dput()
  * If the dentry is not d_in_lookup():
@@ -1788,8 +1799,9 @@ static struct dentry *lookup_dcache(const struct qstr *name,
  * If it is d_in_lookup() then these conditions can only be checked by the
  * file system when carrying out the intent (create or rename).
  */
-static struct dentry *lookup_one_qstr_excl(const struct qstr *name,
-					   struct dentry *base, unsigned int flags)
+static struct dentry *lookup_one_qstr(const struct qstr *name,
+				      struct dentry *base, unsigned int flags,
+				      unsigned int state)
 {
 	struct dentry *dentry;
 	struct dentry *old;
@@ -1811,7 +1823,16 @@ static struct dentry *lookup_one_qstr_excl(const struct qstr *name,
 		/* Raced with another thread which did the lookup */
 		goto found;
 
-	old = dir->i_op->lookup(dir, dentry, flags);
+	if (!inode_lock_shared_state(dir, state)) {
+		d_lookup_done(dentry);
+		dput(dentry);
+		return ERR_PTR(-EINTR);
+	}
+	if (unlikely(IS_DEADDIR(dir)))
+		old = ERR_PTR(-ENOENT);
+	else
+		old = dir->i_op->lookup(dir, dentry, flags | LOOKUP_SHARED);
+	inode_unlock_shared(dir);
 	if (unlikely(old)) {
 		d_lookup_done(dentry);
 		dput(dentry);
@@ -1902,7 +1923,8 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 /* Fast lookup failed, do it the slow way */
 static struct dentry *__lookup_slow(const struct qstr *name,
 				    struct dentry *dir,
-				    unsigned int flags)
+				    unsigned int flags,
+				    unsigned int state)
 {
 	struct dentry *dentry, *old;
 	struct inode *inode = dir->d_inode;
@@ -1925,8 +1947,17 @@ again:
 			dput(dentry);
 			dentry = ERR_PTR(error);
 		}
+	} else if (!inode_lock_shared_state(inode, state)) {
+		d_lookup_done(dentry);
+		dput(dentry);
+		return ERR_PTR(-EINTR);
 	} else {
-		old = inode->i_op->lookup(inode, dentry, flags);
+		if (unlikely(IS_DEADDIR(inode)))
+			old = ERR_PTR(-ENOENT);
+		else
+			old = inode->i_op->lookup(inode, dentry,
+						  flags | LOOKUP_SHARED);
+		inode_unlock_shared(inode);
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
 			dput(dentry);
@@ -1940,26 +1971,14 @@ static noinline struct dentry *lookup_slow(const struct qstr *name,
 				  struct dentry *dir,
 				  unsigned int flags)
 {
-	struct inode *inode = dir->d_inode;
-	struct dentry *res;
-	inode_lock_shared(inode);
-	res = __lookup_slow(name, dir, flags | LOOKUP_SHARED);
-	inode_unlock_shared(inode);
-	return res;
+	return __lookup_slow(name, dir, flags | LOOKUP_SHARED, TASK_NORMAL);
 }
 
 static struct dentry *lookup_slow_killable(const struct qstr *name,
 					   struct dentry *dir,
 					   unsigned int flags)
 {
-	struct inode *inode = dir->d_inode;
-	struct dentry *res;
-
-	if (inode_lock_shared_killable(inode))
-		return ERR_PTR(-EINTR);
-	res = __lookup_slow(name, dir, flags | LOOKUP_SHARED);
-	inode_unlock_shared(inode);
-	return res;
+	return __lookup_slow(name, dir, flags | LOOKUP_SHARED, TASK_KILLABLE);
 }
 
 static inline int may_lookup(struct mnt_idmap *idmap,
@@ -2919,18 +2938,31 @@ static struct dentry *__start_dirop(struct dentry *parent, struct qstr *name,
 	struct dentry *dentry;
 	struct inode *dir = d_inode(parent);
 
-	if (state == TASK_KILLABLE) {
-		int ret = down_write_killable_nested(&dir->i_rwsem,
-						     I_MUTEX_PARENT);
-		if (ret)
-			return ERR_PTR(ret);
-	} else {
-		inode_lock_nested(dir, I_MUTEX_PARENT);
-	}
-	dentry = lookup_one_qstr_excl(name, parent, lookup_flags);
-	if (IS_ERR(dentry))
+	while(1) {
+		unsigned int seq = raw_seqcount_begin(&rename_lock.seqcount);
+
+		dentry = lookup_one_qstr(name, parent, lookup_flags, state);
+		if (IS_ERR(dentry))
+			return dentry;
+		if (state == TASK_KILLABLE) {
+			if (down_write_killable_nested(&dir->i_rwsem, I_MUTEX_PARENT) != 0) {
+				d_lookup_done(dentry);
+				dput(dentry);
+				return ERR_PTR(-EINTR);
+			}
+		} else {
+			inode_lock_nested(dir, I_MUTEX_PARENT);
+		}
+		if ((lookup_flags & LOOKUP_EXCL) && dentry->d_inode)
+			/* became positive while we waited, try again */
+			;
+		else if (dentry_matches(dentry, parent, name, seq))
+			return dentry;
+		/* Something happened while waiting for the lock, try again */
 		inode_unlock(dir);
-	return dentry;
+		d_lookup_done(dentry);
+		dput(dentry);
+	}
 }
 
 /**
@@ -3828,6 +3860,7 @@ __start_renaming(struct renamedata *rd, int lookup_flags,
 	struct dentry *trap;
 	struct dentry *d1, *d2;
 	int target_flags = LOOKUP_RENAME_TARGET | LOOKUP_CREATE;
+	unsigned int seq;
 	int err;
 
 	if (rd->flags & RENAME_EXCHANGE)
@@ -3835,26 +3868,39 @@ __start_renaming(struct renamedata *rd, int lookup_flags,
 	if (rd->flags & RENAME_NOREPLACE)
 		target_flags |= LOOKUP_EXCL;
 
-	trap = lock_rename(rd->old_parent, rd->new_parent);
-	if (IS_ERR(trap))
-		return PTR_ERR(trap);
-
-	d1 = lookup_one_qstr_excl(old_last, rd->old_parent,
-				  lookup_flags);
+retry:
+	seq = raw_seqcount_begin(&rename_lock.seqcount);
+	d1 = lookup_one_qstr(old_last, rd->old_parent,
+			     lookup_flags, TASK_NORMAL);
 	err = PTR_ERR(d1);
 	if (IS_ERR(d1))
-		goto out_unlock;
+		goto out_err;
 
-	d2 = lookup_one_qstr_excl(new_last, rd->new_parent,
-				  lookup_flags | target_flags);
+	d2 = lookup_one_qstr(new_last, rd->new_parent,
+			     lookup_flags | target_flags, TASK_NORMAL);
 	err = PTR_ERR(d2);
 	if (IS_ERR(d2))
 		goto out_dput_d1;
 
+	trap = lock_rename(rd->old_parent, rd->new_parent);
+	err = PTR_ERR(trap);
+	if (IS_ERR(trap))
+		goto out_unlock;
+
+	if (((target_flags & LOOKUP_EXCL) && d2->d_inode) ||
+	    (unlikely(!dentry_matches(d1, rd->old_parent, old_last, seq) ||
+		      !dentry_matches(d2, rd->new_parent, new_last, seq)))) {
+		unlock_rename(rd->old_parent, rd->new_parent);
+		d_lookup_done(d1); dput(d1);
+		d_lookup_done(d2); dput(d2);
+		dput(trap);
+		goto retry;
+	}
+
 	if (d1 == trap) {
 		/* source is an ancestor of target */
 		err = -EINVAL;
-		goto out_dput_d2;
+		goto out_unlock;
 	}
 
 	if (d2 == trap) {
@@ -3863,7 +3909,7 @@ __start_renaming(struct renamedata *rd, int lookup_flags,
 			err = -EINVAL;
 		else
 			err = -ENOTEMPTY;
-		goto out_dput_d2;
+		goto out_unlock;
 	}
 
 	rd->old_dentry = d1;
@@ -3871,14 +3917,14 @@ __start_renaming(struct renamedata *rd, int lookup_flags,
 	dget(rd->old_parent);
 	return 0;
 
-out_dput_d2:
+out_unlock:
+	unlock_rename(rd->old_parent, rd->new_parent);
 	d_lookup_done(d2);
 	dput(d2);
 out_dput_d1:
 	d_lookup_done(d1);
 	dput(d1);
-out_unlock:
-	unlock_rename(rd->old_parent, rd->new_parent);
+out_err:
 	return err;
 }
 
@@ -3925,6 +3971,7 @@ __start_renaming_dentry(struct renamedata *rd, int lookup_flags,
 	struct dentry *trap;
 	struct dentry *d2;
 	int target_flags = LOOKUP_RENAME_TARGET | LOOKUP_CREATE;
+	unsigned int seq;
 	int err;
 
 	if (rd->flags & RENAME_EXCHANGE)
@@ -3932,27 +3979,42 @@ __start_renaming_dentry(struct renamedata *rd, int lookup_flags,
 	if (rd->flags & RENAME_NOREPLACE)
 		target_flags |= LOOKUP_EXCL;
 
-	/* Already have the dentry - need to be sure to lock the correct parent */
+retry:
+	seq = raw_seqcount_begin(&rename_lock.seqcount);
+	d2 = lookup_one_qstr(new_last, rd->new_parent,
+			     lookup_flags | target_flags, TASK_NORMAL);
+	err = PTR_ERR(d2);
+	if (IS_ERR(d2))
+		goto out_unlock;
+
+	/*
+	 * Already have the old_dentry - need to be sure to lock
+	 * the correct parent
+	 */
 	trap = lock_rename_child(old_dentry, rd->new_parent);
+	err = PTR_ERR(trap);
 	if (IS_ERR(trap))
-		return PTR_ERR(trap);
-	if (d_unhashed(old_dentry) ||
-	    (rd->old_parent && rd->old_parent != old_dentry->d_parent)) {
+		goto out_dput_d2;
+
+	if (!dentry_matches(old_dentry, rd->old_parent, NULL, seq)) {
 		/* dentry was removed, or moved and explicit parent requested */
 		err = -EINVAL;
 		goto out_unlock;
 	}
 
-	d2 = lookup_one_qstr_excl(new_last, rd->new_parent,
-				  lookup_flags | target_flags);
-	err = PTR_ERR(d2);
-	if (IS_ERR(d2))
-		goto out_unlock;
+	if (((target_flags & LOOKUP_EXCL) && d2->d_inode) ||
+	    !dentry_matches(d2, rd->new_parent, new_last, seq)) {
+		/* d2 was moved/removed/instantiated before lock - repeat lookup */
+		unlock_rename(old_dentry->d_parent, rd->new_parent);
+		d_lookup_done(d2); dput(d2);
+		dput(trap);
+		goto retry;
+	}
 
 	if (old_dentry == trap) {
 		/* source is an ancestor of target */
 		err = -EINVAL;
-		goto out_dput_d2;
+		goto out_unlock;
 	}
 
 	if (d2 == trap) {
@@ -3961,7 +4023,7 @@ __start_renaming_dentry(struct renamedata *rd, int lookup_flags,
 			err = -EINVAL;
 		else
 			err = -ENOTEMPTY;
-		goto out_dput_d2;
+		goto out_unlock;
 	}
 
 	rd->old_dentry = dget(old_dentry);
@@ -3969,11 +4031,11 @@ __start_renaming_dentry(struct renamedata *rd, int lookup_flags,
 	rd->old_parent = dget(old_dentry->d_parent);
 	return 0;
 
+out_unlock:
+	unlock_rename(old_dentry->d_parent, rd->new_parent);
 out_dput_d2:
 	d_lookup_done(d2);
 	dput(d2);
-out_unlock:
-	unlock_rename(old_dentry->d_parent, rd->new_parent);
 	return err;
 }
 
@@ -4329,8 +4391,19 @@ static struct dentry *atomic_open(const struct path *path, struct dentry *dentry
 
 	file->__f_path.dentry = DENTRY_NOT_SET;
 	file->__f_path.mnt = path->mnt;
-	error = dir_inode->i_op->atomic_open(dir_inode, dentry, file,
-				       open_to_namei_flags(open_flag), mode);
+
+	if (open_flag & O_CREAT)
+		inode_lock(dir_inode);
+	else
+		inode_lock_shared(dir_inode);
+	if (dentry->d_inode)
+		error = finish_no_open(file, NULL);
+	else if (unlikely(IS_DEADDIR(dir_inode)))
+		error = -ENOENT;
+	else
+		error = dir_inode->i_op->atomic_open(dir_inode, dentry, file,
+						     open_to_namei_flags(open_flag),
+						     mode);
 	d_lookup_done(dentry);
 
 	if (!error) {
@@ -4360,6 +4433,12 @@ static struct dentry *atomic_open(const struct path *path, struct dentry *dentry
 			error = -EIO;
 		}
 	}
+	if (!error && (file->f_mode & FMODE_CREATED))
+		fsnotify_create(dir_inode, dentry);
+	if (open_flag & O_CREAT)
+		inode_unlock(dir_inode);
+	else
+		inode_unlock_shared(dir_inode);
 
 	if (error) {
 		if (unlikely(create_error) && error == -ENOENT) {
@@ -4405,14 +4484,12 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	int error, create_error;
 	umode_t mode;
 	bool got_write;
-	unsigned int shared_flag;
 
 retry:
 	open_flag = op->open_flag;
 	got_write = false;
 	mode = op->mode;
 	create_error = 0;
-	shared_flag = (open_flag & O_CREAT) ? 0 : LOOKUP_SHARED;
 
 	if (open_flag & (O_CREAT | O_TRUNC | O_WRONLY | O_RDWR)) {
 		got_write = !mnt_want_write(nd->path.mnt);
@@ -4420,15 +4497,6 @@ retry:
 		 * do _not_ fail yet - we might not need that or fail with
 		 * a different error; we'll be dropping this one anyway.
 		 */
-	}
-	if (shared_flag)
-		inode_lock_shared(dir_inode);
-	else
-		inode_lock(dir_inode);
-
-	if (unlikely(IS_DEADDIR(dir_inode))) {
-		dentry = ERR_PTR(-ENOENT);
-		goto out;
 	}
 
 	file->f_mode &= ~FMODE_CREATED;
@@ -4492,8 +4560,15 @@ retry:
 	}
 
 	if (d_in_lookup(dentry)) {
-		struct dentry *res = dir_inode->i_op->lookup(dir_inode, dentry,
-							     nd->flags | shared_flag);
+		struct dentry *res;
+
+		inode_lock_shared(dir_inode);
+		if (IS_DEADDIR(dir_inode))
+			res = ERR_PTR(-ENOENT);
+		else
+			res = dir_inode->i_op->lookup(dir_inode, dentry,
+						      nd->flags | LOOKUP_SHARED);
+		inode_unlock_shared(dir_inode);
 		d_lookup_done(dentry);
 		if (unlikely(res)) {
 			if (IS_ERR(res)) {
@@ -4525,14 +4600,19 @@ retry:
 	if (error)
 		goto out_dput;
 
-	file->f_mode |= FMODE_CREATED;
+	inode_lock(dir_inode);
+		if (!dentry->d_inode && !unlikely(IS_DEADDIR(dir_inode))) {
+			file->f_mode |= FMODE_CREATED;
 	if (!dir_inode->i_op->create) {
 		error = -EACCES;
 		goto out_dput;
 	}
 
 	error = dir_inode->i_op->create(idmap, dir_inode, dentry, mode);
-	if (error)
+	} else if (!dentry->d_inode)
+			error = -ENOENT;
+		inode_unlock(dir_inode);
+		if (error)
 		goto out_dput;
 out:
 	if (!IS_ERR(dentry)) {
@@ -4541,11 +4621,6 @@ out:
 		if (file->f_mode & FMODE_OPENED)
 			fsnotify_open(file);
 	}
-	if (shared_flag)
-		inode_unlock_shared(dir_inode);
-	else
-		inode_unlock(dir_inode);
-
 	if (got_write)
 		mnt_drop_write(nd->path.mnt);
 

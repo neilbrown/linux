@@ -2841,6 +2841,36 @@ static void d_wait_lookup(struct dentry *dentry)
 	}
 }
 
+bool dentry_matches(struct dentry *dentry,
+		    struct dentry *base, const struct qstr *last,
+		    unsigned int seq)
+{
+	if (d_in_lookup(dentry))
+		/* in-lookup dentries must always match */
+		return true;
+	if (d_unhashed(dentry))
+		/* An unhashed dentry can never be locked */
+		return false;
+	if (d_really_is_negative(dentry))
+		/* Negative/in-lookup dentries are never unlinked or renamed,
+		 * there is no race we could have lost and no need to check.
+		 */
+		return true;
+	if (!base)
+		/* No matching required */
+		return true;
+	if (!read_seqretry(&rename_lock,seq))
+		/* Nothing has been renamed, not need to check */
+		return true;
+	if (dentry->d_parent != base)
+		return false;
+	if (last &&
+	    (dentry->d_name.hash != last->hash ||
+	     !d_same_name(dentry, base, last)))
+		return false;
+	return true;
+}
+
 /* What to do when __d_alloc_parallel finds a d_in_lookup dentry */
 enum alloc_para {
 	ALLOC_PARA_WAIT,
