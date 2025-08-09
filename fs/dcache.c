@@ -2882,6 +2882,10 @@ bool dentry_lock_two(struct dentry *d1, struct qstr *n1,
 	 * d2 could already be locked if in-lookup, so we lock it
 	 * first as it is never safe to call dentry_lock() while holding
 	 * a lock on another dentry in the same dir, due to S_DYING.
+	 *
+	 * On failure, neither dentries are locked, even if d2 was to
+	 * start with.
+	 * On success, both dentries are locked.
 	 */
 	struct dentry *p1 = d1->d_parent, *p2 = d2->d_parent;
 
@@ -3247,11 +3251,13 @@ static void copy_name(struct dentry *dentry, struct dentry *target)
  * @target: new dentry
  * @exchange: exchange the two dentries
  *
- * Update the dcache to reflect the move of a file name. Negative dcache
- * entries should not be moved in this way. Caller must hold s_rename_lock, the
- * i_rwsem of the source and target directories (exclusively), and either
- * DCACHE_RENAME_LOCK must be set on any dentry which will change ->d_parent,
- * or it was confirmed NOT to be set since rename_lock was taken.
+ * Update the dcache to reflect the move of a file name.  Negative
+ * dcache entries must not be moved in this way.  Caller must hold
+ * s_rename_lock, DCACHE_LOCK on the source and target directories, and either
+ * - DCACHE_RENAME_LOCK must be set on any dentry which will change
+ *   ->d_parent or
+ * - it was confirmed NOT to be set since rename_lock was taken
+ *   (as done in d_unalias).
  *
  * If @dentry and @target have the same parent, then neither is
  * moved in the d_sib list.
@@ -3483,15 +3489,14 @@ struct dentry *d_ancestor(struct dentry *p1, struct dentry *p2)
 /*
  * This helper attempts to cope with remotely renamed directories
  *
- * It assumes that the caller is already holding
- * dentry->d_parent->d_inode->i_rwsem, and s_rename_lock
+ * It assumes that the caller is already holding DCACHE_LOCK on
+ * dentry, and s_rename_lock
  *
  * Note: If ever the locking in rename_lookup() changes, then please
  * remember to update this too...
  */
 static int __d_unalias(struct dentry *dentry, struct dentry *alias)
 {
-	struct rw_semaphore *m2 = NULL;
 	int ret = -ESTALE;
 
 	if (dentry->d_flags & DCACHE_LOCKED) {
@@ -3512,7 +3517,6 @@ static int __d_unalias(struct dentry *dentry, struct dentry *alias)
 
 	if (!inode_trylock_shared(alias->d_parent->d_inode))
 		goto out_err;
-	m2 = &alias->d_parent->d_inode->i_rwsem;
 out_unalias:
 	if (alias->d_op && alias->d_op->d_unalias_trylock &&
 	    !alias->d_op->d_unalias_trylock(alias))
@@ -3522,8 +3526,6 @@ out_unalias:
 		alias->d_op->d_unalias_unlock(alias);
 	ret = 0;
 out_err:
-	if (m2)
-		up_read(m2);
 out_unlock:
 	if (dentry->d_flags & DCACHE_LOCKED) {
 		if (ret)

@@ -1047,6 +1047,12 @@ cleanup_file:
  * the return value of d_splice_alias(), then the caller needs to perform dput()
  * on it after finish_open().
  *
+ * If called from atomic_open and a dentry is passed which is different to
+ * the orignal dentry, and if that original was locked (DCACHE_LOCKED), then
+ * it must have been unlocked and this new dentry locked instead.
+ * Using d_splice_alias() provides this guarantee.
+ * (When called from tmpfile, the original dentry is not locked).
+ *
  * Returns zero on success or -errno if the open failed.
  */
 int finish_open(struct file *file, struct dentry *dentry,
@@ -1072,6 +1078,11 @@ EXPORT_SYMBOL(finish_open);
  *
  * Returns 0 or -E..., which must be the return value of ->atomic_open() after
  * having called this function.
+ *
+ * If called from atomic_open and a dentry is passed which is different to
+ * the orignal dentry, and if that original was locked (DCACHE_LOCKED), then
+ * it must have been unlocked and this new dentry locked instead.
+ * Using d_splice_alias() provides this guarantee.
  */
 int finish_no_open(struct file *file, struct dentry *dentry)
 {
