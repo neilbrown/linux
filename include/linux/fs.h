@@ -1811,9 +1811,10 @@ struct file *kernel_tmpfile_open(struct mnt_idmap *idmap,
 struct file *kernel_file_open(const struct path *path, int flags,
 			      const struct cred *cred);
 
-int vfs_mkobj(struct dentry *, umode_t,
-		int (*f)(struct dentry *, umode_t, void *),
-		void *);
+int vfs_mkobj(struct mnt_idmap *idmap,
+	      struct dentry *, umode_t,
+	      int (*f)(struct dentry *, umode_t, void *),
+	      void *);
 
 int vfs_fchown(struct file *file, uid_t user, gid_t group);
 int vfs_fchmod(struct file *file, umode_t mode);

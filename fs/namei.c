@@ -3691,7 +3691,6 @@ int may_create_dentry(struct mnt_idmap *idmap,
 
 	return inode_permission(idmap, dir, MAY_WRITE | MAY_EXEC);
 }
-EXPORT_SYMBOL(may_create_dentry);
 
 /*
  * p1 and p2 should be directories on the same fs.
@@ -4252,12 +4251,13 @@ int vfs_create(struct mnt_idmap *idmap, struct dentry *dentry, umode_t mode,
 }
 EXPORT_SYMBOL(vfs_create);
 
-int vfs_mkobj(struct dentry *dentry, umode_t mode,
-		int (*f)(struct dentry *, umode_t, void *),
-		void *arg)
+int vfs_mkobj(struct mnt_idmap *idmap,
+	      struct dentry *dentry, umode_t mode,
+	      int (*f)(struct dentry *, umode_t, void *),
+	      void *arg)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
-	int error = may_create_dentry(&nop_mnt_idmap, dir, dentry);
+	int error = may_create_dentry(idmap, dir, dentry);
 	if (error)
 		return error;
 

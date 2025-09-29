@@ -534,10 +534,19 @@ static unsigned int create_subvol_num_items(const struct btrfs_qgroup_inherit *i
 	return num_items;
 }
 
-static noinline int create_subvol(struct mnt_idmap *idmap,
-				  struct inode *dir, struct dentry *dentry,
-				  struct btrfs_qgroup_inherit *inherit)
+struct svargs {
+	struct mnt_idmap *idmap;
+	struct btrfs_qgroup_inherit *inherit;
+};
+
+static int create_subvol(struct dentry *dentry,
+			 umode_t mode,
+			 void *svargsv)
 {
+	struct svargs *svargs = svargsv;
+	struct mnt_idmap *idmap = svargs->idmap;
+	struct inode *dir = dentry->d_parent->d_inode;
+	struct btrfs_qgroup_inherit *inherit = svargs->inherit;
 	struct btrfs_fs_info *fs_info = inode_to_fs_info(dir);
 	struct btrfs_trans_handle *trans;
 	struct btrfs_key key;
@@ -739,10 +748,21 @@ out_anon_dev:
 	return ret;
 }
 
-static int create_snapshot(struct btrfs_root *root, struct inode *dir,
-			   struct dentry *dentry, bool readonly,
-			   struct btrfs_qgroup_inherit *inherit)
+struct ssargs {
+	struct btrfs_root *snap_src;
+	struct btrfs_qgroup_inherit *inherit;
+	bool readonly;
+};
+
+static int create_snapshot(struct dentry *dentry,
+			   umode_t mode,
+			   void *ssargsv)
 {
+	struct ssargs *ssargs = ssargsv;
+	struct btrfs_root *root = ssargs->snap_src;
+	struct inode *dir = dentry->d_parent->d_inode;
+	bool readonly = ssargs->readonly;
+	struct btrfs_qgroup_inherit *inherit = ssargs->inherit;
 	struct btrfs_fs_info *fs_info = inode_to_fs_info(dir);
 	struct inode *inode;
 	struct btrfs_pending_snapshot AUTO_KFREE(pending_snapshot);
@@ -879,10 +899,6 @@ static noinline int btrfs_mksubvol(struct dentry *parent,
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);
 
-	ret = may_create_dentry(idmap, dir, dentry);
-	if (ret)
-		goto out_dput;
-
 	/*
 	 * even if this name doesn't exist, we may get hash collisions.
 	 * check for them now when we can safely fail
@@ -896,10 +912,13 @@ static noinline int btrfs_mksubvol(struct dentry *parent,
 	if (btrfs_root_refs(&BTRFS_I(dir)->root->root_item) == 0)
 		goto out_up_read;
 
-	if (snap_src)
-		ret = create_snapshot(snap_src, dir, dentry, readonly, inherit);
-	else
-		ret = create_subvol(idmap, dir, dentry, inherit);
+	if (snap_src) {
+		struct ssargs ssargs = { snap_src, inherit, readonly };
+		ret = vfs_mkobj(idmap, dentry, 0755, create_snapshot, &ssargs);
+	} else {
+		struct svargs svargs = { idmap, inherit };
+		ret = vfs_mkobj(idmap, dentry, 0755, create_subvol, &svargs);
+	}
 
 	if (!ret)
 		fsnotify_mkdir(dir, dentry);

@@ -871,7 +871,7 @@ static int prepare_open(struct dentry *dentry, int oflag, int ro,
 		if (ro)
 			return ro;
 		audit_inode_parent_hidden(name, dentry->d_parent);
-		return vfs_mkobj(dentry, mode & ~current_umask(),
+		return vfs_mkobj(&nop_mnt_idmap, dentry, mode & ~current_umask(),
 				  mqueue_create_attr, attr);
 	}
 	/* it already existed */

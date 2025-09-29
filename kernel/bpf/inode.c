@@ -514,13 +514,13 @@ static int bpf_obj_do_pin(int path_fd, const char __user *pathname, void *raw,
 
 	switch (type) {
 	case BPF_TYPE_PROG:
-		ret = vfs_mkobj(dentry, mode, bpf_mkprog, raw);
+		ret = vfs_mkobj(&nop_mnt_idmap, dentry, mode, bpf_mkprog, raw);
 		break;
 	case BPF_TYPE_MAP:
-		ret = vfs_mkobj(dentry, mode, bpf_mkmap, raw);
+		ret = vfs_mkobj(&nop_mnt_idmap, dentry, mode, bpf_mkmap, raw);
 		break;
 	case BPF_TYPE_LINK:
-		ret = vfs_mkobj(dentry, mode, bpf_mklink, raw);
+		ret = vfs_mkobj(&nop_mnt_idmap, dentry, mode, bpf_mklink, raw);
 		break;
 	default:
 		ret = -EPERM;
