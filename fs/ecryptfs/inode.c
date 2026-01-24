@@ -413,7 +413,7 @@ static struct dentry *ecryptfs_lookup(struct inode *ecryptfs_dir_inode,
 
 	lower_dentry = lookup_noperm_unlocked(&qname, lower_dir_dentry);
 	if (IS_ERR(lower_dentry)) {
-		ecryptfs_printk(KERN_DEBUG, "%s: lookup_noperm() returned "
+		ecryptfs_printk(KERN_DEBUG, "%s: lookup_noperm_unlocked() returned "
 				"[%ld] on lower_dentry = [%s]\n", __func__,
 				PTR_ERR(lower_dentry),
 				qname.name);

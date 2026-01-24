@@ -3155,59 +3155,6 @@ struct dentry *try_lookup_noperm(struct qstr *name, struct dentry *base)
 EXPORT_SYMBOL(try_lookup_noperm);
 
 /**
- * lookup_noperm - filesystem helper to lookup single pathname component
- * @name:	qstr storing pathname component to lookup
- * @base:	base directory to lookup from
- *
- * Note that this routine is purely a helper for filesystem usage and should
- * not be called by generic code.  It does no permission checking.
- *
- * The caller must hold base->i_rwsem.
- */
-struct dentry *lookup_noperm(struct qstr *name, struct dentry *base)
-{
-	struct dentry *dentry;
-	int err;
-
-	WARN_ON_ONCE(!inode_is_locked(base->d_inode));
-
-	err = lookup_noperm_common(name, base);
-	if (err)
-		return ERR_PTR(err);
-
-	dentry = lookup_dcache(name, base, 0);
-	return dentry ? dentry : __lookup_slow(name, base, 0);
-}
-EXPORT_SYMBOL(lookup_noperm);
-
-/**
- * lookup_one - lookup single pathname component
- * @idmap:	idmap of the mount the lookup is performed from
- * @name:	qstr holding pathname component to lookup
- * @base:	base directory to lookup from
- *
- * This can be used for in-kernel filesystem clients such as file servers.
- *
- * The caller must hold base->i_rwsem.
- */
-struct dentry *lookup_one(struct mnt_idmap *idmap, struct qstr *name,
-			  struct dentry *base)
-{
-	struct dentry *dentry;
-	int err;
-
-	WARN_ON_ONCE(!inode_is_locked(base->d_inode));
-
-	err = lookup_one_common(idmap, name, base);
-	if (err)
-		return ERR_PTR(err);
-
-	dentry = lookup_dcache(name, base, 0);
-	return dentry ? dentry : __lookup_slow(name, base, 0);
-}
-EXPORT_SYMBOL(lookup_one);
-
-/**
  * lookup_one_unlocked - lookup single pathname component
  * @idmap:	idmap of the mount the lookup is performed from
  * @name:	qstr holding pathname component to lookup
@@ -3215,8 +3162,8 @@ EXPORT_SYMBOL(lookup_one);
  *
  * This can be used for in-kernel filesystem clients such as file servers.
  *
- * Unlike lookup_one, it should be called without the parent
- * i_rwsem held, and will take the i_rwsem itself if necessary.
+ * It should be called without the parent i_rwsem held, and will take
+ * the i_rwsem itself if necessary.
  *
  * Returns: - A dentry, possibly negative, or
  *	    - same errors as try_lookup_noperm() or
@@ -3328,8 +3275,8 @@ EXPORT_SYMBOL(lookup_one_positive_unlocked);
  * Note that this routine is purely a helper for filesystem usage and should
  * not be called by generic code. It does no permission checking.
  *
- * Unlike lookup_noperm(), it should be called without the parent
- * i_rwsem held, and will take the i_rwsem itself if necessary.
+ * This should be called without the parent i_rwsem held, and will take
+ * the i_rwsem itself if necessary.
  *
  * Unlike try_lookup_noperm() it *does* revalidate the dentry if it already
  * existed.

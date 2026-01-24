@@ -1424,3 +1424,10 @@ d_add_ci() must now be passed the flags arguemnt that was given to ->lookup
 d_rehash() is gone. It should never be needed.  Only unhash a dentry if
 you really don't want it.
 
+---
+
+**mandatory**
+
+lookup_one() and lookup_noperm() are no longer available.  Use
+start_creating() or similar instead.
+
