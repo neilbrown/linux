@@ -2406,7 +2406,6 @@ EXPORT_SYMBOL(d_obtain_root);
  * @dentry: the negative dentry that was passed to the parent's lookup func
  * @inode:  the inode case-insensitive lookup has found
  * @name:   the case-exact name to be associated with the returned dentry
- * @lookup_flags: flags passed to ->lookup
  *
  * This is to avoid filling the dcache with case-insensitive names to the
  * same inode, only the actual correct case is stored in the dcache for
@@ -2419,7 +2418,7 @@ EXPORT_SYMBOL(d_obtain_root);
  * the exact case, and return the spliced entry.
  */
 struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
-			struct qstr *name, unsigned int lookup_flags)
+			struct qstr *name)
 {
 	struct dentry *found, *res;
 
@@ -2441,10 +2440,7 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 	 * ->lookup() and will shortly drop the lock anyway.
 	 * We cannot retake the lock while the new dentry is in-lookup
 	 */
-	if (lookup_flags & LOOKUP_SHARED)
-		inode_unlock_shared(d_inode(dentry->d_parent));
-	else
-		inode_unlock(d_inode(dentry->d_parent));
+	inode_unlock_shared(d_inode(dentry->d_parent));
 	found = d_alloc_parallel(dentry->d_parent, name);
 	if (IS_ERR(found) || !d_in_lookup(found)) {
 		iput(inode);
@@ -2458,10 +2454,7 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 	}
 out_unlock:
 	d_lookup_done(dentry);
-	if (lookup_flags & LOOKUP_SHARED)
-		inode_lock_shared(d_inode(dentry->d_parent));
-	else
-		inode_lock_nested(d_inode(dentry->d_parent), I_MUTEX_PARENT);
+	inode_lock_shared(d_inode(dentry->d_parent));
 	return found;
 }
 EXPORT_SYMBOL(d_add_ci);

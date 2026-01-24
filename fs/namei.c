@@ -1831,7 +1831,7 @@ static struct dentry *lookup_one_qstr(const struct qstr *name,
 	if (unlikely(IS_DEADDIR(dir)))
 		old = ERR_PTR(-ENOENT);
 	else
-		old = dir->i_op->lookup(dir, dentry, flags | LOOKUP_SHARED);
+		old = dir->i_op->lookup(dir, dentry, flags);
 	inode_unlock_shared(dir);
 	if (unlikely(old)) {
 		d_lookup_done(dentry);
@@ -1956,7 +1956,7 @@ again:
 			old = ERR_PTR(-ENOENT);
 		else
 			old = inode->i_op->lookup(inode, dentry,
-						  flags | LOOKUP_SHARED);
+						  flags);
 		inode_unlock_shared(inode);
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
@@ -1971,14 +1971,14 @@ static noinline struct dentry *lookup_slow(const struct qstr *name,
 				  struct dentry *dir,
 				  unsigned int flags)
 {
-	return __lookup_slow(name, dir, flags | LOOKUP_SHARED, TASK_NORMAL);
+	return __lookup_slow(name, dir, flags, TASK_NORMAL);
 }
 
 static struct dentry *lookup_slow_killable(const struct qstr *name,
 					   struct dentry *dir,
 					   unsigned int flags)
 {
-	return __lookup_slow(name, dir, flags | LOOKUP_SHARED, TASK_KILLABLE);
+	return __lookup_slow(name, dir, flags, TASK_KILLABLE);
 }
 
 static inline int may_lookup(struct mnt_idmap *idmap,
@@ -4567,7 +4567,7 @@ retry:
 			res = ERR_PTR(-ENOENT);
 		else
 			res = dir_inode->i_op->lookup(dir_inode, dentry,
-						      nd->flags | LOOKUP_SHARED);
+						      nd->flags);
 		inode_unlock_shared(dir_inode);
 		d_lookup_done(dentry);
 		if (unlikely(res)) {

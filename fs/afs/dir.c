@@ -941,10 +941,7 @@ static struct dentry *afs_lookup_atsys(struct inode *dir, struct dentry *dentry,
 	 * We don't really need the lock any more. The in-lookup status of
 	 * dentry gives us sufficient exclusion.
 	 */
-	if (flags & LOOKUP_SHARED)
-		inode_unlock_shared(dir);
-	else
-		inode_unlock(dir);
+	inode_unlock_shared(dir);
 	for (i = 0; i < subs->nr; i++) {
 		name = subs->subs[i];
 		len = dentry->d_name.len - 4 + strlen(name);
@@ -968,10 +965,7 @@ static struct dentry *afs_lookup_atsys(struct inode *dir, struct dentry *dentry,
 out_s:
 	/* Cannot take parent lock while we hold an in-lookup dentry */
 	d_lookup_done(dentry);
-	if (flags & LOOKUP_SHARED)
-		inode_lock_shared(dir);
-	else
-		inode_lock_nested(dir, I_MUTEX_PARENT);
+	inode_lock_shared(dir);
 	afs_put_sysnames(subs);
 	kfree(buf);
 out_p:
