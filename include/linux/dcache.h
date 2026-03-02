@@ -300,8 +300,6 @@ extern int path_has_submounts(const struct path *);
  */
 extern void d_rehash(struct dentry *);
  
-extern void d_add(struct dentry *, struct inode *);
-
 /* used for rename() and baskets */
 extern void d_move(struct dentry *, struct dentry *);
 extern void d_exchange(struct dentry *, struct dentry *);

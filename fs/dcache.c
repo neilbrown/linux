@@ -3110,25 +3110,6 @@ static inline void __d_add(struct dentry *dentry, struct inode *inode,
 		spin_unlock(&inode->i_lock);
 }
 
-/**
- * d_add - add dentry to hash queues
- * @entry: dentry to add
- * @inode: The inode to attach to this dentry
- *
- * This adds the entry to the hash queues and initializes @inode.
- * The entry was actually filled in earlier during d_alloc().
- */
-
-void d_add(struct dentry *entry, struct inode *inode)
-{
-	if (inode) {
-		security_d_instantiate(entry, inode);
-		spin_lock(&inode->i_lock);
-	}
-	__d_add(entry, inode, NULL);
-}
-EXPORT_SYMBOL(d_add);
-
 struct dentry *d_make_persistent(struct dentry *dentry, struct inode *inode)
 {
 	WARN_ON(d_really_is_positive(dentry));
