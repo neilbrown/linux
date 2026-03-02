@@ -460,7 +460,7 @@ otherwise noted.
 ``lookup``
 	called when the VFS needs to look up an inode in a parent
 	directory.  The name to look for is found in the dentry.  This
-	method must call d_add() to insert the found inode into the
+	method must call d_splice_alias() to insert the found inode into the
 	dentry.  The "i_count" field in the inode structure should be
 	incremented.  If the named inode does not exist a NULL inode
 	should be inserted into the dentry (this is called a negative
@@ -1429,7 +1429,7 @@ manipulate dentries:
 	d_iput() method is called).  If there are other references, then
 	d_drop() is called instead
 
-``d_add``
+``d_splice_alias``
 	add a dentry to its parents hash list and then calls
 	d_instantiate()
 

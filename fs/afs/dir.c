@@ -960,8 +960,9 @@ static struct dentry *afs_lookup_atsys(struct inode *dir, struct dentry *dentry,
 		dput(ret);
 	}
 
-	/* We don't want to d_add() the @sys dentry here as we don't want to
-	 * the cached dentry to hide changes to the sysnames list.
+	/* We don't want to d_splice_alias() the @sys dentry here as we
+	 * don't want to the cached dentry to hide changes to the
+	 * sysnames list.
 	 */
 	ret = NULL;
 out_s:

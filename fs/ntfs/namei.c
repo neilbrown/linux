@@ -116,9 +116,9 @@ static int ntfs_check_bad_windows_name(struct ntfs_volume *vol,
  * inode number and the inode is associated with the dentry @dent via a call to
  * d_splice_alias().
  *
- * If the name is not found in the directory, a NULL inode is inserted into the
- * dentry @dent via a call to d_add(). The dentry is then termed a negative
- * dentry.
+ * If the name is not found in the directory, a NULL inode is inserted
+ * into the dentry @dent via a call to d_splice_alias().  The dentry is
+ * then termed a negative dentry.
  *
  * Only if an actual error occurs, do we return an error via ERR_PTR().
  *

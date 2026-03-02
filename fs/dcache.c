@@ -3461,7 +3461,7 @@ out:
  * @dentry must be negative and may be in-lookup or unhashed or hashed.
  *
  * If inode is a directory and has an IS_ROOT alias, then d_move that in
- * place of the given dentry and return it, else simply d_add the inode
+ * place of the given dentry and return it, else simply __d_add the inode
  * to the dentry and return NULL.
  *
  * If a non-IS_ROOT directory is found, the filesystem is corrupt, and

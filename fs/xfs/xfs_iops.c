@@ -354,9 +354,9 @@ xfs_vn_ci_lookup(
 		if (unlikely(error != -ENOENT))
 			return ERR_PTR(error);
 		/*
-		 * call d_add(dentry, NULL) here when d_drop_negative_children
-		 * is called in xfs_vn_mknod (ie. allow negative dentries
-		 * with CI filesystems).
+		 * call d_splice_alias(NULL, dentry) here when
+		 * d_drop_negative_children is called in xfs_vn_mknod
+		 * (ie.  allow negative dentries with CI filesystems).
 		 */
 		return NULL;
 	}

@@ -172,7 +172,7 @@ bail_add:
 		ocfs2_dentry_attach_gen(dentry);
 
 bail_unlock:
-	/* Don't drop the cluster lock until *after* the d_add --
+	/* Don't drop the cluster lock until *after* the d_splice_alias --
 	 * unlink on another node will message us to remove that
 	 * dentry under this lock so otherwise we can race this with
 	 * the downconvert thread and have a stale dentry. */

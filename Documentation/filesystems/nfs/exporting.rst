@@ -101,14 +101,8 @@ Filesystem Issues
 For a filesystem to be exportable it must:
 
    1. provide the filehandle fragment routines described below.
-   2. make sure that d_splice_alias is used rather than d_add
-      when ->lookup finds an inode for a given parent and name.
-
-      If inode is NULL, d_splice_alias(inode, dentry) is equivalent to::
-
-		d_add(dentry, inode), NULL
-
-      Similarly, d_splice_alias(ERR_PTR(err), dentry) = ERR_PTR(err)
+   2. Use d_splice_alias() when ->lookup finds an inode for a given 
+      parent and name.
 
       Typically the ->lookup routine will simply end with a::
 
