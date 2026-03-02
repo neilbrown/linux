@@ -160,6 +160,7 @@ retry:
 		dput(dentry);
 		goto retry;
 	} else {
+		cifs_set_time(dentry, jiffies);
 		inode = cifs_iget(sb, fattr);
 		if (!inode)
 			inode = ERR_PTR(-ENOMEM);

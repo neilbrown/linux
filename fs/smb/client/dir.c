@@ -594,6 +594,7 @@ int cifs_atomic_open(struct inode *dir, struct dentry *direntry,
 	} else {
 		d_instantiate(direntry, inode);
 	}
+	cifs_set_time(direntry, jiffies);
 
 	if ((oflags & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL))
 		file->f_mode |= FMODE_CREATED;
