@@ -2794,21 +2794,6 @@ static void __d_rehash(struct dentry *entry)
 	hlist_bl_unlock(b);
 }
 
-/**
- * d_rehash - add an entry back to the hash
- * @entry: dentry to add to the hash
- *
- * Adds a dentry to the hash according to its name.
- */
- 
-void d_rehash(struct dentry * entry)
-{
-	spin_lock(&entry->d_lock);
-	__d_rehash(entry);
-	spin_unlock(&entry->d_lock);
-}
-EXPORT_SYMBOL(d_rehash);
-
 static inline unsigned start_dir_add(struct inode *dir)
 {
 	preempt_disable_nested();

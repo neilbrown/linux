@@ -1416,3 +1416,11 @@ to be involved in non-exclusive create, it should provide atomic_open.
 
 d_add_ci() must now be passed the flags arguemnt that was given to ->lookup
 
+
+---
+
+**mandatory**
+
+d_rehash() is gone. It should never be needed.  Only unhash a dentry if
+you really don't want it.
+
