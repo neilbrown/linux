@@ -2054,9 +2054,7 @@ int ceph_readdir_prepopulate(struct ceph_mds_request *req,
 		struct ceph_mds_reply_dir_entry *rde = rinfo->dir_entries + i;
 		struct ceph_vino tvino;
 
-		dname.name = rde->name;
-		dname.len = rde->name_len;
-		dname.hash = full_name_hash(parent, dname.name, dname.len);
+		dname = QSTR_LEN(rde->name, rde->name_len);
 
 		tvino.ino = le64_to_cpu(rde->inode.in->ino);
 		tvino.snap = le64_to_cpu(rde->inode.in->snapid);
@@ -2072,27 +2070,24 @@ int ceph_readdir_prepopulate(struct ceph_mds_request *req,
 		}
 
 retry_lookup:
-		dn = d_lookup(parent, &dname);
-		doutc(cl, "d_lookup on parent=%p name=%.*s got %p\n",
+		dn = d_alloc_trylock(parent, &dname);
+		doutc(cl, "d_alloc_trylock on parent=%p name=%.*s got %p\n",
 		      parent, dname.len, dname.name, dn);
-
-		if (!dn) {
-			dn = d_alloc(parent, &dname);
-			doutc(cl, "d_alloc %p '%.*s' = %p\n", parent,
-			      dname.len, dname.name, dn);
-			if (!dn) {
-				doutc(cl, "d_alloc badness\n");
-				err = -ENOMEM;
-				goto out;
-			}
-			if (rde->is_nokey) {
-				spin_lock(&dn->d_lock);
-				dn->d_flags |= DCACHE_NOKEY_NAME;
-				spin_unlock(&dn->d_lock);
-			}
-		} else if (d_really_is_positive(dn) &&
-			   (ceph_ino(d_inode(dn)) != tvino.ino ||
-			    ceph_snap(d_inode(dn)) != tvino.snap)) {
+		if (dn == ERR_PTR(-EWOULDBLOCK)) {
+			/* Just handle the inode info */
+			dn = NULL;
+		} else if (IS_ERR(dn)) {
+			doutc(cl, "d_alloc_trylock badness\n");
+			err = PTR_ERR(dn);
+			goto out;
+		} else if (d_in_lookup(dn) && rde->is_nokey) {
+			spin_lock(&dn->d_lock);
+			dn->d_flags |= DCACHE_NOKEY_NAME;
+			spin_unlock(&dn->d_lock);
+		}
+		if (dn && d_really_is_positive(dn) &&
+		    (ceph_ino(d_inode(dn)) != tvino.ino ||
+		     ceph_snap(d_inode(dn)) != tvino.snap)) {
 			struct ceph_dentry_info *di = ceph_dentry(dn);
 			doutc(cl, " dn %p points to wrong inode %p\n",
 			      dn, d_inode(dn));
@@ -2112,7 +2107,7 @@ retry_lookup:
 		}
 
 		/* inode */
-		if (d_really_is_positive(dn)) {
+		if (dn && d_really_is_positive(dn)) {
 			in = d_inode(dn);
 		} else {
 			in = ceph_get_inode(parent->d_sb, tvino, NULL);
@@ -2130,21 +2125,25 @@ retry_lookup:
 		if (ret < 0) {
 			pr_err_client(cl, "badness on %p %llx.%llx\n", in,
 				      ceph_vinop(in));
-			if (d_really_is_negative(dn)) {
+			if (!dn || d_really_is_negative(dn)) {
 				if (inode_state_read_once(in) & I_NEW) {
 					ihold(in);
 					discard_new_inode(in);
 				}
 				iput(in);
 			}
-			d_drop(dn);
+			if (dn)
+				d_drop(dn);
 			err = ret;
 			goto next_item;
 		}
 		if (inode_state_read_once(in) & I_NEW)
 			unlock_new_inode(in);
 
-		if (d_really_is_negative(dn)) {
+		if (!dn)
+			goto next_item;
+
+		if (d_in_lookup(dn) || d_really_is_negative(dn)) {
 			if (ceph_security_xattr_deadlock(in)) {
 				doutc(cl, " skip splicing dn %p to inode %p"
 				      " (security xattr deadlock)\n", dn, in);
