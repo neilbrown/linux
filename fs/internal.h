@@ -223,6 +223,7 @@ bool sync_lazytime(struct inode *inode);
 /*
  * dcache.c
  */
+struct dentry *d_alloc(struct dentry * parent, const struct qstr *name);
 extern int d_set_mounted(struct dentry *dentry);
 extern long prune_dcache_sb(struct super_block *sb, struct shrink_control *sc);
 extern struct dentry *d_alloc_cursor(struct dentry *);

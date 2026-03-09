@@ -2001,7 +2001,6 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name)
 
 	return dentry;
 }
-EXPORT_SYMBOL(d_alloc);
 
 /**
  * d_duplicate - duplicate a dentry for combined atomic operation

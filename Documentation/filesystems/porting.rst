@@ -1431,3 +1431,10 @@ you really don't want it.
 lookup_one() and lookup_noperm() are no longer available.  Use
 start_creating() or similar instead.
 
+---
+
+**mandatory**
+
+d_alloc() is no longer exported as its use can be racy.  Use d_alloc_name()
+when object creation is controlled separately from standard filesystem interface,
+and d_alloc_parallel() or d_alloc_trylock() when standard interfaces can be used.
