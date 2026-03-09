@@ -2101,12 +2101,36 @@ struct dentry *d_alloc_pseudo(struct super_block *sb, const struct qstr *name)
 	return dentry;
 }
 
+/**
+ * d_alloc_name: allocate a dentry for use in a dcache-based filesystem.
+ * @parent: dentry of the parent for the dentry
+ * @name: name of the dentry
+ *
+ * d_alloc_name() allocates a dentry without any protection against
+ * races.  It should only be used in directories that use simple_lookup
+ * and when create/rename/link inode operations cannot be called, either
+ * because they don't exist or because some locking prevents it.
+ * d_alloc_name() is particularly suited for use with
+ * simple_dir_inode_operations but can also be used freely in
+ * fill_super/get_tree context and with some care when the filesystem
+ * is frozen.
+ *
+ * The result of d_alloc_name() is typically passed to d_make_persistent().
+ *
+ * This must NOT be used by filesystems which provide a d_hash() function
+ * that can return an error.
+ */
 struct dentry *d_alloc_name(struct dentry *parent, const char *name)
 {
 	struct qstr q;
 
 	q.name = name;
 	q.hash_len = hashlen_string(parent, name);
+	if (parent->d_flags & DCACHE_OP_HASH) {
+		int err = parent->d_op->d_hash(parent, &q);
+		if (WARN_ON_ONCE(err))
+			return NULL;
+	}
 	return d_alloc(parent, &q);
 }
 EXPORT_SYMBOL(d_alloc_name);
