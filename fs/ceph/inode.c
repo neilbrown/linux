@@ -15,6 +15,7 @@
 #include <linux/sort.h>
 #include <linux/iversion.h>
 #include <linux/fscrypt.h>
+#include <linux/namei.h>
 
 #include "super.h"
 #include "mds_client.h"
@@ -1664,33 +1665,17 @@ int ceph_fill_trace(struct super_block *sb, struct ceph_mds_request *req)
 				ceph_fname_free_buffer(parent_dir, &oname);
 				goto done;
 			}
-			dname.name = oname.name;
-			dname.len = oname.len;
-			dname.hash = full_name_hash(parent, dname.name, dname.len);
+			dname = QSTR_LEN(oname.name, oname.len);
 			tvino.ino = le64_to_cpu(rinfo->targeti.in->ino);
 			tvino.snap = le64_to_cpu(rinfo->targeti.in->snapid);
 retry_lookup:
-			dn = d_lookup(parent, &dname);
+			dn = try_lookup_noperm(&dname, parent);
 			doutc(cl, "d_lookup on parent=%p name=%.*s got %p\n",
 			      parent, dname.len, dname.name, dn);
-
-			if (!dn) {
-				dn = d_alloc(parent, &dname);
-				doutc(cl, "d_alloc %p '%.*s' = %p\n", parent,
-				      dname.len, dname.name, dn);
-				if (!dn) {
-					dput(parent);
-					ceph_fname_free_buffer(parent_dir, &oname);
-					err = -ENOMEM;
-					goto done;
-				}
-				if (is_nokey) {
-					spin_lock(&dn->d_lock);
-					dn->d_flags |= DCACHE_NOKEY_NAME;
-					spin_unlock(&dn->d_lock);
-				}
-				err = 0;
-			} else if (d_really_is_positive(dn) &&
+			if (IS_ERR(dn))
+				/* should be impossible */
+				dn = NULL;
+			if (dn && d_really_is_positive(dn) &&
 				   (ceph_ino(d_inode(dn)) != tvino.ino ||
 				    ceph_snap(d_inode(dn)) != tvino.snap)) {
 				doutc(cl, " dn %p points to wrong inode %p\n",
