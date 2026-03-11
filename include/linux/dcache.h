@@ -129,10 +129,8 @@ struct dentry {
 	union {
 		/* positives: inode alias list */
 		struct hlist_node d_alias;
-		/* in-lookup ones (all negative, live): hash chain */
-		struct hlist_bl_node d_in_lookup_hash;
 		/* killed ones: (already negative) used to schedule freeing */
-	 	struct rcu_head d_rcu;
+		struct rcu_head d_rcu;
 		/*
 		 * live non-in-lookup negatives: used if shrink_dcache_tree()
 		 * races with eviction by another thread and needs to wait for
@@ -428,7 +426,7 @@ static inline void dont_mount(struct dentry *dentry)
 	spin_unlock(&dentry->d_lock);
 }
 
-extern void __d_lookup_unhash_wake(struct dentry *dentry);
+extern void __d_lookup_unhash_wake_unlock(struct dentry *dentry);
 
 static inline int d_in_lookup(const struct dentry *dentry)
 {
@@ -438,7 +436,7 @@ static inline int d_in_lookup(const struct dentry *dentry)
 static inline void d_lookup_done(struct dentry *dentry)
 {
 	if (unlikely(d_in_lookup(dentry)))
-		__d_lookup_unhash_wake(dentry);
+		__d_lookup_unhash_wake_unlock(dentry);
 }
 
 extern void dput(struct dentry *);

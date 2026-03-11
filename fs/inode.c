@@ -252,7 +252,6 @@ int inode_init_always_gfp(struct super_block *sb, struct inode *inode, gfp_t gfp
 	inode->i_pipe = NULL;
 	inode->i_cdev = NULL;
 	inode->i_link = NULL;
-	inode->i_dir_seq = 0;
 	inode->i_rdev = 0;
 	inode->dirtied_when = 0;
 

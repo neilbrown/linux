@@ -857,9 +857,7 @@ struct inode {
 		struct pipe_inode_info	*i_pipe;
 		struct cdev		*i_cdev;
 		char			*i_link;
-		unsigned		i_dir_seq;
 	};
-
 
 #ifdef CONFIG_FSNOTIFY
 	__u32			i_fsnotify_mask; /* all events this inode cares about */

@@ -1796,7 +1796,7 @@ retry_lookup:
 				ceph_dir_clear_ordered(dir);
 				d_delete(dn);
 			} else if (have_lease) {
-				if (d_unhashed(dn) &&
+				if ((d_unhashed(dn) || d_in_lookup(dn)) &&
 				    ceph_snap(dir) == CEPH_NOSNAP)
 					d_splice_alias(NULL, dn);
 			}

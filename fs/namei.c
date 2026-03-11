@@ -1882,8 +1882,7 @@ again:
 		    d_count(child) <= 0)
 			/* untouchable */
 			continue;
-		if (!d_in_lookup(child) ||
-		    hlist_bl_unhashed(&child->d_in_lookup_hash))
+		if (!d_in_lookup(child) || d_unhashed(child))
 			/* Not interesting */
 			continue;
 
@@ -1891,7 +1890,7 @@ again:
 		/* Recheck under lock */
 		if (d_count(child) <= 0 ||
 		    !d_in_lookup(child) ||
-		    hlist_bl_unhashed(&child->d_in_lookup_hash)) {
+		    d_unhashed(child)) {
 			spin_unlock(&child->d_lock);
 			continue;
 		}
@@ -1949,7 +1948,7 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 	 */
 	if (nd->flags & LOOKUP_RCU) {
 		dentry = __d_lookup_rcu(parent, &nd->last, &nd->next_seq);
-		if (unlikely(!dentry)) {
+		if (unlikely(!dentry || d_in_lookup(dentry))) {
 			if (!try_to_unlazy(nd))
 				return ERR_PTR(-ECHILD);
 			return NULL;
