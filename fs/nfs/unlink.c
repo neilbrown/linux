@@ -66,7 +66,7 @@ static void nfs_async_unlink_release(void *calldata)
 	struct dentry *dentry = data->dentry;
 	struct super_block *sb = dentry->d_sb;
 
-	d_lookup_acquire(dentry);
+	d_lock_acquire(dentry);
 	d_lookup_done(dentry);
 	nfs_free_unlinkdata(data);
 	dput(dentry);
@@ -163,7 +163,7 @@ static int nfs_call_unlink(struct dentry *dentry, struct inode *inode, struct nf
 		return ret;
 	}
 	data->dentry = alias;
-	d_lookup_release(alias);
+	d_lock_release(alias);
 
 	nfs_do_call_unlink(inode, data);
 	return 1;

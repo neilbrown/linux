@@ -1724,7 +1724,7 @@ static void __d_init(struct dentry *dentry, struct super_block *sb)
  */
 static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 {
-	static struct lock_class_key __lookup_key;
+	static struct lock_class_key __lock_key;
 	struct dentry *dentry;
 	char *dname;
 	int err;
@@ -1769,7 +1769,7 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 
 	__d_init(dentry, sb);
 
-	lockdep_init_map(&dentry->lookup_map, "DCACHE_PAR_LOOKUP", &__lookup_key, 0);
+	lockdep_init_map(&dentry->lock_map, "DCACHE_LOCKED", &__lock_key, 0);
 	if (dentry->d_op && dentry->d_op->d_init) {
 		err = dentry->d_op->d_init(dentry);
 		if (err) {
@@ -1918,8 +1918,8 @@ struct dentry *d_duplicate(struct dentry *dentry)
 	if (unlikely(!new))
 		return ERR_PTR(-ENOMEM);
 
-	new->d_flags |= DCACHE_PAR_LOOKUP;
-	lock_map_acquire_try(&new->lookup_map);
+	new->d_flags |= DCACHE_LOCKED | DCACHE_INLOOKUP_TYPE;
+	lock_map_acquire_try(&new->lock_map);
 	spin_lock(&parent->d_lock);
 	new->d_parent = dget_dlock(parent);
 	hlist_add_head(&new->d_sib, &parent->d_children);
@@ -2695,22 +2695,22 @@ static void __d_rehash(struct dentry *entry)
 	hlist_bl_nulls_lock_add_head(&entry->d_hash, b, d_nulls(hash));
 }
 
-void d_wait_lookup(struct dentry *dentry, unsigned int subclass)
+void d_wait_locked(struct dentry *dentry, unsigned int subclass)
 {
-	if (likely(d_in_lookup(dentry))) {
+	if (likely(dentry->d_flags & DCACHE_LOCKED)) {
 		/*
 		 * Tell lockdep we will wait for the lookup lock, after
 		 * dropping ->d_lock, but won't actually take it.
 		 */
 		spin_release(&dentry->d_lock.dep_map, _THIS_IP_);
-		lock_acquire_exclusive(&dentry->lookup_map, subclass,
+		lock_acquire_exclusive(&dentry->lock_map, subclass,
 				       0, NULL, _THIS_IP_);
 		lock_map_release(&dentry->lookup_map);
 		spin_acquire(&dentry->d_lock.dep_map, 0, 1, _THIS_IP_);
 
-		dentry->d_flags |= DCACHE_LOOKUP_WAITERS;
+		dentry->d_flags |= DCACHE_LOCK_WAITERS;
 		wait_var_event_spinlock(&dentry->d_flags,
-					!d_in_lookup(dentry) ||
+					!(dentry->d_flags & DCACHE_LOCKED) ||
 					d_unhashed(dentry),
 					&dentry->d_lock);
 	}
@@ -2720,22 +2720,22 @@ static void __d_lookup_unhash_wake(struct dentry *dentry)
 {
 	spin_lock(&dentry->d_lock);
 	__d_drop(dentry);
-	if (dentry->d_flags & DCACHE_LOOKUP_WAITERS) {
+	if (dentry->d_flags & DCACHE_LOCK_WAITERS) {
 		wake_up_var_locked(&dentry->d_flags, &dentry->d_lock);
-		dentry->d_flags &= ~DCACHE_LOOKUP_WAITERS;
+		dentry->d_flags &= ~DCACHE_LOCK_WAITERS;
 	}
 	spin_unlock(&dentry->d_lock);
 }
 
 static inline void __d_wake_in_lookup_waiters_unlock(struct dentry *dentry)
 {
-	if (dentry->d_flags & DCACHE_PAR_LOOKUP) {
-		dentry->d_flags &= ~DCACHE_PAR_LOOKUP;
-		lock_map_release(&dentry->lookup_map);
+	if (dentry->d_flags & DCACHE_LOCKED) {
+		dentry->d_flags &= ~DCACHE_LOCKED;
+		lock_map_release(&dentry->lock_map);
 	}
-	if (dentry->d_flags & DCACHE_LOOKUP_WAITERS) {
+	if (dentry->d_flags & DCACHE_LOCK_WAITERS) {
 		wake_up_var_locked(&dentry->d_flags, &dentry->d_lock);
-		dentry->d_flags &= ~DCACHE_LOOKUP_WAITERS;
+		dentry->d_flags &= ~DCACHE_LOCK_WAITERS;
 	}
 }
 
@@ -2791,7 +2791,7 @@ struct dentry *__d_alloc_parallel(struct dentry *parent,
 	if (unlikely(!new))
 		return ERR_PTR(-ENOMEM);
 
-	new->d_flags |= DCACHE_PAR_LOOKUP;
+	new->d_flags |= DCACHE_LOCKED | DCACHE_INLOOKUP_TYPE;
 	new->d_parent = parent;
 	if (parent->d_flags & DCACHE_DISCONNECTED)
 		new->d_flags |= DCACHE_DISCONNECTED;
@@ -2834,7 +2834,7 @@ retry:
 			if (hlist_empty(&parent->d_children))
 				dget_dlock(parent);
 			hlist_add_head(&new->d_sib, &parent->d_children);
-			lock_map_acquire_try(&new->lookup_map);
+			lock_map_acquire_try(&new->lock_map);
 			return new;
 		}
 	}
@@ -2869,7 +2869,7 @@ retry:
 	 * somebody is likely to be still doing lookup for it;
 	 * wait for them to finish
 	 */
-	d_wait_lookup(dentry, 0);
+	d_wait_locked(dentry, 0);
 	/*
 	 * it's not in-lookup anymore.  We dropped the lock and d_seq
 	 * isn't much use as it is likely that an inode was attached.
@@ -2961,6 +2961,10 @@ EXPORT_SYMBOL(d_alloc_trylock);
 void __d_lookup_unhash_wake_unlock(struct dentry *dentry)
 {
 	spin_lock(&dentry->d_lock);
+
+	if (d_in_lookup(dentry))
+		WRITE_ONCE(dentry->d_flags,
+			   dentry->d_flags & ~DCACHE_ENTRY_TYPE);
 	__d_drop(dentry);
 	__d_wake_in_lookup_waiters_unlock(dentry);
 	spin_unlock(&dentry->d_lock);
@@ -2979,6 +2983,8 @@ static inline void __d_add(struct dentry *dentry, struct inode *inode,
 		__d_instantiate(dentry, inode);
 	if (d_unhashed(dentry))
 		__d_rehash(dentry);
+	else
+		__d_set_inode_and_type(dentry, inode, DCACHE_MISS_TYPE);
 	__d_wake_in_lookup_waiters_unlock(dentry);
 	spin_unlock(&dentry->d_lock);
 	if (inode)

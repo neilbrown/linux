@@ -1882,14 +1882,15 @@ again:
 		    d_count(child) <= 0)
 			/* untouchable */
 			continue;
-		if (!d_in_lookup(child) || d_unhashed(child))
+		if (!(child->d_flags & DCACHE_LOCKED) ||
+		    d_unhashed(child))
 			/* Not interesting */
 			continue;
 
 		spin_lock_nested(&child->d_lock, DENTRY_D_LOCK_NESTED);
 		/* Recheck under lock */
 		if (d_count(child) <= 0 ||
-		    !d_in_lookup(child) ||
+		    !(child->d_flags & DCACHE_LOCKED) ||
 		    d_unhashed(child)) {
 			spin_unlock(&child->d_lock);
 			continue;
@@ -1897,7 +1898,7 @@ again:
 		dget_dlock(child);
 		spin_unlock(&dentry->d_lock);
 
-		d_wait_lookup(child, 1);
+		d_wait_locked(child, 1);
 		spin_unlock(&child->d_lock);
 		dput(child);
 		goto again;
