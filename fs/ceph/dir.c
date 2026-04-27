@@ -779,7 +779,7 @@ struct dentry *ceph_finish_lookup(struct ceph_mds_request *req,
 						d_inode(dentry->d_parent);
 					if (!parent ||
 					    ceph_snap(parent) == CEPH_NOSNAP)
-						d_add(dentry, NULL);
+						d_splice_alias(NULL, dentry);
 				}
 			}
 		}
@@ -853,7 +853,7 @@ static struct dentry *ceph_lookup(struct inode *dir, struct dentry *dentry,
 			doutc(cl, " dir %llx.%llx complete, -ENOENT\n",
 			      ceph_vinop(dir));
 			if (d_unhashed(dentry))
-				d_add(dentry, NULL);
+				d_splice_alias(NULL, dentry);
 			di->lease_shared_gen = atomic_read(&ci->i_shared_gen);
 			return NULL;
 		}
