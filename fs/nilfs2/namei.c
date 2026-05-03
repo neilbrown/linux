@@ -240,7 +240,7 @@ static struct dentry *nilfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	inode->i_fop = &nilfs_dir_operations;
 	inode->i_mapping->a_ops = &nilfs_aops;
 
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 
 	err = nilfs_make_empty(inode, dir);
 	if (err)

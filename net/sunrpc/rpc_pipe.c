@@ -477,7 +477,7 @@ rpc_get_inode(struct super_block *sb, umode_t mode)
 	case S_IFDIR:
 		inode->i_fop = &simple_dir_operations;
 		inode->i_op = &simple_dir_inode_operations;
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 		break;
 	default:
 		break;

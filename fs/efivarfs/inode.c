@@ -39,7 +39,7 @@ struct inode *efivarfs_get_inode(struct super_block *sb,
 		case S_IFDIR:
 			inode->i_op = &efivarfs_dir_inode_operations;
 			inode->i_fop = &simple_dir_operations;
-			inc_nlink(inode);
+			set_nlink(inode, 2);
 			break;
 		}
 	}

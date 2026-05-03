@@ -316,7 +316,7 @@ static int configfs_create_dir(struct config_item *item, struct dentry *dentry,
 	inode->i_op = &configfs_dir_inode_operations;
 	inode->i_fop = &configfs_dir_operations;
 	/* directory inodes start off with i_nlink == 2 (for "." entry) */
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 	d_make_persistent(dentry, inode);
 	inc_nlink(p_inode);
 	inode_set_mtime_to_ts(p_inode, inode_set_ctime_current(p_inode));

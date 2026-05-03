@@ -1041,10 +1041,9 @@ static struct dentry *ubifs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (err)
 		goto out_inode;
 
-	set_nlink(inode, 1);
 	mutex_lock(&dir_ui->ui_mutex);
 	insert_inode_hash(inode);
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 	inc_nlink(dir);
 	dir->i_size += sz_change;
 	dir_ui->ui_size = dir->i_size;

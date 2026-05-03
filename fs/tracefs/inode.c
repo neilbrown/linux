@@ -672,7 +672,7 @@ static struct dentry *__create_dir(const char *name, struct dentry *parent,
 	ti->private = instance_inode(parent, inode);
 
 	/* directory inodes start off with i_nlink == 2 (for "." entry) */
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 	d_make_persistent(dentry, inode);
 	inc_nlink(d_inode(dentry->d_parent));
 	fsnotify_mkdir(d_inode(dentry->d_parent), dentry);

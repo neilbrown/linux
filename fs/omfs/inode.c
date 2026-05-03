@@ -59,7 +59,7 @@ struct inode *omfs_new_inode(struct inode *dir, umode_t mode)
 		inode->i_op = &omfs_dir_inops;
 		inode->i_fop = &omfs_dir_operations;
 		inode->i_size = sbi->s_sys_blocksize;
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 		break;
 	case S_IFREG:
 		inode->i_op = &omfs_file_inops;
@@ -244,7 +244,7 @@ struct inode *omfs_iget(struct super_block *sb, ino_t ino)
 		inode->i_op = &omfs_dir_inops;
 		inode->i_fop = &omfs_dir_operations;
 		inode->i_size = sbi->s_sys_blocksize;
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 		break;
 	case OMFS_FILE:
 		inode->i_mode = S_IFREG | (S_IRWXUGO & ~sbi->s_fmask);

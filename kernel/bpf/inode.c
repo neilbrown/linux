@@ -196,7 +196,7 @@ static struct dentry *bpf_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	inode->i_op = &bpf_dir_iops;
 	inode->i_fop = &simple_dir_operations;
 
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 	inc_nlink(dir);
 
 	bpf_dentry_finalize(dentry, inode, dir);

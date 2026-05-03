@@ -182,7 +182,8 @@ static struct dentry *ufs_mkdir(struct mnt_idmap * idmap, struct inode * dir,
 	inode->i_fop = &ufs_dir_operations;
 	inode->i_mapping->a_ops = &ufs_aops;
 
-	inode_inc_link_count(inode);
+	set_nlink(inode, 2);
+	mark_inode_dirty(inode);
 
 	err = ufs_make_empty(inode, dir);
 	if (err)

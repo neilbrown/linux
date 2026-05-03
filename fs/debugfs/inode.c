@@ -591,7 +591,7 @@ struct dentry *debugfs_create_dir(const char *name, struct dentry *parent)
 	inode->i_fop = &simple_dir_operations;
 
 	/* directory inodes start off with i_nlink == 2 (for "." entry) */
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 	d_make_persistent(dentry, inode);
 	inc_nlink(d_inode(dentry->d_parent));
 	fsnotify_mkdir(d_inode(dentry->d_parent), dentry);
@@ -633,7 +633,7 @@ struct dentry *debugfs_create_automount(const char *name,
 	inode->i_private = data;
 	DEBUGFS_I(inode)->automount = f;
 	/* directory inodes start off with i_nlink == 2 (for "." entry) */
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 	d_make_persistent(dentry, inode);
 	inc_nlink(d_inode(dentry->d_parent));
 	fsnotify_mkdir(d_inode(dentry->d_parent), dentry);

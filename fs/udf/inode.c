@@ -1608,7 +1608,7 @@ reread:
 		inode->i_op = &udf_dir_inode_operations;
 		inode->i_fop = &udf_dir_operations;
 		inode->i_mode |= S_IFDIR;
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 		break;
 	case ICBTAG_FILE_TYPE_REALTIME:
 	case ICBTAG_FILE_TYPE_REGULAR:

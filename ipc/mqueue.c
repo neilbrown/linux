@@ -386,7 +386,7 @@ static struct inode *mqueue_get_inode(struct super_block *sb,
 			spin_unlock(&mq_lock);
 		}
 	} else if (S_ISDIR(mode)) {
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 		/* Some things misbehave if size == 0 on a directory */
 		inode->i_size = 2 * DIRENT_SIZE;
 		inode->i_op = &mqueue_dir_inode_operations;

@@ -77,7 +77,7 @@ static int configfs_fill_super(struct super_block *sb, struct fs_context *fc)
 		inode->i_op = &configfs_root_inode_operations;
 		inode->i_fop = &configfs_dir_operations;
 		/* directory inodes start off with i_nlink == 2 (for "." entry) */
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 	} else {
 		pr_debug("could not get root inode\n");
 		return -ENOMEM;

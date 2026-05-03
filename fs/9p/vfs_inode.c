@@ -311,7 +311,7 @@ int v9fs_init_inode(struct v9fs_session_info *v9ses,
 
 		break;
 	case S_IFDIR:
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 		if (v9fs_proto_dotl(v9ses))
 			inode->i_op = &v9fs_dir_inode_operations_dotl;
 		else if (v9fs_proto_dotu(v9ses))

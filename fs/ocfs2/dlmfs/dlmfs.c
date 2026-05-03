@@ -338,7 +338,7 @@ static struct inode *dlmfs_get_root_inode(struct super_block *sb)
 		inode->i_ino = get_next_ino();
 		inode_init_owner(&nop_mnt_idmap, inode, NULL, mode);
 		simple_inode_init_ts(inode);
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 
 		inode->i_fop = &simple_dir_operations;
 		inode->i_op = &dlmfs_root_inode_operations;
@@ -392,7 +392,7 @@ static struct inode *dlmfs_get_inode(struct inode *parent,
 
 		/* directory inodes start off with i_nlink ==
 		 * 2 (for "." entry) */
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 		break;
 	}
 	return inode;

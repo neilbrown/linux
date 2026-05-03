@@ -149,7 +149,7 @@ static struct dentry *securityfs_create_dentry(const char *name, umode_t mode,
 	if (S_ISDIR(mode)) {
 		inode->i_op = &simple_dir_inode_operations;
 		inode->i_fop = &simple_dir_operations;
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 		inc_nlink(dir);
 	} else if (S_ISLNK(mode)) {
 		inode->i_op = iops ? iops : &simple_symlink_inode_operations;

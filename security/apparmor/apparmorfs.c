@@ -304,7 +304,7 @@ static int __aafs_setup_d_inode(struct inode *dir, struct dentry *dentry,
 	if (S_ISDIR(mode)) {
 		inode->i_op = iops ? iops : &simple_dir_inode_operations;
 		inode->i_fop = &simple_dir_operations;
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 		inc_nlink(dir);
 	} else if (S_ISLNK(mode)) {
 		inode->i_op = iops ? iops : &simple_symlink_inode_operations;

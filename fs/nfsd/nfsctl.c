@@ -1157,7 +1157,7 @@ static struct dentry *nfsd_mkdir(struct dentry *parent, struct nfsdfs_client *nc
 	}
 	inode->i_fop = &simple_dir_operations;
 	inode->i_op = &simple_dir_inode_operations;
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 	if (ncl) {
 		inode->i_private = ncl;
 		kref_get(&ncl->cl_ref);

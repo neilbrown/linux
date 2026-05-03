@@ -245,7 +245,8 @@ static struct dentry *ext2_mkdir(struct mnt_idmap * idmap,
 	inode->i_fop = &ext2_dir_operations;
 	inode->i_mapping->a_ops = &ext2_aops;
 
-	inode_inc_link_count(inode);
+	set_nlink(inode, 2);
+	mark_inode_dirty(inode);
 
 	err = ext2_make_empty(inode, dir);
 	if (err)

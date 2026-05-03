@@ -116,7 +116,8 @@ static struct dentry *minix_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 
 	inode_inc_link_count(dir);
 	minix_set_inode(inode, 0);
-	inode_inc_link_count(inode);
+	set_nlink(inode, 2);
+	mark_inode_dirty(inode);
 
 	err = minix_make_empty(inode, dir);
 	if (err)

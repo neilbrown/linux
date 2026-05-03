@@ -3081,7 +3081,7 @@ static struct inode *__shmem_get_inode(struct mnt_idmap *idmap,
 					 shmem_get_sbmpol(sbinfo));
 		break;
 	case S_IFDIR:
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 		/* Some things misbehave if size == 0 on a directory */
 		inode->i_size = 2 * BOGO_DIRENT_SIZE;
 		inode->i_op = &shmem_dir_inode_operations;

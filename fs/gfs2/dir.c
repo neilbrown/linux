@@ -1826,7 +1826,7 @@ int gfs2_dir_add(struct inode *inode, const struct qstr *name,
 			ip->i_entries++;
 			inode_set_mtime_to_ts(&ip->i_inode, tv);
 			if (S_ISDIR(nip->i_inode.i_mode))
-				inc_nlink(&ip->i_inode);
+				set_nlink(&ip->i_inode, 2);
 			mark_inode_dirty(inode);
 			error = 0;
 			break;

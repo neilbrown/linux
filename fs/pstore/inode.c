@@ -429,7 +429,7 @@ static int pstore_fill_super(struct super_block *sb, struct fs_context *fc)
 		inode->i_mode = S_IFDIR | 0750;
 		inode->i_op = &pstore_dir_inode_operations;
 		inode->i_fop = &simple_dir_operations;
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 	}
 	sb->s_root = d_make_root(inode);
 	if (!sb->s_root)

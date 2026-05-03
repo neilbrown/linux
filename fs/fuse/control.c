@@ -225,7 +225,7 @@ static struct dentry *fuse_ctl_add_dentry(struct dentry *parent,
 	inode->i_fop = fop;
 	if (S_ISDIR(mode)) {
 		inc_nlink(d_inode(parent));
-		inc_nlink(inode);
+		set_nlink(inode, 2);
 	}
 	inode->i_private = fc;
 	d_make_persistent(dentry, inode);

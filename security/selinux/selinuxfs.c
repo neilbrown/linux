@@ -1775,7 +1775,7 @@ static struct dentry *sel_make_dir(struct dentry *dir, const char *name,
 	inode->i_fop = &simple_dir_operations;
 	inode->i_ino = ++(*ino);
 	/* directory inodes start off with i_nlink == 2 (for "." entry) */
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 	/* bump link count on parent directory, too */
 	inc_nlink(d_inode(dir));
 
@@ -1811,7 +1811,7 @@ static struct dentry *sel_make_swapover_dir(struct super_block *sb,
 	inode->i_op = &swapover_dir_inode_operations;
 	inode->i_ino = ++(*ino);
 	/* directory inodes start off with i_nlink == 2 (for "." entry) */
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 	d_make_persistent(dentry, inode);
 	inc_nlink(sb->s_root->d_inode);
 	simple_done_creating(dentry);

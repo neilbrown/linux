@@ -241,7 +241,7 @@ spufs_mkdir(struct inode *dir, struct dentry *dentry, unsigned int flags,
 	inode_lock(inode);
 
 	inc_nlink(dir);
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 
 	d_make_persistent(dentry, inode);
 
@@ -467,7 +467,7 @@ spufs_mkgang(struct inode *dir, struct dentry *dentry, umode_t mode)
 	inode->i_fop = &simple_dir_operations;
 
 	inc_nlink(dir);
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 	d_make_persistent(dentry, inode);
 	return ret;
 
@@ -679,7 +679,7 @@ static int spufs_create_root(struct super_block *sb, struct fs_context *fc)
 	inode->i_op = &simple_dir_inode_operations;
 	inode->i_fop = &simple_dir_operations;
 	SPUFS_I(inode)->i_ctx = NULL;
-	inc_nlink(inode);
+	set_nlink(inode, 2);
 
 	sb->s_root = d_make_root(inode);
 	if (!sb->s_root)
