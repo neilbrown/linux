@@ -1778,18 +1778,6 @@ static struct dentry *lookup_dcache(const struct qstr *name,
 	return dentry;
 }
 
-static inline bool inode_lock_shared_state(struct inode *inode, unsigned int state)
-{
-	if (state == TASK_KILLABLE) {
-		if (down_read_killable(&inode->i_rwsem) != 0) {
-			return false;
-		}
-	} else {
-		inode_lock_shared(inode);
-	}
-	return true;
-}
-
 /*
  * If Lookup_EXCL or LOOKUP_RENAME_TARGET is set
  * d_lookup_done() must be called before the dentry is dput()
@@ -1800,8 +1788,7 @@ static inline bool inode_lock_shared_state(struct inode *inode, unsigned int sta
  * file system when carrying out the intent (create or rename).
  */
 static struct dentry *lookup_one_qstr(const struct qstr *name,
-				      struct dentry *base, unsigned int flags,
-				      unsigned int state)
+				      struct dentry *base, unsigned int flags)
 {
 	struct dentry *dentry;
 	struct dentry *old;
@@ -1823,7 +1810,7 @@ static struct dentry *lookup_one_qstr(const struct qstr *name,
 		/* Raced with another thread which did the lookup */
 		goto found;
 
-	if (!inode_lock_shared_state(dir, state)) {
+	if (inode_lock_shared_killable(dir)) {
 		d_lookup_done(dentry);
 		dput(dentry);
 		return ERR_PTR(-EINTR);
@@ -1921,10 +1908,9 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 }
 
 /* Fast lookup failed, do it the slow way */
-static struct dentry *__lookup_slow(const struct qstr *name,
-				    struct dentry *dir,
-				    unsigned int flags,
-				    unsigned int state)
+static struct dentry *lookup_slow(const struct qstr *name,
+				  struct dentry *dir,
+				  unsigned int flags)
 {
 	struct dentry *dentry, *old;
 	struct inode *inode = dir->d_inode;
@@ -1947,7 +1933,7 @@ again:
 			dput(dentry);
 			dentry = ERR_PTR(error);
 		}
-	} else if (!inode_lock_shared_state(inode, state)) {
+	} else if (inode_lock_shared_killable(inode)) {
 		d_lookup_done(dentry);
 		dput(dentry);
 		return ERR_PTR(-EINTR);
@@ -1965,20 +1951,6 @@ again:
 		}
 	}
 	return dentry;
-}
-
-static noinline struct dentry *lookup_slow(const struct qstr *name,
-				  struct dentry *dir,
-				  unsigned int flags)
-{
-	return __lookup_slow(name, dir, flags, TASK_NORMAL);
-}
-
-static struct dentry *lookup_slow_killable(const struct qstr *name,
-					   struct dentry *dir,
-					   unsigned int flags)
-{
-	return __lookup_slow(name, dir, flags, TASK_KILLABLE);
 }
 
 static inline int may_lookup(struct mnt_idmap *idmap,
@@ -2941,7 +2913,7 @@ static struct dentry *__start_dirop(struct dentry *parent, struct qstr *name,
 	while(1) {
 		unsigned int seq = raw_seqcount_begin(&rename_lock.seqcount);
 
-		dentry = lookup_one_qstr(name, parent, lookup_flags, state);
+		dentry = lookup_one_qstr(name, parent, lookup_flags);
 		if (IS_ERR(dentry))
 			return dentry;
 		if (state == TASK_KILLABLE) {
@@ -3214,6 +3186,7 @@ EXPORT_SYMBOL(try_lookup_noperm);
  *	    - same errors as try_lookup_noperm() or
  *	    - ERR_PTR(-ENOENT) if parent has been removed, or
  *	    - ERR_PTR(-EACCES) if parent directory is not searchable.
+ *	    - ERR_PTR(-EINTR) if a fatal signal is pending.
  */
 struct dentry *lookup_one_unlocked(struct mnt_idmap *idmap, struct qstr *name,
 				   struct dentry *base)
@@ -3233,7 +3206,7 @@ struct dentry *lookup_one_unlocked(struct mnt_idmap *idmap, struct qstr *name,
 EXPORT_SYMBOL(lookup_one_unlocked);
 
 /**
- * lookup_one_positive_killable - lookup single pathname component
+ * lookup_one_positive_unlocked - lookup single pathname component
  * @idmap:	idmap of the mount the lookup is performed from
  * @name:	qstr holding pathname component to lookup
  * @base:	base directory to lookup from
@@ -3250,49 +3223,6 @@ EXPORT_SYMBOL(lookup_one_unlocked);
  * It should be called without the parent i_rwsem held, and will take
  * the i_rwsem itself if necessary.  If a fatal signal is pending or
  * delivered, it will return %-EINTR if the lock is needed.
- *
- * Returns: A positive dentry, or
- *	   - same errors as lookup_one_unlocked() or
- *	   - ERR_PTR(-EINTR) if a fatal signal is pending.
- */
-struct dentry *lookup_one_positive_killable(struct mnt_idmap *idmap,
-					    struct qstr *name,
-					    struct dentry *base)
-{
-	int err;
-	struct dentry *ret;
-
-	err = lookup_one_common(idmap, name, base);
-	if (err)
-		return ERR_PTR(err);
-
-	ret = lookup_dcache(name, base, 0);
-	if (!ret)
-		ret = lookup_slow_killable(name, base, 0);
-	if (!IS_ERR(ret) && d_flags_negative(smp_load_acquire(&ret->d_flags))) {
-		dput(ret);
-		ret = ERR_PTR(-ENOENT);
-	}
-	return ret;
-}
-EXPORT_SYMBOL(lookup_one_positive_killable);
-
-/**
- * lookup_one_positive_unlocked - lookup single pathname component
- * @idmap:	idmap of the mount the lookup is performed from
- * @name:	qstr holding pathname component to lookup
- * @base:	base directory to lookup from
- *
- * This helper will yield ERR_PTR(-ENOENT) on negatives. The helper returns
- * known positive or ERR_PTR(). This is what most of the users want.
- *
- * Note that pinned negative with unlocked parent _can_ become positive at any
- * time, so callers of lookup_one_unlocked() need to be very careful; pinned
- * positives have >d_inode stable, so this one avoids such problems.
- *
- * This can be used for in-kernel filesystem clients such as file servers.
- *
- * The helper should be called without i_rwsem held.
  *
  * Returns: A positive dentry, or
  *	   - ERR_PTR(-ENOENT) if the name could not be found, or
@@ -3871,13 +3801,13 @@ __start_renaming(struct renamedata *rd, int lookup_flags,
 retry:
 	seq = raw_seqcount_begin(&rename_lock.seqcount);
 	d1 = lookup_one_qstr(old_last, rd->old_parent,
-			     lookup_flags, TASK_NORMAL);
+			     lookup_flags);
 	err = PTR_ERR(d1);
 	if (IS_ERR(d1))
 		goto out_err;
 
 	d2 = lookup_one_qstr(new_last, rd->new_parent,
-			     lookup_flags | target_flags, TASK_NORMAL);
+			     lookup_flags | target_flags);
 	err = PTR_ERR(d2);
 	if (IS_ERR(d2))
 		goto out_dput_d1;
@@ -3982,7 +3912,7 @@ __start_renaming_dentry(struct renamedata *rd, int lookup_flags,
 retry:
 	seq = raw_seqcount_begin(&rename_lock.seqcount);
 	d2 = lookup_one_qstr(new_last, rd->new_parent,
-			     lookup_flags | target_flags, TASK_NORMAL);
+			     lookup_flags | target_flags);
 	err = PTR_ERR(d2);
 	if (IS_ERR(d2))
 		goto out_unlock;
@@ -4387,15 +4317,17 @@ static struct dentry *atomic_open(const struct path *path, struct dentry *dentry
 {
 	struct dentry *const DENTRY_NOT_SET = (void *) -1UL;
 	struct inode *dir_inode = path->dentry->d_inode;
-	int error;
+	int error = 0;
 
 	file->__f_path.dentry = DENTRY_NOT_SET;
 	file->__f_path.mnt = path->mnt;
 
 	if (open_flag & O_CREAT)
 		inode_lock(dir_inode);
-	else
-		inode_lock_shared(dir_inode);
+	else if (inode_lock_shared_killable(dir_inode) != 0) {
+		error = -EINTR;
+		goto out;
+	}
 	if (dentry->d_inode)
 		error = finish_no_open(file, NULL);
 	else if (unlikely(IS_DEADDIR(dir_inode)))
@@ -4439,7 +4371,7 @@ static struct dentry *atomic_open(const struct path *path, struct dentry *dentry
 		inode_unlock(dir_inode);
 	else
 		inode_unlock_shared(dir_inode);
-
+out:
 	if (error) {
 		if (unlikely(create_error) && error == -ENOENT) {
 			/*
@@ -4562,13 +4494,16 @@ retry:
 	if (d_in_lookup(dentry)) {
 		struct dentry *res;
 
-		inode_lock_shared(dir_inode);
-		if (IS_DEADDIR(dir_inode))
-			res = ERR_PTR(-ENOENT);
-		else
-			res = dir_inode->i_op->lookup(dir_inode, dentry,
-						      nd->flags);
-		inode_unlock_shared(dir_inode);
+		if (inode_lock_shared_killable(dir_inode) == 0) {
+			if (IS_DEADDIR(dir_inode))
+				res = ERR_PTR(-ENOENT);
+			else
+				res = dir_inode->i_op->lookup(dir_inode, dentry,
+							      nd->flags);
+			inode_unlock_shared(dir_inode);
+		} else {
+			res = ERR_PTR(-EINTR);
+		}
 		d_lookup_done(dentry);
 		if (unlikely(res)) {
 			if (IS_ERR(res)) {
