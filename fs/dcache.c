@@ -3723,7 +3723,7 @@ void d_tmpfile(struct file *file, struct inode *inode)
 {
 	struct dentry *dentry = file->f_path.dentry;
 
-	inode_dec_link_count(inode);
+	inode_clear_link_count(inode);
 	d_mark_tmpfile(file, inode);
 	d_instantiate(dentry, inode);
 }

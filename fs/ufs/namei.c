@@ -42,7 +42,7 @@ static inline int ufs_add_nondir(struct dentry *dentry, struct inode *inode)
 		d_instantiate_new(dentry, inode);
 		return 0;
 	}
-	inode_dec_link_count(inode);
+	inode_clear_link_count(inode);
 	discard_new_inode(inode);
 	return err;
 }
@@ -141,7 +141,7 @@ static int ufs_symlink (struct mnt_idmap * idmap, struct inode * dir,
 	return ufs_add_nondir(dentry, inode);
 
 out_fail:
-	inode_dec_link_count(inode);
+	inode_clear_link_count(inode);
 	discard_new_inode(inode);
 	return err;
 }
@@ -197,8 +197,7 @@ static struct dentry *ufs_mkdir(struct mnt_idmap * idmap, struct inode * dir,
 	return NULL;
 
 out_fail:
-	inode_dec_link_count(inode);
-	inode_dec_link_count(inode);
+	inode_clear_link_count(inode);
 	discard_new_inode(inode);
 out_dir:
 	inode_dec_link_count(dir);

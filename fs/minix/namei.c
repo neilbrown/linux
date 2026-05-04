@@ -14,7 +14,7 @@ static int add_nondir(struct dentry *dentry, struct inode *inode)
 		d_instantiate(dentry, inode);
 		return 0;
 	}
-	inode_dec_link_count(inode);
+	inode_clear_link_count(inode);
 	iput(inode);
 	return err;
 }
@@ -86,7 +86,7 @@ static int minix_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	minix_set_inode(inode, 0);
 	err = page_symlink(inode, symname, i);
 	if (unlikely(err)) {
-		inode_dec_link_count(inode);
+		inode_clear_link_count(inode);
 		iput(inode);
 		return err;
 	}
@@ -132,8 +132,7 @@ out:
 	return ERR_PTR(err);
 
 out_fail:
-	inode_dec_link_count(inode);
-	inode_dec_link_count(inode);
+	inode_clear_link_count(inode);
 	iput(inode);
 	inode_dec_link_count(dir);
 	goto out;

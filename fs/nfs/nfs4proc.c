@@ -1215,7 +1215,7 @@ nfs4_dec_nlink_locked(struct inode *inode)
 	nfs_set_cache_invalid(inode, NFS_INO_INVALID_CHANGE |
 					     NFS_INO_INVALID_CTIME |
 					     NFS_INO_INVALID_NLINK);
-	drop_nlink(inode);
+	__drop_nlink(inode);
 }
 
 static void

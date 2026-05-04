@@ -555,7 +555,7 @@ void devpts_pty_kill(struct dentry *dentry)
 	WARN_ON_ONCE(dentry->d_sb->s_magic != DEVPTS_SUPER_MAGIC);
 
 	dentry->d_fsdata = NULL;
-	drop_nlink(dentry->d_inode);
+	clear_nlink(dentry->d_inode);
 	d_drop(dentry);
 	fsnotify_unlink(d_inode(dentry->d_parent), dentry);
 	d_make_discardable(dentry);

@@ -2797,7 +2797,7 @@ static int ext4_add_nondir(handle_t *handle,
 		*inodep = NULL;
 		return err;
 	}
-	drop_nlink(inode);
+	clear_nlink(inode);
 	ext4_mark_inode_dirty(handle, inode);
 	ext4_orphan_add(handle, inode);
 	unlock_new_inode(inode);
@@ -4032,7 +4032,7 @@ end_rename:
 		if (retval) {
 			ext4_resetent(handle, &old,
 				      old.inode->i_ino, old_file_type);
-			drop_nlink(whiteout);
+			clear_nlink(whiteout);
 			ext4_mark_inode_dirty(handle, whiteout);
 			ext4_orphan_add(handle, whiteout);
 		}

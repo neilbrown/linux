@@ -392,6 +392,29 @@ static void destroy_inode(struct inode *inode)
 }
 
 /**
+ * __drop_nlink - directly drop an inode's link count
+ * @inode: inode
+ *
+ * This is a low-level filesystem helper to replace any
+ * direct filesystem manipulation of i_nlink.  In cases
+ * where we are attempting to track writes to the
+ * filesystem, a decrement to zero means an imminent
+ * write when the file is truncated and actually unlinked
+ * on the filesystem.
+ *
+ * This can be used when the i_rwsem may not be held, but
+ * the filesystem has provided exclusion in some other way.
+ */
+void __drop_nlink(struct inode *inode)
+{
+	WARN_ON(inode->i_nlink == 0);
+	inode->__i_nlink--;
+	if (!inode->i_nlink)
+		atomic_long_inc(&inode->i_sb->s_remove_count);
+}
+EXPORT_SYMBOL(__drop_nlink);
+
+/**
  * drop_nlink - directly drop an inode's link count
  * @inode: inode
  *
@@ -401,13 +424,15 @@ static void destroy_inode(struct inode *inode)
  * filesystem, a decrement to zero means an imminent
  * write when the file is truncated and actually unlinked
  * on the filesystem.
+ *
+ * This may only be used when i_rwsem is held exclusively.
+ * If that is not held but it is known to be safe to change
+ * i_nlink, clear_nlink() or __drop_nlink() should be used.
  */
 void drop_nlink(struct inode *inode)
 {
-	WARN_ON(inode->i_nlink == 0);
-	inode->__i_nlink--;
-	if (!inode->i_nlink)
-		atomic_long_inc(&inode->i_sb->s_remove_count);
+	lockdep_assert_held_write(&inode->i_rwsem);
+	__drop_nlink(inode);
 }
 EXPORT_SYMBOL(drop_nlink);
 

@@ -352,7 +352,7 @@ static int udf_add_nondir(struct dentry *dentry, struct inode *inode)
 
 	err = udf_fiiter_add_entry(dir, dentry, &iter);
 	if (err) {
-		inode_dec_link_count(inode);
+		inode_clear_link_count(inode);
 		discard_new_inode(inode);
 		return err;
 	}
@@ -723,7 +723,7 @@ out:
 
 out_no_entry:
 	up_write(&iinfo->i_data_sem);
-	inode_dec_link_count(inode);
+	inode_clear_link_count(inode);
 	discard_new_inode(inode);
 	goto out;
 }

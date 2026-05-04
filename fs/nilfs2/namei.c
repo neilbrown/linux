@@ -40,7 +40,7 @@ static inline int nilfs_add_nondir(struct dentry *dentry, struct inode *inode)
 		d_instantiate_new(dentry, inode);
 		return 0;
 	}
-	inode_dec_link_count(inode);
+	inode_clear_link_count(inode);
 	unlock_new_inode(inode);
 	iput(inode);
 	return err;
@@ -183,7 +183,7 @@ out:
 	return err;
 
 out_fail:
-	drop_nlink(inode);
+	clear_nlink(inode);
 	nilfs_mark_inode_dirty(inode);
 	unlock_new_inode(inode);
 	iput(inode);
@@ -261,8 +261,7 @@ out:
 	return err ? ERR_PTR(err) : NULL;
 
 out_fail:
-	drop_nlink(inode);
-	drop_nlink(inode);
+	clear_nlink(inode);
 	nilfs_mark_inode_dirty(inode);
 	unlock_new_inode(inode);
 	iput(inode);
