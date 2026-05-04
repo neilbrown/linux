@@ -3012,7 +3012,6 @@ struct dentry *start_dirop(struct dentry *parent, struct qstr *name,
 			   unsigned int lookup_flags)
 {
 	struct dentry *dentry;
-	struct inode *dir = d_inode(parent);
 	struct super_block *sb= parent->d_sb;
 
 	while(1) {
@@ -3027,12 +3026,6 @@ struct dentry *start_dirop(struct dentry *parent, struct qstr *name,
 		if (fatal_signal_pending(current))
 			return ERR_PTR(-EINTR);
 	}
-	/* We only need to lock the parent because the fs might expect it. */
-	if (down_write_killable_nested(&dir->i_rwsem, I_MUTEX_PARENT) != 0) {
-		dentry_unlock(dentry);
-		dput(dentry);
-		return ERR_PTR(-EINTR);
-	}
 	return dentry;
 }
 
@@ -3046,7 +3039,6 @@ struct dentry *start_dirop(struct dentry *parent, struct qstr *name,
 void end_dirop(struct dentry *de)
 {
 	if (!IS_ERR(de)) {
-		inode_unlock(de->d_parent->d_inode);
 		dentry_unlock(de);
 		dput(de);
 	}
@@ -3936,12 +3928,6 @@ retry:
 	if (!dentry_lock_two(d1, old_last, d2, new_last, seq, target_flags))
 		goto out_unlock;
 
-	/*
-	 * Directories are neither the ancestor of the other, and neither
-	 * is involved in a concurrent rename, so locking is safe
-	 */
-	lock_rename(rd->old_parent, rd->new_parent);
-
 	rd->old_dentry = d1;
 	rd->new_dentry = d2;
 	dget(rd->old_parent);
@@ -4043,8 +4029,6 @@ retry:
 	if (dentry_lock_two(old_dentry, NULL, d2, new_last, seq, target_flags))
 		goto out_unlock;
 
-	lock_rename(old_dentry->d_parent, rd->new_parent);
-
 	rd->old_dentry = dget(old_dentry);
 	rd->new_dentry = d2;
 	rd->old_parent = dget(old_dentry->d_parent);
@@ -4140,12 +4124,6 @@ start_renaming_two_dentries(struct renamedata *rd,
 		goto out_unlock;
 	}
 
-	/*
-	 * Directories are neither the ancestor of the other, and neither
-	 * is involved in a concurrent rename, so locking is safe
-	 */
-	lock_rename(old_dentry->d_parent, new_dentry->d_parent);
-
 	rd->old_dentry = dget(old_dentry);
 	rd->new_dentry = dget(new_dentry);
 	rd->old_parent = dget(old_dentry->d_parent);
@@ -4167,7 +4145,6 @@ void end_renaming(struct renamedata *rd)
 	ancestor_unlock(rd->old_parent, rd->new_parent, rd->ancestor,
 			rd->old_dentry, rd->new_dentry);
 
-	unlock_rename(rd->old_parent, rd->new_parent);
 	dput(rd->old_dentry);
 	dput(rd->new_dentry);
 	dput(rd->old_parent);
@@ -4244,7 +4221,9 @@ int vfs_create(struct mnt_idmap *idmap, struct dentry *dentry, umode_t mode,
 	error = try_break_deleg(dir, LEASE_BREAK_DIR_CREATE, di);
 	if (error)
 		return error;
+	inode_lock_nested(dir, I_MUTEX_PARENT);
 	error = dir->i_op->create(idmap, dir, dentry, mode);
+	inode_unlock(dir);
 	if (!error)
 		fsnotify_create(dir, dentry);
 	return error;
@@ -4266,7 +4245,9 @@ int vfs_mkobj(struct mnt_idmap *idmap,
 	error = security_inode_create(dir, dentry, mode);
 	if (error)
 		return error;
+	inode_lock_nested(dir, I_MUTEX_PARENT);
 	error = f(dentry, mode, arg);
+	inode_unlock(dir);
 	if (!error)
 		fsnotify_create(dir, dentry);
 	return error;
@@ -5366,7 +5347,9 @@ int vfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		return error;
 
+	inode_lock_nested(dir, I_MUTEX_PARENT);
 	error = dir->i_op->mknod(idmap, dir, dentry, mode, dev);
+	inode_unlock(dir);
 	if (!error)
 		fsnotify_create(dir, dentry);
 	return error;
@@ -5507,7 +5490,9 @@ struct dentry *vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		goto err;
 
+	inode_lock_nested(dir, I_MUTEX_PARENT);
 	de = dir->i_op->mkdir(idmap, dir, dentry, mode);
+	inode_unlock(dir);
 	error = PTR_ERR(de);
 	if (IS_ERR(de))
 		goto err;
@@ -5612,7 +5597,9 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		goto out;
 
+	inode_lock_nested(dir, I_MUTEX_PARENT);
 	error = dir->i_op->rmdir(dir, dentry);
+	inode_unlock(dir);
 	if (error)
 		goto out;
 
@@ -5746,7 +5733,9 @@ int vfs_unlink(struct mnt_idmap *idmap, struct inode *dir,
 			error = try_break_deleg(target, 0, delegated_inode);
 			if (error)
 				goto out;
+			inode_lock_nested(dir, I_MUTEX_PARENT);
 			error = dir->i_op->unlink(dir, dentry);
+			inode_unlock(dir);
 			if (!error) {
 				dont_mount(dentry);
 				detach_mounts(dentry);
@@ -5891,7 +5880,9 @@ int vfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		return error;
 
+	inode_lock_nested(dir, I_MUTEX_PARENT);
 	error = dir->i_op->symlink(idmap, dir, dentry, oldname);
+	inode_unlock(dir);
 	if (!error)
 		fsnotify_create(dir, dentry);
 	return error;
@@ -6021,8 +6012,11 @@ int vfs_link(struct dentry *old_dentry, struct mnt_idmap *idmap,
 		error = try_break_deleg(dir, LEASE_BREAK_DIR_CREATE, delegated_inode);
 		if (!error)
 			error = try_break_deleg(inode, 0, delegated_inode);
-		if (!error)
+		if (!error) {
+			inode_lock_nested(dir, I_MUTEX_PARENT);
 			error = dir->i_op->link(old_dentry, dir, new_dentry);
+			inode_unlock(dir);
+		}
 	}
 
 	if (!error && (inode_state_read_once(inode) & I_LINKABLE)) {
@@ -6130,7 +6124,7 @@ SYSCALL_DEFINE2(link, const char __user *, oldname, const char __user *, newname
  * vfs_rename - rename a filesystem object
  * @rd:		pointer to &struct renamedata info
  *
- * The caller must hold multiple mutexes--see lock_rename()).
+ * The caller must have locked ancentors and two dentries.
  *
  * If vfs_rename discovers a delegation in need of breaking at either
  * the source or destination, it will return -EWOULDBLOCK and return a
@@ -6310,8 +6304,10 @@ int vfs_rename(struct renamedata *rd)
 		if (error)
 			goto out;
 	}
+	lock_rename(rd->old_parent, rd->new_parent);
 	error = old_dir->i_op->rename(rd->mnt_idmap, old_dir, old_dentry,
 				      new_dir, new_dentry, flags);
+	unlock_rename(rd->old_parent, rd->new_parent);
 	if (error)
 		goto out;
 
