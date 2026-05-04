@@ -825,7 +825,7 @@ struct eventfs_inode *eventfs_create_events_dir(const char *name, struct dentry 
 	 */
 	d_make_persistent(dentry, inode);
 	/* The dentry of the "events" parent does keep track though */
-	inc_nlink(dentry->d_parent->d_inode);
+	inc_nlink_dir(dentry->d_parent->d_inode);
 	fsnotify_mkdir(dentry->d_parent->d_inode, dentry);
 	tracefs_end_creating(dentry);
 

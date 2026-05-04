@@ -567,7 +567,7 @@ static struct dentry *rpc_new_dir(struct dentry *parent,
 	}
 
 	inode->i_ino = iunique(dir->i_sb, 100);
-	inc_nlink(dir);
+	inc_nlink_dir(dir);
 	d_make_persistent(dentry, inode);
 	fsnotify_mkdir(dir, dentry);
 	simple_done_creating(dentry);

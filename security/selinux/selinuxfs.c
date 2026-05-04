@@ -1777,7 +1777,7 @@ static struct dentry *sel_make_dir(struct dentry *dir, const char *name,
 	/* directory inodes start off with i_nlink == 2 (for "." entry) */
 	set_nlink(inode, 2);
 	/* bump link count on parent directory, too */
-	inc_nlink(d_inode(dir));
+	inc_nlink_dir(d_inode(dir));
 
 	return sel_attach(dir, name, inode);
 }
@@ -1813,7 +1813,7 @@ static struct dentry *sel_make_swapover_dir(struct super_block *sb,
 	/* directory inodes start off with i_nlink == 2 (for "." entry) */
 	set_nlink(inode, 2);
 	d_make_persistent(dentry, inode);
-	inc_nlink(sb->s_root->d_inode);
+	inc_nlink_dir(sb->s_root->d_inode);
 	simple_done_creating(dentry);
 	return dentry;	// borrowed
 }

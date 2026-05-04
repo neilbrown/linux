@@ -2272,8 +2272,10 @@ static inline bool inode_is_dirtytime_only(struct inode *inode)
 }
 
 extern void inc_nlink(struct inode *inode);
+extern void inc_nlink_dir(struct inode *inode);
 extern void __inc_nlink(struct inode *inode);
 extern void drop_nlink(struct inode *inode);
+extern void drop_nlink_dir(struct inode *inode);
 extern void __drop_nlink(struct inode *inode);
 extern void clear_nlink(struct inode *inode);
 extern void set_nlink(struct inode *inode, unsigned int nlink);

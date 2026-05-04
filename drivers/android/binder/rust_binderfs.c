@@ -523,7 +523,7 @@ static struct dentry *binderfs_create_dir(struct dentry *parent,
 		return dentry;
 	}
 
-	inc_nlink(parent->d_inode);
+	inc_nlink_dir(parent->d_inode);
 	set_nlink(new_inode, 2);
 	d_make_persistent(dentry, new_inode);
 	fsnotify_mkdir(parent->d_inode, dentry);

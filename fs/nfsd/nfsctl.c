@@ -1163,7 +1163,7 @@ static struct dentry *nfsd_mkdir(struct dentry *parent, struct nfsdfs_client *nc
 		kref_get(&ncl->cl_ref);
 	}
 	d_make_persistent(dentry, inode);
-	inc_nlink(dir);
+	inc_nlink_dir(dir);
 	fsnotify_mkdir(dir, dentry);
 	simple_done_creating(dentry);
 	return dentry;	// borrowed

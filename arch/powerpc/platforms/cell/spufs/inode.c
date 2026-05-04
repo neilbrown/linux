@@ -240,7 +240,7 @@ spufs_mkdir(struct inode *dir, struct dentry *dentry, unsigned int flags,
 
 	inode_lock(inode);
 
-	inc_nlink(dir);
+	inc_nlink_dir(dir);
 	set_nlink(inode, 2);
 
 	d_make_persistent(dentry, inode);
@@ -466,7 +466,7 @@ spufs_mkgang(struct inode *dir, struct dentry *dentry, umode_t mode)
 	inode->i_op = &simple_dir_inode_operations;
 	inode->i_fop = &simple_dir_operations;
 
-	inc_nlink(dir);
+	inc_nlink_dir(dir);
 	set_nlink(inode, 2);
 	d_make_persistent(dentry, inode);
 	return ret;

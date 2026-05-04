@@ -561,7 +561,7 @@ static void __simple_recursive_removal(struct dentry *dentry,
 				inode_set_mtime_to_ts(inode,
 						      inode_set_ctime_current(inode));
 				if (d_is_dir(dentry))
-					drop_nlink(inode);
+					drop_nlink_dir(inode);
 				if (!locked)
 					inode_unlock(inode);
 				dput(dentry);
@@ -729,7 +729,7 @@ void __simple_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	drop_nlink(d_inode(dentry));
 	__simple_unlink(dir, dentry);
-	drop_nlink(dir);
+	drop_nlink_dir(dir);
 }
 EXPORT_SYMBOL(__simple_rmdir);
 
@@ -786,11 +786,11 @@ int simple_rename_exchange(struct inode *old_dir, struct dentry *old_dentry,
 
 	if (old_dir != new_dir && old_is_dir != new_is_dir) {
 		if (old_is_dir) {
-			drop_nlink(old_dir);
-			inc_nlink(new_dir);
+			drop_nlink_dir(old_dir);
+			inc_nlink_dir(new_dir);
 		} else {
-			drop_nlink(new_dir);
-			inc_nlink(old_dir);
+			drop_nlink_dir(new_dir);
+			inc_nlink_dir(old_dir);
 		}
 	}
 	simple_rename_timestamp(old_dir, old_dentry, new_dir, new_dentry);

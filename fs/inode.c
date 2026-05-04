@@ -437,6 +437,29 @@ void drop_nlink(struct inode *inode)
 EXPORT_SYMBOL(drop_nlink);
 
 /**
+ * drop_nlink_dir - directly drop link count on parent directory
+ * @inode: inode
+ *
+ * When a subdirectory is removed the refcount on the parent must be
+ * decremented.  When this is done with a lock on i_rwsem on the parent,
+ * drop_nlink() can safey be used.  If the filesystem has opted out of
+ * i_rwsem locking for directory operations, it needs some other
+ * exclusion.  drop_nlink_dir() provides that using ->i_lock.
+ *
+ * When used at all, inc_nlink_dir() and drop_nlink_dir() must be
+ * used consistently for all updates to a parent directory link count
+ * within a given filesystem.
+ *
+ * simple_recursive_removal() uses drop_nlink_dir().
+ */
+void drop_nlink_dir(struct inode *inode)
+{
+	spin_lock(&inode->i_lock);
+	__drop_nlink(inode);
+	spin_unlock(&inode->i_lock);
+}
+
+/**
  * clear_nlink - directly zero an inode's link count
  * @inode: inode
  *
@@ -510,6 +533,29 @@ void inc_nlink(struct inode *inode)
 	__inc_nlink(inode);
 }
 EXPORT_SYMBOL(inc_nlink);
+
+/**
+ * inc_nlink_dir - directly increment link count of parent directory
+ * @inode: inode
+ *
+ * When a subdirectory is created the refcount on the parent must
+ * be incremented.  When this is done with a lock on i_rwsem on the parent,
+ * inc_nlink() can safey be used.  If the filesystem has opted out of
+ * i_rwsem locking for directory operations, or uses simple_start_creating()
+ * to populate the tree, it needs some other exclusion.  inc_nlink_dir()
+ * provides that using ->i_lock.
+ */
+void inc_nlink_dir(struct inode *inode)
+{
+	if (unlikely(inode->i_nlink == 0)) {
+		WARN_ON(!(inode_state_read_once(inode) & I_LINKABLE));
+		atomic_long_dec(&inode->i_sb->s_remove_count);
+	}
+	spin_lock(&inode->i_lock);
+	inode->__i_nlink++;
+	spin_unlock(&inode->i_lock);
+}
+EXPORT_SYMBOL(inc_nlink_dir);
 
 static void __address_space_init_once(struct address_space *mapping)
 {
