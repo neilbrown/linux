@@ -319,9 +319,10 @@ const struct file_operations hfs_dir_operations = {
 	.release	= hfs_dir_release,
 };
 
+WRAP_DIR_LOOKUP(hfs_lookup)
 const struct inode_operations hfs_dir_inode_operations = {
 	.create		= hfs_create,
-	.lookup		= hfs_lookup,
+	.lookup		= hfs_lookup_unlocked,
 	.unlink		= hfs_remove,
 	.mkdir		= hfs_mkdir,
 	.rmdir		= hfs_remove,

@@ -256,9 +256,10 @@ end_rename:
 	return error;
 }
 
+WRAP_DIR_LOOKUP(bfs_lookup)
 const struct inode_operations bfs_dir_inops = {
 	.create			= bfs_create,
-	.lookup			= bfs_lookup,
+	.lookup			= bfs_lookup_unlocked,
 	.link			= bfs_link,
 	.unlink			= bfs_unlink,
 	.rename			= bfs_rename,

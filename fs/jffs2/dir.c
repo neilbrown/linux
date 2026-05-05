@@ -52,11 +52,11 @@ const struct file_operations jffs2_dir_operations =
 	.setlease =	generic_setlease,
 };
 
-
+WRAP_DIR_LOOKUP(jffs2_lookup)
 const struct inode_operations jffs2_dir_inode_operations =
 {
 	.create =	jffs2_create,
-	.lookup =	jffs2_lookup,
+	.lookup =	jffs2_lookup_unlocked,
 	.link =		jffs2_link,
 	.unlink =	jffs2_unlink,
 	.symlink =	jffs2_symlink,

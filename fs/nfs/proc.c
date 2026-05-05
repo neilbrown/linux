@@ -705,9 +705,10 @@ static void nfs_return_delegation(struct inode *inode)
 		nfs_wb_all(inode);
 }
 
+WRAP_DIR_LOOKUP(nfs_lookup)
 static const struct inode_operations nfs_dir_inode_operations = {
 	.create		= nfs_create,
-	.lookup		= nfs_lookup,
+	.lookup		= nfs_lookup_unlocked,
 	.atomic_open	= nfs_atomic_open_v23,
 	.link		= nfs_link,
 	.unlink		= nfs_unlink,

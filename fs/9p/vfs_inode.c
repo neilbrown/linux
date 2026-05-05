@@ -1362,9 +1362,10 @@ out:
 	return 0;
 }
 
+WRAP_DIR_LOOKUP(v9fs_vfs_lookup)
 static const struct inode_operations v9fs_dir_inode_operations_dotu = {
 	.create = v9fs_vfs_create,
-	.lookup = v9fs_vfs_lookup,
+	.lookup = v9fs_vfs_lookup_unlocked,
 	.atomic_open = v9fs_vfs_atomic_open,
 	.symlink = v9fs_vfs_symlink,
 	.link = v9fs_vfs_link,
@@ -1379,7 +1380,7 @@ static const struct inode_operations v9fs_dir_inode_operations_dotu = {
 
 static const struct inode_operations v9fs_dir_inode_operations = {
 	.create = v9fs_vfs_create,
-	.lookup = v9fs_vfs_lookup,
+	.lookup = v9fs_vfs_lookup_unlocked,
 	.atomic_open = v9fs_vfs_atomic_open,
 	.unlink = v9fs_vfs_unlink,
 	.mkdir = v9fs_vfs_mkdir,

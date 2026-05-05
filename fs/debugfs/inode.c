@@ -58,8 +58,9 @@ static int debugfs_setattr(struct mnt_idmap *idmap,
 static const struct inode_operations debugfs_file_inode_operations = {
 	.setattr	= debugfs_setattr,
 };
+WRAP_DIR_LOOKUP(simple_lookup)
 static const struct inode_operations debugfs_dir_inode_operations = {
-	.lookup		= simple_lookup,
+	.lookup		= simple_lookup_unlocked,
 	.setattr	= debugfs_setattr,
 };
 static const struct inode_operations debugfs_symlink_inode_operations = {

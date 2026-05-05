@@ -744,8 +744,9 @@ static const struct file_operations hfs_file_operations = {
 	.release	= hfs_file_release,
 };
 
+WRAP_DIR_LOOKUP(hfs_file_lookup)
 static const struct inode_operations hfs_file_inode_operations = {
-	.lookup		= hfs_file_lookup,
+	.lookup		= hfs_file_lookup_unlocked,
 	.setattr	= hfs_inode_setattr,
 	.listxattr	= generic_listxattr,
 	.fileattr_get	= hfs_fileattr_get,

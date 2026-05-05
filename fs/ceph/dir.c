@@ -2252,8 +2252,9 @@ const struct file_operations ceph_snapdir_fops = {
 	.release = ceph_release,
 };
 
+WRAP_DIR_LOOKUP(ceph_lookup)
 const struct inode_operations ceph_dir_iops = {
-	.lookup = ceph_lookup,
+	.lookup = ceph_lookup_unlocked,
 	.permission = ceph_permission,
 	.getattr = ceph_getattr,
 	.setattr = ceph_setattr,
@@ -2272,7 +2273,7 @@ const struct inode_operations ceph_dir_iops = {
 };
 
 const struct inode_operations ceph_snapdir_iops = {
-	.lookup = ceph_lookup,
+	.lookup = ceph_lookup_unlocked,
 	.permission = ceph_permission,
 	.getattr = ceph_getattr,
 	.mkdir = ceph_mkdir,

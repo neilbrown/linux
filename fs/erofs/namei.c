@@ -215,8 +215,9 @@ static struct dentry *erofs_lookup(struct inode *dir, struct dentry *dentry,
 	return d_splice_alias(inode, dentry);
 }
 
+WRAP_DIR_LOOKUP(erofs_lookup)
 const struct inode_operations erofs_dir_iops = {
-	.lookup = erofs_lookup,
+	.lookup = erofs_lookup_unlocked,
 	.getattr = erofs_getattr,
 	.listxattr = erofs_listxattr,
 	.get_inode_acl = erofs_get_acl,

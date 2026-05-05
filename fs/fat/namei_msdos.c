@@ -637,9 +637,10 @@ out:
 	return err;
 }
 
+WRAP_DIR_LOOKUP(msdos_lookup)
 static const struct inode_operations msdos_dir_inode_operations = {
 	.create		= msdos_create,
-	.lookup		= msdos_lookup,
+	.lookup		= msdos_lookup_unlocked,
 	.unlink		= msdos_unlink,
 	.mkdir		= msdos_mkdir,
 	.rmdir		= msdos_rmdir,

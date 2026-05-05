@@ -236,8 +236,9 @@ const struct file_operations simple_dir_operations = {
 };
 EXPORT_SYMBOL(simple_dir_operations);
 
+WRAP_DIR_LOOKUP(simple_lookup)
 const struct inode_operations simple_dir_inode_operations = {
-	.lookup		= simple_lookup,
+	.lookup		= simple_lookup_unlocked,
 };
 EXPORT_SYMBOL(simple_dir_inode_operations);
 
@@ -1738,8 +1739,9 @@ static ssize_t empty_dir_listxattr(struct dentry *dentry, char *list, size_t siz
 	return -EOPNOTSUPP;
 }
 
+WRAP_DIR_LOOKUP(empty_dir_lookup)
 static const struct inode_operations empty_dir_inode_operations = {
-	.lookup		= empty_dir_lookup,
+	.lookup		= empty_dir_lookup_unlocked,
 	.setattr	= empty_dir_setattr,
 	.listxattr	= empty_dir_listxattr,
 };

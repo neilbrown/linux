@@ -552,9 +552,10 @@ const struct dentry_operations coda_dentry_operations = {
 	.d_delete	= coda_dentry_delete,
 };
 
+WRAP_DIR_LOOKUP(coda_lookup)
 const struct inode_operations coda_dir_inode_operations = {
 	.create		= coda_create,
-	.lookup		= coda_lookup,
+	.lookup		= coda_lookup_unlocked,
 	.link		= coda_link,
 	.unlink		= coda_unlink,
 	.symlink	= coda_symlink,

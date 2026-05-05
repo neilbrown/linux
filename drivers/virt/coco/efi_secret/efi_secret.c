@@ -131,8 +131,9 @@ static int efi_secret_unlink(struct inode *dir, struct dentry *dentry)
 	return simple_unlink(inode, dentry);
 }
 
+WRAP_DIR_LOOKUP(simple_lookup)
 static const struct inode_operations efi_secret_dir_inode_operations = {
-	.lookup         = simple_lookup,
+	.lookup         = simple_lookup_unlocked,
 	.unlink         = efi_secret_unlink,
 };
 

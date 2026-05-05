@@ -10730,9 +10730,10 @@ struct btrfs_inode *btrfs_find_first_inode(struct btrfs_root *root, u64 min_ino)
 	return inode;
 }
 
+WRAP_DIR_LOOKUP(btrfs_lookup)
 static const struct inode_operations btrfs_dir_inode_operations = {
 	.getattr	= btrfs_getattr,
-	.lookup		= btrfs_lookup,
+	.lookup		= btrfs_lookup_unlocked,
 	.create		= btrfs_create,
 	.unlink		= btrfs_unlink,
 	.link		= btrfs_link,

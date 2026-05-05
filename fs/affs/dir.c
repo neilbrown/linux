@@ -62,9 +62,10 @@ const struct file_operations affs_dir_operations = {
 /*
  * directories can handle most operations...
  */
+WRAP_DIR_LOOKUP(affs_lookup)
 const struct inode_operations affs_dir_inode_operations = {
 	.create		= affs_create,
-	.lookup		= affs_lookup,
+	.lookup		= affs_lookup_unlocked,
 	.link		= affs_link,
 	.unlink		= affs_unlink,
 	.symlink	= affs_symlink,

@@ -1411,9 +1411,10 @@ const struct inode_operations f2fs_encrypted_symlink_inode_operations = {
 	.listxattr	= f2fs_listxattr,
 };
 
+WRAP_DIR_LOOKUP(f2fs_lookup)
 const struct inode_operations f2fs_dir_inode_operations = {
 	.create		= f2fs_create,
-	.lookup		= f2fs_lookup,
+	.lookup		= f2fs_lookup_unlocked,
 	.link		= f2fs_link,
 	.unlink		= f2fs_unlink,
 	.symlink	= f2fs_symlink,

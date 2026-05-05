@@ -1520,9 +1520,10 @@ struct dentry *jfs_get_parent(struct dentry *dentry)
 	return d_obtain_alias(jfs_iget(dentry->d_sb, parent_ino));
 }
 
+WRAP_DIR_LOOKUP(jfs_lookup)
 const struct inode_operations jfs_dir_inode_operations = {
 	.create		= jfs_create,
-	.lookup		= jfs_lookup,
+	.lookup		= jfs_lookup_unlocked,
 	.link		= jfs_link,
 	.unlink		= jfs_unlink,
 	.symlink	= jfs_symlink,

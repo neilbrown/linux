@@ -276,9 +276,10 @@ out:
 /*
  * directories can handle most operations...
  */
+WRAP_DIR_LOOKUP(minix_lookup)
 const struct inode_operations minix_dir_inode_operations = {
 	.create		= minix_create,
-	.lookup		= minix_lookup,
+	.lookup		= minix_lookup_unlocked,
 	.link		= minix_link,
 	.unlink		= minix_unlink,
 	.symlink	= minix_symlink,

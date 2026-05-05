@@ -4221,9 +4221,10 @@ static int ext4_rename2(struct mnt_idmap *idmap,
 /*
  * directories can handle most operations...
  */
+WRAP_DIR_LOOKUP(ext4_lookup)
 const struct inode_operations ext4_dir_inode_operations = {
 	.create		= ext4_create,
-	.lookup		= ext4_lookup,
+	.lookup		= ext4_lookup_unlocked,
 	.link		= ext4_link,
 	.unlink		= ext4_unlink,
 	.symlink	= ext4_symlink,

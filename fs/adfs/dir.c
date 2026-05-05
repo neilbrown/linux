@@ -452,7 +452,8 @@ adfs_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 /*
  * directories can handle most operations...
  */
+WRAP_DIR_LOOKUP(adfs_lookup)
 const struct inode_operations adfs_dir_inode_operations = {
-	.lookup		= adfs_lookup,
+	.lookup		= adfs_lookup_unlocked,
 	.setattr	= adfs_setattr,
 };

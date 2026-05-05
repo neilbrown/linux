@@ -942,8 +942,9 @@ static const struct file_operations cramfs_directory_operations = {
 	.setlease	= generic_setlease,
 };
 
+WRAP_DIR_LOOKUP(cramfs_lookup)
 static const struct inode_operations cramfs_dir_inode_operations = {
-	.lookup		= cramfs_lookup,
+	.lookup		= cramfs_lookup_unlocked,
 };
 
 static const struct super_operations cramfs_ops = {

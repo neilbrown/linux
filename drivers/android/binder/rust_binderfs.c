@@ -440,8 +440,9 @@ out:
 	return ret;
 }
 
+WRAP_DIR_LOOKUP(simple_lookup)
 static const struct inode_operations binderfs_dir_inode_operations = {
-	.lookup = simple_lookup,
+	.lookup = simple_lookup_unlocked,
 	.rename = binderfs_rename,
 	.unlink = binderfs_unlink,
 };

@@ -1574,17 +1574,18 @@ static int configfs_rmdir(struct inode *dir, struct dentry *dentry)
 	return 0;
 }
 
+WRAP_DIR_LOOKUP(configfs_lookup)
 const struct inode_operations configfs_dir_inode_operations = {
 	.mkdir		= configfs_mkdir,
 	.rmdir		= configfs_rmdir,
 	.symlink	= configfs_symlink,
 	.unlink		= configfs_unlink,
-	.lookup		= configfs_lookup,
+	.lookup		= configfs_lookup_unlocked,
 	.setattr	= configfs_setattr,
 };
 
 const struct inode_operations configfs_root_inode_operations = {
-	.lookup		= configfs_lookup,
+	.lookup		= configfs_lookup_unlocked,
 	.setattr	= configfs_setattr,
 };
 

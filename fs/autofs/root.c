@@ -50,8 +50,9 @@ const struct file_operations autofs_dir_operations = {
 	.llseek		= dcache_dir_lseek,
 };
 
+WRAP_DIR_LOOKUP(autofs_lookup)
 const struct inode_operations autofs_dir_inode_operations = {
-	.lookup		= autofs_lookup,
+	.lookup		= autofs_lookup_unlocked,
 	.permission	= autofs_dir_permission,
 	.unlink		= autofs_dir_unlink,
 	.symlink	= autofs_dir_symlink,

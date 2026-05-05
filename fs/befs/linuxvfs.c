@@ -83,8 +83,9 @@ static const struct file_operations befs_dir_operations = {
 	.setlease	= generic_setlease,
 };
 
+WRAP_DIR_LOOKUP(befs_lookup)
 static const struct inode_operations befs_dir_inode_operations = {
-	.lookup		= befs_lookup,
+	.lookup		= befs_lookup_unlocked,
 };
 
 static const struct address_space_operations befs_aops = {

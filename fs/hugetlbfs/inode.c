@@ -1214,9 +1214,10 @@ static const struct file_operations hugetlbfs_file_operations = {
 	.fop_flags		= FOP_HUGE_PAGES,
 };
 
+WRAP_DIR_LOOKUP(simple_lookup)
 static const struct inode_operations hugetlbfs_dir_inode_operations = {
 	.create		= hugetlbfs_create,
-	.lookup		= simple_lookup,
+	.lookup		= simple_lookup_unlocked,
 	.link		= simple_link,
 	.unlink		= simple_unlink,
 	.symlink	= hugetlbfs_symlink,

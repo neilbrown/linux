@@ -2411,8 +2411,9 @@ static int fuse_getattr(struct mnt_idmap *idmap,
 	return fuse_update_get_attr(idmap, inode, NULL, stat, request_mask, flags);
 }
 
+WRAP_DIR_LOOKUP(fuse_lookup)
 static const struct inode_operations fuse_dir_inode_operations = {
-	.lookup		= fuse_lookup,
+	.lookup		= fuse_lookup_unlocked,
 	.mkdir		= fuse_mkdir,
 	.symlink	= fuse_symlink,
 	.unlink		= fuse_unlink,

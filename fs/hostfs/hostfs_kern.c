@@ -877,9 +877,10 @@ static const struct inode_operations hostfs_iops = {
 	.setattr	= hostfs_setattr,
 };
 
+WRAP_DIR_LOOKUP(hostfs_lookup)
 static const struct inode_operations hostfs_dir_iops = {
 	.create		= hostfs_create,
-	.lookup		= hostfs_lookup,
+	.lookup		= hostfs_lookup_unlocked,
 	.link		= hostfs_link,
 	.unlink		= hostfs_unlink,
 	.symlink	= hostfs_symlink,

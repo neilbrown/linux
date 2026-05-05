@@ -1338,9 +1338,10 @@ unlock:
 	return err;
 }
 
+WRAP_DIR_LOOKUP(exfat_lookup)
 const struct inode_operations exfat_dir_inode_operations = {
 	.create		= exfat_create,
-	.lookup		= exfat_lookup,
+	.lookup		= exfat_lookup_unlocked,
 	.unlink		= exfat_unlink,
 	.mkdir		= exfat_mkdir,
 	.rmdir		= exfat_rmdir,

@@ -1357,8 +1357,9 @@ static int kernfs_iop_rename(struct mnt_idmap *idmap,
 	return ret;
 }
 
+WRAP_DIR_LOOKUP(kernfs_iop_lookup)
 const struct inode_operations kernfs_dir_iops = {
-	.lookup		= kernfs_iop_lookup,
+	.lookup		= kernfs_iop_lookup_unlocked,
 	.permission	= kernfs_iop_permission,
 	.setattr	= kernfs_iop_setattr,
 	.getattr	= kernfs_iop_getattr,

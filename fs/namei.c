@@ -1810,16 +1810,11 @@ static struct dentry *lookup_one_qstr(const struct qstr *name,
 		/* Raced with another thread which did the lookup */
 		goto found;
 
-	if (inode_lock_shared_killable(dir)) {
-		d_lookup_done(dentry);
-		dput(dentry);
-		return ERR_PTR(-EINTR);
-	}
 	if (unlikely(IS_DEADDIR(dir)))
 		old = ERR_PTR(-ENOENT);
 	else
 		old = dir->i_op->lookup(dir, dentry, flags);
-	inode_unlock_shared(dir);
+
 	if (unlikely(old)) {
 		d_lookup_done(dentry);
 		dput(dentry);
@@ -1933,17 +1928,12 @@ again:
 			dput(dentry);
 			dentry = ERR_PTR(error);
 		}
-	} else if (inode_lock_shared_killable(inode)) {
-		d_lookup_done(dentry);
-		dput(dentry);
-		return ERR_PTR(-EINTR);
 	} else {
 		if (unlikely(IS_DEADDIR(inode)))
 			old = ERR_PTR(-ENOENT);
 		else
 			old = inode->i_op->lookup(inode, dentry,
 						  flags);
-		inode_unlock_shared(inode);
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
 			dput(dentry);
@@ -4494,16 +4484,11 @@ retry:
 	if (d_in_lookup(dentry)) {
 		struct dentry *res;
 
-		if (inode_lock_shared_killable(dir_inode) == 0) {
-			if (IS_DEADDIR(dir_inode))
-				res = ERR_PTR(-ENOENT);
-			else
-				res = dir_inode->i_op->lookup(dir_inode, dentry,
-							      nd->flags);
-			inode_unlock_shared(dir_inode);
-		} else {
-			res = ERR_PTR(-EINTR);
-		}
+		if (IS_DEADDIR(dir_inode))
+			res = ERR_PTR(-ENOENT);
+		else
+			res = dir_inode->i_op->lookup(dir_inode, dentry,
+						      nd->flags);
 		d_lookup_done(dentry);
 		if (unlikely(res)) {
 			if (IS_ERR(res)) {

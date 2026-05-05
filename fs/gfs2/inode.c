@@ -2304,9 +2304,10 @@ static const struct inode_operations gfs2_file_iops = {
 	.fileattr_set = gfs2_fileattr_set,
 };
 
+WRAP_DIR_LOOKUP(gfs2_lookup)
 static const struct inode_operations gfs2_dir_iops = {
 	.create = gfs2_create,
-	.lookup = gfs2_lookup,
+	.lookup = gfs2_lookup_unlocked,
 	.link = gfs2_link,
 	.unlink = gfs2_unlink,
 	.symlink = gfs2_symlink,

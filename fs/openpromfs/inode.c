@@ -174,8 +174,9 @@ static const struct file_operations openprom_operations = {
 
 static struct dentry *openpromfs_lookup(struct inode *, struct dentry *, unsigned int);
 
+WRAP_DIR_LOOKUP(openpromfs_lookup)
 static const struct inode_operations openprom_inode_operations = {
-	.lookup		= openpromfs_lookup,
+	.lookup		= openpromfs_lookup_unlocked,
 };
 
 static struct dentry *openpromfs_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)

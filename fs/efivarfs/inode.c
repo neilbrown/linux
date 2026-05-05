@@ -128,8 +128,9 @@ static int efivarfs_unlink(struct inode *dir, struct dentry *dentry)
 	return simple_unlink(dir, dentry);
 };
 
+WRAP_DIR_LOOKUP(simple_lookup)
 const struct inode_operations efivarfs_dir_inode_operations = {
-	.lookup = simple_lookup,
+	.lookup = simple_lookup_unlocked,
 	.unlink = efivarfs_unlink,
 	.create = efivarfs_create,
 };

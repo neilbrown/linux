@@ -352,8 +352,9 @@ static int proc_fd_getattr(struct mnt_idmap *idmap,
 	return proc_readfd_count(inode, &stat->size);
 }
 
+WRAP_DIR_LOOKUP(proc_lookupfd)
 const struct inode_operations proc_fd_inode_operations = {
-	.lookup		= proc_lookupfd,
+	.lookup		= proc_lookupfd_unlocked,
 	.permission	= proc_fd_permission,
 	.getattr	= proc_fd_getattr,
 	.setattr	= proc_nochmod_setattr,

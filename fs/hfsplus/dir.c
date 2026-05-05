@@ -617,8 +617,9 @@ static int hfsplus_rename(struct mnt_idmap *idmap,
 	return res;
 }
 
+WRAP_DIR_LOOKUP(hfsplus_lookup)
 const struct inode_operations hfsplus_dir_inode_operations = {
-	.lookup			= hfsplus_lookup,
+	.lookup			= hfsplus_lookup_unlocked,
 	.create			= hfsplus_create,
 	.link			= hfsplus_link,
 	.unlink			= hfsplus_unlink,

@@ -1471,8 +1471,9 @@ drop_write:
 	return err;
 }
 
+WRAP_DIR_LOOKUP(ovl_lookup)
 const struct inode_operations ovl_dir_inode_operations = {
-	.lookup		= ovl_lookup,
+	.lookup		= ovl_lookup_unlocked,
 	.mkdir		= ovl_mkdir,
 	.symlink	= ovl_symlink,
 	.unlink		= ovl_unlink,

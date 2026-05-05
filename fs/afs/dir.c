@@ -62,9 +62,10 @@ const struct file_operations afs_dir_file_operations = {
 	.llseek		= generic_file_llseek,
 };
 
+WRAP_DIR_LOOKUP(afs_lookup)
 const struct inode_operations afs_dir_inode_operations = {
 	.create		= afs_create,
-	.lookup		= afs_lookup,
+	.lookup		= afs_lookup_unlocked,
 	.link		= afs_link,
 	.unlink		= afs_unlink,
 	.symlink	= afs_symlink,

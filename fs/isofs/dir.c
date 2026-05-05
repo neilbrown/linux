@@ -272,9 +272,10 @@ const struct file_operations isofs_dir_operations =
 /*
  * directories can handle most operations...
  */
+WRAP_DIR_LOOKUP(isofs_lookup)
 const struct inode_operations isofs_dir_inode_operations =
 {
-	.lookup = isofs_lookup,
+	.lookup = isofs_lookup_unlocked,
 	.fileattr_get = isofs_fileattr_get,
 };
 

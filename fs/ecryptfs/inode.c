@@ -1120,9 +1120,10 @@ const struct inode_operations ecryptfs_symlink_iops = {
 	.listxattr = ecryptfs_listxattr,
 };
 
+WRAP_DIR_LOOKUP(ecryptfs_lookup)
 const struct inode_operations ecryptfs_dir_iops = {
 	.create = ecryptfs_create,
-	.lookup = ecryptfs_lookup,
+	.lookup = ecryptfs_lookup_unlocked,
 	.link = ecryptfs_link,
 	.unlink = ecryptfs_unlink,
 	.symlink = ecryptfs_symlink,

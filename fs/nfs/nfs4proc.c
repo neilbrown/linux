@@ -10703,9 +10703,10 @@ static void nfs4_disable_swap(struct inode *inode)
 	wake_up_var(&clp->cl_state);
 }
 
+WRAP_DIR_LOOKUP(nfs_lookup)
 static const struct inode_operations nfs4_dir_inode_operations = {
 	.create		= nfs_create,
-	.lookup		= nfs_lookup,
+	.lookup		= nfs_lookup_unlocked,
 	.atomic_open	= nfs_atomic_open,
 	.link		= nfs_link,
 	.unlink		= nfs_unlink,

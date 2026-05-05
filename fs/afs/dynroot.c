@@ -160,8 +160,9 @@ static struct dentry *afs_dynroot_lookup(struct inode *dir, struct dentry *dentr
 	return afs_dynroot_lookup_cell(dir, dentry, flags);
 }
 
+WRAP_DIR_LOOKUP(afs_dynroot_lookup)
 const struct inode_operations afs_dynroot_inode_operations = {
-	.lookup		= afs_dynroot_lookup,
+	.lookup		= afs_dynroot_lookup_unlocked,
 };
 
 static void afs_dynroot_d_release(struct dentry *dentry)

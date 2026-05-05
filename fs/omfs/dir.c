@@ -445,8 +445,9 @@ static int omfs_readdir(struct file *file, struct dir_context *ctx)
 	return 0;
 }
 
+WRAP_DIR_LOOKUP(omfs_lookup)
 const struct inode_operations omfs_dir_inops = {
-	.lookup = omfs_lookup,
+	.lookup = omfs_lookup_unlocked,
 	.mkdir = omfs_mkdir,
 	.rename = omfs_rename,
 	.create = omfs_create,

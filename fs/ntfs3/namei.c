@@ -526,8 +526,9 @@ out:
 }
 
 // clang-format off
+WRAP_DIR_LOOKUP(ntfs_lookup)
 const struct inode_operations ntfs_dir_inode_operations = {
-	.lookup		= ntfs_lookup,
+	.lookup		= ntfs_lookup_unlocked,
 	.create		= ntfs_create,
 	.link		= ntfs_link,
 	.unlink		= ntfs_unlink,

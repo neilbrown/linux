@@ -1176,9 +1176,10 @@ static int vfat_rename2(struct mnt_idmap *idmap, struct inode *old_dir,
 	return vfat_rename(old_dir, old_dentry, new_dir, new_dentry);
 }
 
+WRAP_DIR_LOOKUP(vfat_lookup)
 static const struct inode_operations vfat_dir_inode_operations = {
 	.create		= vfat_create,
-	.lookup		= vfat_lookup,
+	.lookup		= vfat_lookup_unlocked,
 	.unlink		= vfat_unlink,
 	.mkdir		= vfat_mkdir,
 	.rmdir		= vfat_rmdir,

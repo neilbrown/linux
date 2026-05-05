@@ -1555,8 +1555,9 @@ out:
 /*
  * Inode operations for directories.
  */
+WRAP_DIR_LOOKUP(ntfs_lookup)
 const struct inode_operations ntfs_dir_inode_ops = {
-	.lookup		= ntfs_lookup,	/* VFS: Lookup directory. */
+	.lookup		= ntfs_lookup_unlocked,	/* VFS: Lookup directory. */
 	.create		= ntfs_create,
 	.unlink		= ntfs_unlink,
 	.mkdir		= ntfs_mkdir,

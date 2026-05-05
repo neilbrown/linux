@@ -1986,6 +1986,23 @@ int wrap_directory_iterator(struct file *, struct dir_context *,
 	static int shared_##x(struct file *file , struct dir_context *ctx) \
 	{ return wrap_directory_iterator(file, ctx, x); }
 
+/*
+ * Wrap a lookup function to take the directory lock first.
+ * This is used for a simple conversion of all filesystems.
+ * Ideally filesystems will be changed to more ideomatic code
+ * and this can then be removed.
+ */
+#define WRAP_DIR_LOOKUP(name) \
+	static struct dentry *name##_unlocked(				\
+		struct inode *dir, struct dentry *de, unsigned int flags)\
+	{								\
+		if (inode_lock_shared_killable(dir))			\
+			return ERR_PTR(-EINTR);				\
+		de = name(dir, de, flags);				\
+		inode_unlock_shared(dir);				\
+		return de;						\
+	}
+
 enum fs_update_time {
 	FS_UPD_ATIME,
 	FS_UPD_CMTIME,

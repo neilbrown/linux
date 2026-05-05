@@ -405,9 +405,10 @@ out_old:
 	return err;
 }
 
+WRAP_DIR_LOOKUP(ext2_lookup)
 const struct inode_operations ext2_dir_inode_operations = {
 	.create		= ext2_create,
-	.lookup		= ext2_lookup,
+	.lookup		= ext2_lookup_unlocked,
 	.link		= ext2_link,
 	.unlink		= ext2_unlink,
 	.symlink	= ext2_symlink,

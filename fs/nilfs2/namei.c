@@ -559,9 +559,10 @@ static int nilfs_encode_fh(struct inode *inode, __u32 *fh, int *lenp,
 	return type;
 }
 
+WRAP_DIR_LOOKUP(nilfs_lookup)
 const struct inode_operations nilfs_dir_inode_operations = {
 	.create		= nilfs_create,
-	.lookup		= nilfs_lookup,
+	.lookup		= nilfs_lookup_unlocked,
 	.link		= nilfs_link,
 	.unlink		= nilfs_unlink,
 	.symlink	= nilfs_symlink,

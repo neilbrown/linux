@@ -28,8 +28,9 @@ const struct file_operations afs_mntpt_file_operations = {
 	.llseek		= noop_llseek,
 };
 
+WRAP_DIR_LOOKUP(afs_mntpt_lookup)
 const struct inode_operations afs_mntpt_inode_operations = {
-	.lookup		= afs_mntpt_lookup,
+	.lookup		= afs_mntpt_lookup_unlocked,
 	.readlink	= afs_readlink,
 	.getattr	= afs_getattr,
 };

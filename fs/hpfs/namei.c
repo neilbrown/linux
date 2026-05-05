@@ -607,10 +607,11 @@ end1:
 	return err;
 }
 
+WRAP_DIR_LOOKUP(hpfs_lookup)
 const struct inode_operations hpfs_dir_iops =
 {
 	.create		= hpfs_create,
-	.lookup		= hpfs_lookup,
+	.lookup		= hpfs_lookup_unlocked,
 	.unlink		= hpfs_unlink,
 	.symlink	= hpfs_symlink,
 	.mkdir		= hpfs_mkdir,

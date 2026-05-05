@@ -526,15 +526,16 @@ static const struct file_operations dlmfs_file_operations = {
 	.llseek		= default_llseek,
 };
 
+WRAP_DIR_LOOKUP(simple_lookup)
 static const struct inode_operations dlmfs_dir_inode_operations = {
 	.create		= dlmfs_create,
-	.lookup		= simple_lookup,
+	.lookup		= simple_lookup_unlocked,
 	.unlink		= dlmfs_unlink,
 };
 
 /* this way we can restrict mkdir to only the toplevel of the fs. */
 static const struct inode_operations dlmfs_root_inode_operations = {
-	.lookup		= simple_lookup,
+	.lookup		= simple_lookup_unlocked,
 	.mkdir		= dlmfs_mkdir,
 	.rmdir		= simple_rmdir,
 };

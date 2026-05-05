@@ -2934,9 +2934,10 @@ leave:
 	return status;
 }
 
+WRAP_DIR_LOOKUP(ocfs2_lookup)
 const struct inode_operations ocfs2_dir_iops = {
 	.create		= ocfs2_create,
-	.lookup		= ocfs2_lookup,
+	.lookup		= ocfs2_lookup_unlocked,
 	.link		= ocfs2_link,
 	.unlink		= ocfs2_unlink,
 	.rmdir		= ocfs2_unlink,
