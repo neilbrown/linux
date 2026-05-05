@@ -2106,21 +2106,7 @@ bool proc_fill_cache(struct file *file, struct dir_context *ctx,
 	unsigned type = DT_UNKNOWN;
 	ino_t ino = 1;
 
-	child = d_alloc_trylock(dir, &qname);
-	if (IS_ERR(child))
-		goto end_instantiate;
-
-	if (child == ERR_PTR(-EWOULDBLOCK)) {
-		/*
-		 * Need to drop directory lock, which isn't really
-		 * needed here anyway.  As rmdir never happens in procfs
-		 * we don't need to be concerned about S_DEAD being set
-		 * while unlocked.
-		 */
-		inode_unlock_shared(dir->d_inode);
-		child = d_alloc_parallel(dir, &qname);
-		inode_lock_shared(dir->d_inode);
-	}
+	child = d_alloc_parallel(dir, &qname);
 	if (IS_ERR(child))
 		goto end_instantiate;
 	if (d_in_lookup(child)) {
@@ -2374,9 +2360,8 @@ out:
 	return result;
 }
 
-WRAP_DIR_LOOKUP(proc_map_files_lookup)
 static const struct inode_operations proc_map_files_inode_operations = {
-	.lookup		= proc_map_files_lookup_unlocked,
+	.lookup		= proc_map_files_lookup,
 	.permission	= proc_fd_permission,
 	.setattr	= proc_nochmod_setattr,
 };
@@ -2861,9 +2846,8 @@ static struct dentry *proc_##LSM##_attr_dir_lookup(struct inode *dir, \
 				  LSM##_attr_dir_stuff + ARRAY_SIZE(LSM##_attr_dir_stuff)); \
 } \
 \
-WRAP_DIR_LOOKUP(proc_##LSM##_attr_dir_lookup) \
 static const struct inode_operations proc_##LSM##_attr_dir_inode_ops = { \
-	.lookup		= proc_##LSM##_attr_dir_lookup_unlocked, \
+	.lookup		= proc_##LSM##_attr_dir_lookup, \
 	.getattr	= pid_getattr, \
 	.setattr	= proc_nochmod_setattr, \
 }
@@ -2921,9 +2905,8 @@ static struct dentry *proc_attr_dir_lookup(struct inode *dir,
 				  attr_dir_stuff + ARRAY_SIZE(attr_dir_stuff));
 }
 
-WRAP_DIR_LOOKUP(proc_attr_dir_lookup)
 static const struct inode_operations proc_attr_dir_inode_operations = {
-	.lookup		= proc_attr_dir_lookup_unlocked,
+	.lookup		= proc_attr_dir_lookup,
 	.getattr	= pid_getattr,
 	.setattr	= proc_nochmod_setattr,
 };
@@ -3431,9 +3414,8 @@ static struct dentry *proc_tgid_base_lookup(struct inode *dir, struct dentry *de
 				  tgid_base_stuff + ARRAY_SIZE(tgid_base_stuff));
 }
 
-WRAP_DIR_LOOKUP(proc_tgid_base_lookup)
 static const struct inode_operations proc_tgid_base_inode_operations = {
-	.lookup		= proc_tgid_base_lookup_unlocked,
+	.lookup		= proc_tgid_base_lookup,
 	.getattr	= pid_getattr,
 	.setattr	= proc_nochmod_setattr,
 	.permission	= proc_pid_permission,
@@ -3769,9 +3751,8 @@ static const struct file_operations proc_tid_base_operations = {
 	.llseek		= generic_file_llseek,
 };
 
-WRAP_DIR_LOOKUP(proc_tid_base_lookup)
 static const struct inode_operations proc_tid_base_inode_operations = {
-	.lookup		= proc_tid_base_lookup_unlocked,
+	.lookup		= proc_tid_base_lookup,
 	.getattr	= pid_getattr,
 	.setattr	= proc_nochmod_setattr,
 };
@@ -3983,9 +3964,8 @@ static loff_t proc_dir_llseek(struct file *file, loff_t offset, int whence)
 	return off;
 }
 
-WRAP_DIR_LOOKUP(proc_task_lookup)
 static const struct inode_operations proc_task_inode_operations = {
-	.lookup		= proc_task_lookup_unlocked,
+	.lookup		= proc_task_lookup,
 	.getattr	= proc_task_getattr,
 	.setattr	= proc_nochmod_setattr,
 	.permission	= proc_pid_permission,

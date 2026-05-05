@@ -687,18 +687,7 @@ static bool proc_sys_fill_cache(struct file *file,
 	unsigned type = DT_UNKNOWN;
 
 	qname = QSTR(table->procname);
-	child = d_alloc_trylock(dir, &qname);
-	if (child == ERR_PTR(-EWOULDBLOCK)) {
-		/*
-		 * Need to drop directory lock, which isn't really
-		 * needed here anyway.  As rmdir never happens in procfs
-		 * we don't need to be concerned about S_DEAD being set
-		 * while unlocked.
-		 */
-		inode_unlock_shared(dir->d_inode);
-		child = d_alloc_parallel(dir, &qname);
-		inode_lock_shared(dir->d_inode);
-	}
+	child = d_alloc_parallel(dir, &qname);
 	if (IS_ERR(child))
 		return false;
 	if (d_in_lookup(child)) {
