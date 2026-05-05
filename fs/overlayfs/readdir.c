@@ -574,21 +574,8 @@ static int ovl_cache_update(const struct path *path, struct ovl_cache_entry *p, 
 		}
 	}
 	/* This checks also for xwhiteouts */
-	this = d_alloc_trylock(dir, &QSTR_LEN(p->name, p->len));
-	if (this == ERR_PTR(-EWOULDBLOCK)) {
-		/*
-		 * Some other thread is looking up this name and will
-		 * block on i_rwsem before it can complete the lookup.
-		 * We will do the lookup in a new dentry and when that
-		 * lookup gets a turn it will find and return this
-		 * dentry.
-		 */
-		this = d_alloc_name(dir, p->name);
-		if (!this)
-			this = ERR_PTR(-ENOMEM);
-	}
-	if (!IS_ERR(this) && d_unhashed(this)) {
-		/* Either we got an in-lookup or we made our own unhashed */
+	this = d_alloc_parallel(dir, &QSTR_LEN(p->name, p->len));
+	if (!IS_ERR(this) && d_in_lookup(this)) {
 		struct dentry *alias = ovl_lookup(dir->d_inode, this, 0);
 
 		if (alias) {
