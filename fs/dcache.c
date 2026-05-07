@@ -1901,6 +1901,7 @@ EXPORT_SYMBOL(d_invalidate);
  
 static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 {
+	static struct lock_class_key __lookup_key;
 	struct dentry *dentry;
 	char *dname;
 	int err;
@@ -1957,6 +1958,8 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	INIT_HLIST_HEAD(&dentry->d_children);
 	dentry->waiters = NULL;
 	INIT_HLIST_NODE(&dentry->d_sib);
+
+	lockdep_init_map(&dentry->lookup_map, "DCACHE_PAR_LOOKUP", &__lookup_key, 0);
 
 	if (dentry->d_op && dentry->d_op->d_init) {
 		err = dentry->d_op->d_init(dentry);
@@ -2037,6 +2040,7 @@ struct dentry *d_duplicate(struct dentry *dentry)
 		return ERR_PTR(-ENOMEM);
 
 	new->d_flags |= DCACHE_PAR_LOOKUP;
+	lock_map_acquire_try(&new->lookup_map);
 	spin_lock(&parent->d_lock);
 	new->d_parent = dget_dlock(parent);
 	hlist_add_head(&new->d_sib, &parent->d_children);
@@ -2801,6 +2805,15 @@ static inline void end_dir_add(struct inode *dir, unsigned int n)
 static void d_wait_lookup(struct dentry *dentry)
 {
 	if (likely(d_in_lookup(dentry))) {
+		/*
+		 * Tell lockdep we will wait for the lookup lock, after
+		 * dropping ->d_lock, but won't actually take it.
+		 */
+		spin_release(&dentry->d_lock.dep_map, _THIS_IP_);
+		lock_map_acquire(&dentry->lookup_map);
+		lock_map_release(&dentry->lookup_map);
+		spin_acquire(&dentry->d_lock.dep_map, 0, 1, _THIS_IP_);
+
 		dentry->d_flags |= DCACHE_LOOKUP_WAITERS;
 		wait_var_event_spinlock(&dentry->d_flags,
 					!d_in_lookup(dentry),
@@ -2923,6 +2936,7 @@ retry:
 	}
 	hlist_bl_add_head(&new->d_in_lookup_hash, b);
 	hlist_bl_unlock(b);
+	lock_map_acquire_try(&new->lookup_map);
 	return new;
 mismatch:
 	spin_unlock(&dentry->d_lock);
@@ -3021,6 +3035,7 @@ static void __d_lookup_unhash(struct dentry *dentry)
 	b = in_lookup_hash(dentry->d_parent, dentry->d_name.hash);
 	hlist_bl_lock(b);
 	dentry->d_flags &= ~DCACHE_PAR_LOOKUP;
+	lock_map_release(&dentry->lookup_map);
 	__hlist_bl_del(&dentry->d_in_lookup_hash);
 	hlist_bl_unlock(b);
 	dentry->waiters = NULL;
