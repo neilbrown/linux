@@ -451,14 +451,15 @@ void set_nlink(struct inode *inode, unsigned int nlink)
 EXPORT_SYMBOL(set_nlink);
 
 /**
- * inc_nlink - directly increment an inode's link count
+ * __inc_nlink - directly increment an inode's link count
  * @inode: inode
  *
  * This is a low-level filesystem helper to replace any
- * direct filesystem manipulation of i_nlink.  Currently,
- * it is only here for parity with dec_nlink().
+ * direct filesystem manipulation of i_nlink.  It should
+ * be used only when the inode is not locked but something
+ * else provides serialisation.
  */
-void inc_nlink(struct inode *inode)
+void __inc_nlink(struct inode *inode)
 {
 	if (unlikely(inode->i_nlink == 0)) {
 		WARN_ON(!(inode_state_read_once(inode) & I_LINKABLE));
@@ -466,6 +467,22 @@ void inc_nlink(struct inode *inode)
 	}
 
 	inode->__i_nlink++;
+}
+EXPORT_SYMBOL(__inc_nlink);
+
+/**
+ * inc_nlink - directly increment an inode's link count
+ * @inode: inode
+ *
+ * This is a low-level filesystem helper to replace any
+ * direct filesystem manipulation of i_nlink.  It assumes
+ * the inode is locked as is normal when creating a link
+ * to a non-directory.
+ */
+void inc_nlink(struct inode *inode)
+{
+	lockdep_assert_held_write(&inode->i_rwsem);
+	__inc_nlink(inode);
 }
 EXPORT_SYMBOL(inc_nlink);
 

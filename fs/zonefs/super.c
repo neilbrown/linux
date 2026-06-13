@@ -1307,7 +1307,8 @@ static int zonefs_fill_super(struct super_block *sb, struct fs_context *fc)
 	set_nlink(inode, 2);
 	for (ztype = 0; ztype < ZONEFS_ZTYPE_MAX; ztype++) {
 		if (sbi->s_zgroup[ztype].g_nr_zones) {
-			inc_nlink(inode);
+			/* Only called at mount-time so no races are possible */
+			__inc_nlink(inode);
 			inode->i_size++;
 		}
 	}

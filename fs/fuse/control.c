@@ -224,7 +224,11 @@ static struct dentry *fuse_ctl_add_dentry(struct dentry *parent,
 		inode->i_op = iop;
 	inode->i_fop = fop;
 	if (S_ISDIR(mode)) {
-		inc_nlink(d_inode(parent));
+		/*
+		 * parent isn't locked so cannot use inc_nlink(),
+		 * but fuse_mutex ensures no races.
+		 */
+		__inc_nlink(d_inode(parent));
 		set_nlink(inode, 2);
 	}
 	inode->i_private = fc;
