@@ -1902,7 +1902,7 @@ static void __d_rehash(struct dentry *entry);
  * create an in-lookup dentry, so there can be no race in this create.
  *
  * The caller should d_move() the original to a new name, often via a
- * rename request, and should call d_lookup_done() on the newly created
+ * rename request, and should call dentry_unlock() on the newly created
  * dentry.  If the new is instantiated then the old MUST either be moved
  * or dropped.
  *
@@ -2330,12 +2330,12 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 	}
 	res = d_splice_alias(inode, found);
 	if (res) {
-		d_lookup_done(found);
+		dentry_unlock(found);
 		dput(found);
 		found = res;
 	}
 out_unlock:
-	d_lookup_done(dentry);
+	dentry_unlock(dentry);
 	inode_lock_shared(d_inode(dentry->d_parent));
 	return found;
 }
@@ -2716,7 +2716,7 @@ void d_wait_locked(struct dentry *dentry, unsigned int subclass)
 	}
 }
 
-static void __d_lookup_unhash_wake(struct dentry *dentry)
+static void __d_lock_unhash_wake(struct dentry *dentry)
 {
 	spin_lock(&dentry->d_lock);
 	__d_drop(dentry);
@@ -2725,18 +2725,6 @@ static void __d_lookup_unhash_wake(struct dentry *dentry)
 		dentry->d_flags &= ~DCACHE_LOCK_WAITERS;
 	}
 	spin_unlock(&dentry->d_lock);
-}
-
-static inline void __d_wake_in_lookup_waiters_unlock(struct dentry *dentry)
-{
-	if (dentry->d_flags & DCACHE_LOCKED) {
-		dentry->d_flags &= ~DCACHE_LOCKED;
-		lock_map_release(&dentry->lock_map);
-	}
-	if (dentry->d_flags & DCACHE_LOCK_WAITERS) {
-		wake_up_var_locked(&dentry->d_flags, &dentry->d_lock);
-		dentry->d_flags &= ~DCACHE_LOCK_WAITERS;
-	}
 }
 
 bool dentry_matches(struct dentry *dentry,
@@ -2827,7 +2815,7 @@ retry:
 			 * are hashed if we see S_DYING
 			 */
 			if (smp_load_acquire(&dir->i_flags) & (S_DYING | S_DEAD)) {
-				__d_lookup_unhash_wake(new);
+				__d_lock_unhash_wake(new);
 				rcu_read_unlock();
 				goto retry;
 			}
@@ -2842,7 +2830,7 @@ retry:
 	 * This dentry was found, either it is not in-lookup, or it
 	 * was added before "new".  Either way we can't use "new".
 	 */
-	__d_lookup_unhash_wake(new);
+	__d_lock_unhash_wake(new);
 
 	if (!lockref_get_not_dead(&dentry->d_lockref)) {
 		rcu_read_unlock();
@@ -2958,18 +2946,22 @@ struct dentry *d_alloc_trylock(struct dentry *parent,
 }
 EXPORT_SYMBOL(d_alloc_trylock);
 
-void __d_lookup_unhash_wake_unlock(struct dentry *dentry)
+void dentry_unlock(struct dentry *dentry)
 {
 	spin_lock(&dentry->d_lock);
-
-	if (d_in_lookup(dentry))
-		WRITE_ONCE(dentry->d_flags,
-			   dentry->d_flags & ~DCACHE_ENTRY_TYPE);
-	__d_drop(dentry);
-	__d_wake_in_lookup_waiters_unlock(dentry);
+	if (unlikely(d_in_lookup(dentry)))
+		__d_drop(dentry);
+	if (dentry->d_flags & DCACHE_LOCKED) {
+		dentry->d_flags &= ~DCACHE_LOCKED;
+		lock_map_release(&dentry->lock_map);
+	}
+	if (dentry->d_flags & DCACHE_LOCK_WAITERS) {
+		wake_up_var_locked(&dentry->d_flags, &dentry->d_lock);
+		dentry->d_flags &= ~DCACHE_LOCK_WAITERS;
+	}
 	spin_unlock(&dentry->d_lock);
 }
-EXPORT_SYMBOL(__d_lookup_unhash_wake_unlock);
+EXPORT_SYMBOL(dentry_unlock);
 
 /* inode->i_lock held if inode is non-NULL */
 
@@ -2985,7 +2977,6 @@ static inline void __d_add(struct dentry *dentry, struct inode *inode,
 		__d_rehash(dentry);
 	else
 		__d_set_inode_and_type(dentry, inode, DCACHE_MISS_TYPE);
-	__d_wake_in_lookup_waiters_unlock(dentry);
 	spin_unlock(&dentry->d_lock);
 	if (inode)
 		spin_unlock(&inode->i_lock);
@@ -3165,8 +3156,6 @@ static void __d_move(struct dentry *dentry, struct dentry *target,
 	write_seqcount_end(&target->d_seq);
 	write_seqcount_end(&dentry->d_seq);
 
-	__d_wake_in_lookup_waiters_unlock(target);
-
 	if (dentry->d_parent != old_parent)
 		spin_unlock(&dentry->d_parent->d_lock);
 	if (dentry != old_parent)
@@ -3234,8 +3223,6 @@ static void __d_move_sibs(struct dentry *dentry, struct dentry *target,
 
 	write_seqcount_end(&target->d_seq);
 	write_seqcount_end(&dentry->d_seq);
-
-	__d_wake_in_lookup_waiters_unlock(target);
 
 	spin_unlock(&target->d_lock);
 	spin_unlock(&dentry->d_lock);

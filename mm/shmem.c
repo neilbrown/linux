@@ -3981,7 +3981,7 @@ static int shmem_whiteout(struct mnt_idmap *idmap,
 		return -ENOMEM;
 	error = shmem_mknod(idmap, old_dir, whiteout,
 			    S_IFCHR | WHITEOUT_MODE, WHITEOUT_DEV);
-	d_lookup_done(whiteout);
+	dentry_unlock(whiteout);
 	dput(whiteout);
 	return error;
 }

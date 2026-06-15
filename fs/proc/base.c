@@ -2112,7 +2112,7 @@ bool proc_fill_cache(struct file *file, struct dir_context *ctx,
 	if (d_in_lookup(child)) {
 		struct dentry *res;
 		res = instantiate(child, task, ptr);
-		d_lookup_done(child);
+		dentry_unlock(child);
 		if (unlikely(res)) {
 			dput(child);
 			child = res;

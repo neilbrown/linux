@@ -163,7 +163,7 @@ retry:
 		if (!inode)
 			inode = ERR_PTR(-ENOMEM);
 		alias = d_splice_alias(inode, dentry);
-		d_lookup_done(dentry);
+		dentry_unlock(dentry);
 		if (alias && !IS_ERR(alias))
 			dput(alias);
 	}

@@ -964,8 +964,8 @@ static struct dentry *afs_lookup_atsys(struct inode *dir, struct dentry *dentry,
 	 */
 	ret = NULL;
 out_s:
-	/* Cannot take parent lock while we hold an in-lookup dentry */
-	d_lookup_done(dentry);
+	/* Cannot take parent lock while we hold a locked dentry */
+	dentry_unlock(dentry);
 	inode_lock_shared(dir);
 	afs_put_sysnames(subs);
 	kfree(buf);
@@ -2055,7 +2055,7 @@ static void afs_rename_put(struct afs_operation *op)
 		store_release_wake_up(&op->rename.unblock->d_fsdata, NULL);
 	store_release_wake_up(&op->dentry->d_fsdata, NULL);
 	if (op->rename.tmp) {
-		d_lookup_done(op->rename.tmp);
+		dentry_unlock(op->rename.tmp);
 		dput(op->rename.tmp);
 	}
 }

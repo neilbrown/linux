@@ -67,7 +67,7 @@ static void nfs_async_unlink_release(void *calldata)
 	struct super_block *sb = dentry->d_sb;
 
 	d_lock_acquire(dentry);
-	d_lookup_done(dentry);
+	dentry_unlock(dentry);
 	nfs_free_unlinkdata(data);
 	dput(dentry);
 	nfs_sb_deactive(sb);
@@ -125,7 +125,7 @@ static int nfs_call_unlink(struct dentry *dentry, struct inode *inode, struct nf
 	/*
 	 * This will fail if directory has already been removed,
 	 * and if it succeeds, then rmdir will be blocked until
-	 * d_lookup_done() is called on this alias.
+	 * dentry_unlock() is called on this alias.
 	 */
 	data->args.name.hash = full_name_hash(dentry->d_parent,
 					      data->args.name.name,
@@ -497,7 +497,7 @@ newname:
 	}
 	/* This name isn't known locally - check on server */
 	old = nfs_lookup(dir, sdentry, 0);
-	d_lookup_done(sdentry);
+	dentry_unlock(sdentry);
 	if (old || d_is_positive(sdentry)) {
 		if (!IS_ERR(old))
 			dput(old);

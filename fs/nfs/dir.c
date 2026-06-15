@@ -780,14 +780,14 @@ again:
 		}
 	}
 	if (!entry->fh->size) {
-		d_lookup_done(dentry);
+		dentry_unlock(dentry);
 		goto out;
 	}
 
 	nfs_set_verifier(dentry, dir_verifier);
 	inode = nfs_fhget(dentry->d_sb, entry->fh, entry->fattr);
 	alias = d_splice_alias(inode, dentry);
-	d_lookup_done(dentry);
+	dentry_unlock(dentry);
 	if (alias) {
 		if (IS_ERR(alias))
 			goto out;
@@ -2865,7 +2865,7 @@ out:
 
 	/* new dentry created? */
 	if (dentry) {
-		d_lookup_done(dentry);
+		dentry_unlock(dentry);
 		dput(dentry);
 	}
 	return error;

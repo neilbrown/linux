@@ -428,13 +428,7 @@ static inline void dont_mount(struct dentry *dentry)
 	spin_unlock(&dentry->d_lock);
 }
 
-extern void __d_lookup_unhash_wake_unlock(struct dentry *dentry);
-
-static inline void d_lookup_done(struct dentry *dentry)
-{
-	if (unlikely(d_in_lookup(dentry)))
-		__d_lookup_unhash_wake_unlock(dentry);
-}
+extern void dentry_unlock(struct dentry *dentry);
 
 extern void dput(struct dentry *);
 

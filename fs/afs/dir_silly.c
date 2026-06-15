@@ -151,7 +151,7 @@ newname:
 	}
 	/* This name isn't known locally - check on server */
 	old = afs_lookup(dir, sdentry, 0);
-	d_lookup_done(sdentry);
+	dentry_unlock(sdentry);
 	if (old || d_is_positive(sdentry)) {
 		if (!IS_ERR(old))
 			dput(old);
@@ -272,7 +272,7 @@ int afs_silly_iput(struct dentry *dentry, struct inode *inode)
 	/*
 	 * This will fail if directory has already been removed,
 	 * and if it succeeds, then rmdir will be blocked until
-	 * d_lookup_done() is called on this alias.
+	 * dentry_unlock() is called on this alias.
 	 */
 	alias = d_alloc_parallel(dentry->d_parent, &dentry->d_name);
 	if (IS_ERR(alias))
@@ -306,7 +306,7 @@ int afs_silly_iput(struct dentry *dentry, struct inode *inode)
 	spin_unlock(&vnode->lock);
 
 	afs_do_silly_unlink(dvnode, vnode, dentry, dvnode->silly_key);
-	d_lookup_done(alias);
+	dentry_unlock(alias);
 	dput(alias);
 	return 1;
 }

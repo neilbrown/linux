@@ -1201,7 +1201,7 @@ char *cifs_silly_fullpath(struct dentry *dentry)
 		if (!d_in_lookup(sdentry))
 			continue;
 		alias = cifs_lookup(sdentry->d_parent->d_inode, sdentry, 0);
-		d_lookup_done(sdentry);
+		dentry_unlock(sdentry);
 		if (alias || d_is_positive(dentry)) {
 			if (!IS_ERR(alias))
 				dput(alias);

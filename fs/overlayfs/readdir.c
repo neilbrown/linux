@@ -579,7 +579,7 @@ static int ovl_cache_update(const struct path *path, struct ovl_cache_entry *p, 
 		struct dentry *alias = ovl_lookup(dir->d_inode, this, 0);
 
 		if (alias) {
-			d_lookup_done(this);
+			dentry_unlock(this);
 			dput(this);
 			this = alias;
 		}

@@ -1786,7 +1786,7 @@ static struct dentry *lookup_dcache(const struct qstr *name,
 
 /*
  * If Lookup_EXCL or LOOKUP_RENAME_TARGET is set
- * d_lookup_done() must be called before the dentry is dput()
+ * dentry_unlock() must be called before the dentry is dput()
  * If the dentry is not d_in_lookup():
  *   Will return -ENOENT if name isn't found and LOOKUP_CREATE wasn't passed.
  *   Will return -EEXIST if name is found and LOOKUP_EXCL was passed.
@@ -1820,10 +1820,12 @@ static struct dentry *lookup_one_qstr(const struct qstr *name,
 		old = dir->i_op->lookup(dir, dentry, flags);
 
 	if (unlikely(old)) {
-		d_lookup_done(dentry);
+		dentry_unlock(dentry);
 		dput(dentry);
 		dentry = old;
 	}
+	if (!IS_ERR(dentry) && !d_in_lookup(dentry))
+		dentry_unlock(dentry);
 found:
 	if (IS_ERR(dentry))
 		return dentry;
@@ -2012,7 +2014,7 @@ again:
 	} else {
 		old = inode->i_op->lookup(inode, dentry,
 						  flags);
-		d_lookup_done(dentry);
+		dentry_unlock(dentry);
 		if (unlikely(old)) {
 			dput(dentry);
 			dentry = old;
@@ -3015,7 +3017,7 @@ struct dentry *start_dirop(struct dentry *parent, struct qstr *name,
 		if (IS_ERR(dentry))
 			return dentry;
 		if (down_write_killable_nested(&dir->i_rwsem, I_MUTEX_PARENT) != 0) {
-				d_lookup_done(dentry);
+				dentry_unlock(dentry);
 				dput(dentry);
 				return ERR_PTR(-EINTR);
 		}
@@ -3026,7 +3028,7 @@ struct dentry *start_dirop(struct dentry *parent, struct qstr *name,
 			return dentry;
 		/* Something happened while waiting for the lock, try again */
 		inode_unlock(dir);
-		d_lookup_done(dentry);
+		dentry_unlock(dentry);
 		dput(dentry);
 	}
 }
@@ -3042,7 +3044,7 @@ void end_dirop(struct dentry *de)
 {
 	if (!IS_ERR(de)) {
 		inode_unlock(de->d_parent->d_inode);
-		d_lookup_done(de);
+		dentry_unlock(de);
 		dput(de);
 	}
 }
@@ -3914,8 +3916,8 @@ retry:
 	if (IS_ERR(ancestor)) {
 		if (err == -EAGAIN) {
 			/* parent changed */
-			d_lookup_done(d1); dput(d1);
-			d_lookup_done(d2); dput(d2);
+			dentry_unlock(d1); dput(d1);
+			dentry_unlock(d2); dput(d2);
 			goto retry;
 		}
 		if (err == -ENOTEMPTY && (rd->flags & RENAME_EXCHANGE))
@@ -3934,8 +3936,8 @@ retry:
 		unlock_rename(rd->old_parent, rd->new_parent);
 		ancestor_unlock(rd->old_parent, rd->new_parent, ancestor,
 			d1, d2);
-		d_lookup_done(d1); dput(d1);
-		d_lookup_done(d2); dput(d2);
+		dentry_unlock(d1); dput(d1);
+		dentry_unlock(d2); dput(d2);
 		goto retry;
 	}
 
@@ -3947,10 +3949,10 @@ retry:
 	return 0;
 
 out_dput_d2:
-	d_lookup_done(d2);
+	dentry_unlock(d2);
 	dput(d2);
 out_dput_d1:
-	d_lookup_done(d1);
+	dentry_unlock(d1);
 	dput(d1);
 out_err:
 	return err;
@@ -4027,7 +4029,7 @@ retry:
 			err = -EINVAL;
 		if (err == -EAGAIN) {
 			/* parent changed */
-			d_lookup_done(d2); dput(d2);
+			dentry_unlock(d2); dput(d2);
 			goto retry;
 		}
 		if (err == -ENOTEMPTY && (rd->flags & RENAME_EXCHANGE))
@@ -4053,7 +4055,7 @@ retry:
 		 * case.
 		 */
 		WARN_ON_ONCE(d_in_lookup(d2));
-		d_lookup_done(d2); dput(d2);
+		dentry_unlock(d2); dput(d2);
 		goto retry;
 	}
 
@@ -4065,7 +4067,7 @@ retry:
 out_unlock:
 	unlock_rename(old_dentry->d_parent, rd->new_parent);
 out_dput_d2:
-	d_lookup_done(d2);
+	dentry_unlock(d2);
 	dput(d2);
 	return err;
 }
@@ -4161,8 +4163,9 @@ EXPORT_SYMBOL(start_renaming_two_dentries);
 
 void end_renaming(struct renamedata *rd)
 {
-	d_lookup_done(rd->old_dentry);
-	d_lookup_done(rd->new_dentry);
+	dentry_unlock(rd->old_dentry);
+	if (rd->new_dentry != rd->old_dentry)
+		dentry_unlock(rd->new_dentry);
 
 	ancestor_unlock(rd->old_parent, rd->new_parent, rd->ancestor,
 			rd->old_dentry, rd->new_dentry);
@@ -4430,7 +4433,7 @@ static struct dentry *atomic_open(const struct path *path, struct dentry *dentry
 		error = dir_inode->i_op->atomic_open(dir_inode, dentry, file,
 						     open_to_namei_flags(open_flag),
 						     mode);
-	d_lookup_done(dentry);
+	dentry_unlock(dentry);
 
 	if (!error) {
 		if (file->f_mode & FMODE_OPENED) {
@@ -4593,7 +4596,7 @@ retry:
 		else
 			res = dir_inode->i_op->lookup(dir_inode, dentry,
 						      nd->flags);
-		d_lookup_done(dentry);
+		dentry_unlock(dentry);
 		if (unlikely(res)) {
 			if (IS_ERR(res)) {
 				error = PTR_ERR(res);
