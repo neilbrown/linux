@@ -3138,13 +3138,13 @@ EXPORT_SYMBOL(d_alloc_trylock);
 
 void dentry_unlock(struct dentry *dentry)
 {
+	if (WARN_ON(!(dentry->d_flags & DCACHE_LOCKED)))
+		return;
 	spin_lock(&dentry->d_lock);
 	if (unlikely(d_in_lookup(dentry)))
 		__d_drop(dentry);
-	if (dentry->d_flags & DCACHE_LOCKED) {
-		dentry->d_flags &= ~DCACHE_LOCKED;
-		lock_map_release(&dentry->lock_map);
-	}
+	dentry->d_flags &= ~DCACHE_LOCKED;
+	lock_map_release(&dentry->lock_map);
 	if (dentry->d_flags & DCACHE_LOCK_WAITERS) {
 		wake_up_var_locked(&dentry->d_flags, &dentry->d_lock);
 		dentry->d_flags &= ~DCACHE_LOCK_WAITERS;
