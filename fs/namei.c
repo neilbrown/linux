@@ -1820,7 +1820,8 @@ static struct dentry *lookup_one_qstr(const struct qstr *name,
 		old = dir->i_op->lookup(dir, dentry, flags);
 
 	if (unlikely(old)) {
-		dentry_unlock(dentry);
+		if (IS_ERR(old))
+			dentry_unlock(dentry);
 		dput(dentry);
 		dentry = old;
 	}
@@ -2015,11 +2016,14 @@ again:
 	} else {
 		old = inode->i_op->lookup(inode, dentry,
 						  flags);
-		dentry_unlock(dentry);
 		if (unlikely(old)) {
+			if (IS_ERR(old))
+				dentry_unlock(dentry);
 			dput(dentry);
 			dentry = old;
 		}
+		if (!IS_ERR(dentry))
+			dentry_unlock(dentry);
 	}
 	return dentry;
 }
@@ -4597,15 +4601,16 @@ retry:
 		else
 			res = dir_inode->i_op->lookup(dir_inode, dentry,
 						      nd->flags);
-		dentry_unlock(dentry);
 		if (unlikely(res)) {
 			if (IS_ERR(res)) {
+				dentry_unlock(dentry);
 				error = PTR_ERR(res);
 				goto out_dput;
 			}
 			dput(dentry);
 			dentry = res;
 		}
+		dentry_unlock(dentry);
 	}
 	if (dentry->d_inode || !(op->open_flag & O_CREAT)) {
 		/*

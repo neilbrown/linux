@@ -244,8 +244,9 @@ retry:
 			inode = ERR_PTR(-ENOMEM);
 
 		alias = d_splice_alias(inode, dentry);
-		dentry_unlock(dentry);
 		if (alias) {
+			if (IS_ERR(alias))
+				dentry_unlock(dentry);
 			dput(dentry);
 			dentry = alias;
 		}
@@ -259,6 +260,7 @@ retry:
 			}
 			return PTR_ERR(dentry);
 		}
+		dentry_unlock(dentry);
 	}
 	if (fc->readdirplus_auto)
 		set_bit(FUSE_I_INIT_RDPLUS, &get_fuse_inode(inode)->state);

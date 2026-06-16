@@ -695,15 +695,16 @@ static bool proc_sys_fill_cache(struct file *file,
 		inode = proc_sys_make_inode(dir->d_sb, head, table);
 		res = d_splice_alias_ops(inode, child,
 					 &proc_sys_dentry_operations);
-		dentry_unlock(child);
 		if (unlikely(res)) {
-			dput(child);
-
-			if (IS_ERR(res))
+			if (IS_ERR(res)) {
+				dentry_unlock(child);
+				dput(child);
 				return false;
-
+			}
+			dput(child);
 			child = res;
 		}
+		dentry_unlock(child);
 	}
 	inode = d_inode(child);
 	ino  = inode->i_ino;

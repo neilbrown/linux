@@ -779,23 +779,22 @@ again:
 			goto again;
 		}
 	}
-	if (!entry->fh->size) {
-		dentry_unlock(dentry);
-		goto out;
-	}
+	if (!entry->fh->size)
+		goto out_unlock;
 
 	nfs_set_verifier(dentry, dir_verifier);
 	inode = nfs_fhget(dentry->d_sb, entry->fh, entry->fattr);
 	alias = d_splice_alias(inode, dentry);
-	dentry_unlock(dentry);
 	if (alias) {
 		if (IS_ERR(alias))
-			goto out;
+			goto out_unlock;
 		nfs_set_verifier(alias, dir_verifier);
 		dput(dentry);
 		dentry = alias;
 	}
 	trace_nfs_readdir_lookup(d_inode(parent), dentry, 0);
+out_unlock:
+	dentry_unlock(dentry);
 out:
 	dput(dentry);
 }
@@ -2379,8 +2378,11 @@ int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
 	if (IS_ERR(d))
 		return PTR_ERR(d);
 
-	/* Callers don't care */
-	dput(d);
+	/* Callers don't care about d, as it never exists */
+	if (WARN_ON(d!= NULL)) { /* This is never called on directories */
+		dentry_unlock(d);
+		dput(d);
+	}
 	return 0;
 }
 EXPORT_SYMBOL_GPL(nfs_instantiate);

@@ -2330,7 +2330,8 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 	}
 	res = d_splice_alias(inode, found);
 	if (res) {
-		dentry_unlock(found);
+		if (IS_ERR(res))
+			dentry_unlock(found);
 		dput(found);
 		found = res;
 	}
@@ -3493,6 +3494,10 @@ static int __d_unalias(struct dentry *dentry, struct dentry *alias)
 	struct rw_semaphore *m2 = NULL;
 	int ret = -ESTALE;
 
+	if (dentry->d_flags & DCACHE_LOCKED) {
+		if (!dentry_trylock(alias))
+			return ret;
+	}
 	/* If alias and dentry share a parent, then no extra locks required */
 	if (alias->d_parent == dentry->d_parent)
 		goto out_unalias;
@@ -3503,7 +3508,7 @@ static int __d_unalias(struct dentry *dentry, struct dentry *alias)
 	 * need to set DCACHE_RENAME_LOCK
 	 */
 	if (alias->d_flags & DCACHE_RENAME_LOCK)
-		goto out_err;
+		goto out_unlock;
 
 	if (!inode_trylock_shared(alias->d_parent->d_inode))
 		goto out_err;
@@ -3519,6 +3524,17 @@ out_unalias:
 out_err:
 	if (m2)
 		up_read(m2);
+out_unlock:
+	if (dentry->d_flags & DCACHE_LOCKED) {
+		if (ret)
+			/* On error: Unlock the dentry we locked */
+			dentry_unlock(alias);
+		else
+			/* On Success: The lock was transferred so unlock
+			 * original.
+			 */
+			dentry_unlock(dentry);
+	}
 	return ret;
 }
 
@@ -3569,7 +3585,15 @@ struct dentry *d_splice_alias_ops(struct inode *inode, struct dentry *dentry,
 					unlink_secondary_root(new);
 					spin_unlock(&new->d_lock);
 				}
+				if (dentry->d_flags & DCACHE_LOCKED)
+					/* This must succeed because IS_ROOT() dentries
+					 * are never locked - except temporarily
+					 * here while rename_lock is held.
+					 */
+					dentry_trylock(new);
 				__d_move(new, dentry, false);
+				if (dentry->d_flags & DCACHE_LOCKED)
+					dentry_unlock(dentry);
 				write_sequnlock(&sb->s_rename_lock);
 			}
 			iput(inode);
@@ -3602,6 +3626,9 @@ out:
  * If a dentry was found and moved, then it is returned.  Otherwise NULL
  * is returned.  This matches the expected return value of ->lookup and
  * ->mkdir.
+ *
+ * If a different dentry is returned, any DCACHE_LOCKED on the original
+ * dentry will have been transferred to the new.
  *
  */
 struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
