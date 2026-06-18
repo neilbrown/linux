@@ -79,12 +79,6 @@ struct dentry *start_creating(struct mnt_idmap *idmap, struct dentry *parent,
 			      struct qstr *name);
 struct dentry *start_removing(struct mnt_idmap *idmap, struct dentry *parent,
 			      struct qstr *name);
-struct dentry *start_creating_killable(struct mnt_idmap *idmap,
-				       struct dentry *parent,
-				       struct qstr *name);
-struct dentry *start_removing_killable(struct mnt_idmap *idmap,
-				       struct dentry *parent,
-				       struct qstr *name);
 struct dentry *start_creating_noperm(struct dentry *parent, struct qstr *name);
 struct dentry *start_removing_noperm(struct dentry *parent, struct qstr *name);
 struct dentry *start_creating_dentry(struct dentry *parent,

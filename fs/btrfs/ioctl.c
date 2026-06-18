@@ -875,7 +875,7 @@ static noinline int btrfs_mksubvol(struct dentry *parent,
 	struct fscrypt_str name_str = FSTR_INIT((char *)qname->name, qname->len);
 	int ret;
 
-	dentry = start_creating_killable(idmap, parent, qname);
+	dentry = start_creating(idmap, parent, qname);
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);
 
@@ -2357,7 +2357,7 @@ static noinline int btrfs_ioctl_snap_destroy(struct file *file,
 		goto free_subvol_name;
 	}
 
-	dentry = start_removing_killable(idmap, parent, &QSTR(subvol_name));
+	dentry = start_removing(idmap, parent, &QSTR(subvol_name));
 	if (IS_ERR(dentry)) {
 		ret = PTR_ERR(dentry);
 		goto out_end_removing;

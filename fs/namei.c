@@ -2893,40 +2893,6 @@ static int filename_parentat(int dfd, struct filename *name,
 	return __filename_parentat(dfd, name, flags, parent, last, type, NULL);
 }
 
-static struct dentry *__start_dirop(struct dentry *parent, struct qstr *name,
-				    unsigned int lookup_flags,
-				    unsigned int state)
-{
-	struct dentry *dentry;
-	struct inode *dir = d_inode(parent);
-
-	while(1) {
-		unsigned int seq = raw_seqcount_begin(&rename_lock.seqcount);
-
-		dentry = lookup_one_qstr(name, parent, lookup_flags);
-		if (IS_ERR(dentry))
-			return dentry;
-		if (state == TASK_KILLABLE) {
-			if (down_write_killable_nested(&dir->i_rwsem, I_MUTEX_PARENT) != 0) {
-				d_lookup_done(dentry);
-				dput(dentry);
-				return ERR_PTR(-EINTR);
-			}
-		} else {
-			inode_lock_nested(dir, I_MUTEX_PARENT);
-		}
-		if ((lookup_flags & LOOKUP_EXCL) && dentry->d_inode)
-			/* became positive while we waited, try again */
-			;
-		else if (dentry_matches(dentry, parent, name, seq))
-			return dentry;
-		/* Something happened while waiting for the lock, try again */
-		inode_unlock(dir);
-		d_lookup_done(dentry);
-		dput(dentry);
-	}
-}
-
 /**
  * start_dirop - begin a create or remove dirop, performing locking and lookup
  * @parent:       the dentry of the parent in which the operation will occur
@@ -2945,7 +2911,30 @@ static struct dentry *__start_dirop(struct dentry *parent, struct qstr *name,
 struct dentry *start_dirop(struct dentry *parent, struct qstr *name,
 			   unsigned int lookup_flags)
 {
-	return __start_dirop(parent, name, lookup_flags, TASK_NORMAL);
+	struct dentry *dentry;
+	struct inode *dir = d_inode(parent);
+
+	while(1) {
+		unsigned int seq = raw_seqcount_begin(&rename_lock.seqcount);
+
+		dentry = lookup_one_qstr(name, parent, lookup_flags);
+		if (IS_ERR(dentry))
+			return dentry;
+		if (down_write_killable_nested(&dir->i_rwsem, I_MUTEX_PARENT) != 0) {
+				d_lookup_done(dentry);
+				dput(dentry);
+				return ERR_PTR(-EINTR);
+		}
+		if ((lookup_flags & LOOKUP_EXCL) && dentry->d_inode)
+			/* became positive while we waited, try again */
+			;
+		else if (dentry_matches(dentry, parent, name, seq))
+			return dentry;
+		/* Something happened while waiting for the lock, try again */
+		inode_unlock(dir);
+		d_lookup_done(dentry);
+		dput(dentry);
+	}
 }
 
 /**
@@ -3306,6 +3295,9 @@ EXPORT_SYMBOL(lookup_noperm_positive_unlocked);
  * behaviour is similar to O_CREAT without O_EXCL, which doesn't fail
  * with -EEXIST.
  *
+ * If a signal is received or was already pending, the function aborts
+ * with -EINTR;
+ *=
  * Returns: a negative or positive dentry, or an error.
  */
 struct dentry *start_creating(struct mnt_idmap *idmap, struct dentry *parent,
@@ -3333,6 +3325,9 @@ EXPORT_SYMBOL(start_creating);
  *
  * end_removing() should be called when removal is complete, or aborted.
  *
+ * If a signal is received or was already pending, the function aborts
+ * with -EINTR;
+ *
  * Returns: a positive dentry, or an error.
  */
 struct dentry *start_removing(struct mnt_idmap *idmap, struct dentry *parent,
@@ -3345,66 +3340,6 @@ struct dentry *start_removing(struct mnt_idmap *idmap, struct dentry *parent,
 	return start_dirop(parent, name, 0);
 }
 EXPORT_SYMBOL(start_removing);
-
-/**
- * start_creating_killable - prepare to create a given name with permission checking
- * @idmap:  idmap of the mount
- * @parent: directory in which to prepare to create the name
- * @name:   the name to be created
- *
- * Locks are taken and a lookup is performed prior to creating
- * an object in a directory.  Permission checking (MAY_EXEC) is performed
- * against @idmap.
- *
- * If the name already exists, a positive dentry is returned.
- *
- * If a signal is received or was already pending, the function aborts
- * with -EINTR;
- *
- * Returns: a negative or positive dentry, or an error.
- */
-struct dentry *start_creating_killable(struct mnt_idmap *idmap,
-				       struct dentry *parent,
-				       struct qstr *name)
-{
-	int err = lookup_one_common(idmap, name, parent);
-
-	if (err)
-		return ERR_PTR(err);
-	return __start_dirop(parent, name, LOOKUP_CREATE, TASK_KILLABLE);
-}
-EXPORT_SYMBOL(start_creating_killable);
-
-/**
- * start_removing_killable - prepare to remove a given name with permission checking
- * @idmap:  idmap of the mount
- * @parent: directory in which to find the name
- * @name:   the name to be removed
- *
- * Locks are taken and a lookup is performed prior to removing
- * an object from a directory.  Permission checking (MAY_EXEC) is performed
- * against @idmap.
- *
- * If the name doesn't exist, an error is returned.
- *
- * end_removing() should be called when removal is complete, or aborted.
- *
- * If a signal is received or was already pending, the function aborts
- * with -EINTR;
- *
- * Returns: a positive dentry, or an error.
- */
-struct dentry *start_removing_killable(struct mnt_idmap *idmap,
-				       struct dentry *parent,
-				       struct qstr *name)
-{
-	int err = lookup_one_common(idmap, name, parent);
-
-	if (err)
-		return ERR_PTR(err);
-	return __start_dirop(parent, name, 0, TASK_KILLABLE);
-}
-EXPORT_SYMBOL(start_removing_killable);
 
 /**
  * start_creating_noperm - prepare to create a given name without permission checking
@@ -3472,7 +3407,9 @@ EXPORT_SYMBOL(start_removing_noperm);
 struct dentry *start_creating_dentry(struct dentry *parent,
 				     struct dentry *child)
 {
-	inode_lock_nested(parent->d_inode, I_MUTEX_PARENT);
+	if (down_write_killable_nested(&parent->d_inode->i_rwsem,
+				       I_MUTEX_PARENT) < 0)
+		return ERR_PTR(-EINTR);
 	if (unlikely(IS_DEADDIR(parent->d_inode) ||
 		     child->d_parent != parent ||
 		     d_unhashed(child))) {
@@ -3505,7 +3442,9 @@ EXPORT_SYMBOL(start_creating_dentry);
 struct dentry *start_removing_dentry(struct dentry *parent,
 				     struct dentry *child)
 {
-	inode_lock_nested(parent->d_inode, I_MUTEX_PARENT);
+	if (down_write_killable_nested(&parent->d_inode->i_rwsem,
+				       I_MUTEX_PARENT) < 0)
+		return ERR_PTR(-EINTR);
 	if (unlikely(IS_DEADDIR(parent->d_inode) ||
 		     child->d_parent != parent ||
 		     d_unhashed(child))) {
@@ -4313,11 +4252,12 @@ static struct dentry *atomic_open(const struct path *path, struct dentry *dentry
 	file->__f_path.mnt = path->mnt;
 
 	if (open_flag & O_CREAT)
-		inode_lock(dir_inode);
-	else if (inode_lock_shared_killable(dir_inode) != 0) {
-		error = -EINTR;
+		error = inode_lock_killable(dir_inode);
+	else
+		error = inode_lock_shared_killable(dir_inode);
+	if (error)
 		goto out;
-	}
+
 	if (dentry->d_inode)
 		error = finish_no_open(file, NULL);
 	else if (unlikely(IS_DEADDIR(dir_inode)))
@@ -4520,7 +4460,10 @@ retry:
 	if (error)
 		goto out_dput;
 
-	inode_lock(dir_inode);
+	error = inode_lock_killable(dir_inode);
+		if (error)
+			goto out_dput;
+
 		if (!dentry->d_inode && !unlikely(IS_DEADDIR(dir_inode))) {
 			file->f_mode |= FMODE_CREATED;
 	if (!dir_inode->i_op->create) {
