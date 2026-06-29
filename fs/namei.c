@@ -4503,9 +4503,6 @@ retry:
 		goto out;
 	}
 
-	if (O_IS_MKDIR(open_flag) && dir_inode->i_op->atomic_open)
-		open_flag &= ~O_CREAT;
-
 	file->f_mode &= ~FMODE_CREATED;
 	dentry = d_lookup(dir, &nd->last);
 	for (;;) {
