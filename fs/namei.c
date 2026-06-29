@@ -4479,7 +4479,7 @@ retry:
 		dentry = NULL;
 	}
 	if (dentry->d_inode) {
-		/* Cached positive dentry: will open in f_op->open */
+		/* Cached positive dentry: will open in do_open(). */
 		goto out;
 	}
 
@@ -4511,11 +4511,23 @@ retry:
 	if (create_error)
 		open_flag &= ~O_CREAT;
 	if (dir_inode->i_op->atomic_open) {
+		struct dentry *orig_dentry = dentry;
 		if (nd->flags & LOOKUP_DIRECTORY)
 			open_flag |= O_DIRECTORY;
+		dget(orig_dentry);
 		dentry = atomic_open(&nd->path, dentry, file, open_flag, mode);
-		if (unlikely(create_error) && dentry == ERR_PTR(-ENOENT))
-			dentry = ERR_PTR(create_error);
+		error = PTR_ERR_OR_ZERO(dentry);
+		if (unlikely(error))
+			dentry = orig_dentry;
+		else
+			dput(orig_dentry);
+		if (unlikely(create_error) && error == -ENOENT) {
+			/* Should have done a create, but we already errored. */
+			audit_inode_child(dir->d_inode, dentry, AUDIT_TYPE_CHILD_CREATE);
+			error = create_error;
+		}
+		if (unlikely(error))
+			goto out_dput;
 		goto out;
 	}
 
@@ -4532,32 +4544,36 @@ retry:
 			dentry = res;
 		}
 	}
+	if (dentry->d_inode || !(op->open_flag & O_CREAT)) {
+		/* No need to create a file. If lookup returned a positive
+		 * dentry, the file will be opened in do_open(). */
+		return dentry;
+	}
 
-	if (unlikely(create_error) && !dentry->d_inode) {
+	/* Negative dentry with O_CREAT flag set */
+	audit_inode_child(dir->d_inode, dentry, AUDIT_TYPE_CHILD_CREATE);
+
+	if (unlikely(create_error)) {
+		/* Should have done a create, but we already errored */
 		error = create_error;
 		goto out_dput;
 	}
 
-	/* Negative dentry, just create the file */
-	if (!dentry->d_inode && (open_flag & O_CREAT)) {
-		/* but break the directory lease first! */
-		error = try_break_deleg(dir_inode, LEASE_BREAK_DIR_CREATE, &delegated_inode);
-		if (error)
-			goto out_dput;
+	error = try_break_deleg(dir_inode, LEASE_BREAK_DIR_CREATE, &delegated_inode);
+	if (error)
+		goto out_dput;
 
-		file->f_mode |= FMODE_CREATED;
-		audit_inode_child(dir_inode, dentry, AUDIT_TYPE_CHILD_CREATE);
-		if (!dir_inode->i_op->create) {
-			error = -EACCES;
-			goto out_dput;
-		}
-
-		error = dir_inode->i_op->create(idmap, dir_inode, dentry, mode);
-		if (error)
-			goto out_dput;
-
-		fsnotify_create(dir_inode, dentry);
+	file->f_mode |= FMODE_CREATED;
+	if (!dir_inode->i_op->create) {
+		error = -EACCES;
+		goto out_dput;
 	}
+
+	error = dir_inode->i_op->create(idmap, dir_inode, dentry, mode);
+	if (error)
+		goto out_dput;
+
+	fsnotify_create(dir_inode, dentry);
 
 out:
 	if ((open_flag & O_CREAT) || create_error)
