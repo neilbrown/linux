@@ -4360,7 +4360,7 @@ static int may_o_create(struct mnt_idmap *idmap,
  * be set.  The caller will need to perform the open themselves.  @path will
  * have been updated to point to the new dentry.  This may be negative.
  *
- * Returns an error code otherwise.
+ * Returns an error code otherwise. On error the ref to dentry is kept.
  */
 static struct dentry *atomic_open(const struct path *path, struct dentry *dentry,
 				  struct file *file,
@@ -4384,17 +4384,24 @@ static struct dentry *atomic_open(const struct path *path, struct dentry *dentry
 		} else if (WARN_ON(file->f_path.dentry == DENTRY_NOT_SET)) {
 			error = -EIO;
 		} else {
+			struct dentry *old = dentry;
+			bool replaced = false;
 			if (file->f_path.dentry) {
-				dput(dentry);
 				dentry = file->f_path.dentry;
+				replaced = dentry != old;
 			}
-			if (unlikely(d_is_negative(dentry)))
+			if (unlikely(d_is_negative(dentry))) {
+				/* Do not drop original dentry ref on error */
+				if (replaced)
+					dput(dentry);
 				error = -ENOENT;
+			} else if (replaced) {
+				dput(old);
+			}
 		}
 	}
 
 	if (error) {
-		dput(dentry);
 		dentry = ERR_PTR(error);
 	} else {
 		if (file->f_mode & FMODE_CREATED)
@@ -4514,13 +4521,10 @@ retry:
 		struct dentry *orig_dentry = dentry;
 		if (nd->flags & LOOKUP_DIRECTORY)
 			open_flag |= O_DIRECTORY;
-		dget(orig_dentry);
 		dentry = atomic_open(&nd->path, dentry, file, open_flag, mode);
 		error = PTR_ERR_OR_ZERO(dentry);
 		if (unlikely(error))
-			dentry = orig_dentry;
-		else
-			dput(orig_dentry);
+			dentry = orig_dentry; /* atomic_open() keeps ref on error */
 		if (unlikely(create_error) && error == -ENOENT) {
 			/* Should have done a create, but we already errored. */
 			audit_inode_child(dir->d_inode, dentry, AUDIT_TYPE_CHILD_CREATE);
@@ -5143,18 +5147,10 @@ struct file *dentry_create(struct path *path, int flags, umode_t mode,
 		if (create_error)
 			flags &= ~O_CREAT;
 
-		/* atomic_open will dput(dentry) on error */
-		dget(orig_dentry);
 		dentry = atomic_open(path, dentry, file, flags, mode);
 		error = PTR_ERR_OR_ZERO(dentry);
-
-		if (IS_ERR(dentry))
-			/* keep the original */
+		if (unlikely(error))
 			dentry = orig_dentry;
-		else
-			/* Drop the extra reference */
-			dput(orig_dentry);
-
 		if (unlikely(create_error) && error == -ENOENT)
 			error = create_error;
 
