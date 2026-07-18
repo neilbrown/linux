@@ -103,18 +103,23 @@ EXPORT_SYMBOL(dcache_dir_close);
  * We are looking for <count>th positive after <p>; if
  * found, dentry is grabbed and returned to caller.
  * If no such element exists, NULL is returned.
+ * If last has been removed from the d_children list
+ * (i.e. last->d_sib is unhashed) then it is treated like
+ * the last element of the list and %NULL is returned.
  */
 static struct dentry *scan_positives(struct dentry *cursor,
-					struct hlist_node **p,
-					loff_t count,
-					struct dentry *last)
+				     struct dentry *last,
+				     loff_t count)
 {
 	struct dentry *dentry = cursor->d_parent, *found = NULL;
+	struct dentry *next;
 
 	spin_lock(&dentry->d_lock);
-	while (*p) {
-		struct dentry *d = hlist_entry(*p, struct dentry, d_sib);
-		p = &d->d_sib.next;
+	next = last ? d_next_sibling(last) : d_first_child(dentry);
+	while (next) {
+		struct dentry *d = next;
+
+		next = d_next_sibling(next);
 		// we must at least skip cursors, to avoid livelocks
 		if (d->d_flags & DCACHE_DENTRY_CURSOR)
 			continue;
@@ -129,10 +134,10 @@ static struct dentry *scan_positives(struct dentry *cursor,
 		}
 		if (need_resched()) {
 			hlist_move_behind(&cursor->d_sib, &d->d_sib);
-			p = &cursor->d_sib.next;
 			spin_unlock(&dentry->d_lock);
 			cond_resched();
 			spin_lock(&dentry->d_lock);
+			next = d_next_sibling(cursor);
 		}
 	}
 	spin_unlock(&dentry->d_lock);
@@ -161,8 +166,7 @@ loff_t dcache_dir_lseek(struct file *file, loff_t offset, int whence)
 		inode_lock_shared(dentry->d_inode);
 
 		if (offset > 2)
-			to = scan_positives(cursor, &dentry->d_children.first,
-					    offset - 2, NULL);
+			to = scan_positives(cursor, NULL, offset - 2);
 		spin_lock(&dentry->d_lock);
 		if (to)
 			hlist_move_behind(&cursor->d_sib, &to->d_sib);
@@ -190,23 +194,19 @@ int dcache_readdir(struct file *file, struct dir_context *ctx)
 	struct dentry *dentry = file->f_path.dentry;
 	struct dentry *cursor = file->private_data;
 	struct dentry *next = NULL;
-	struct hlist_node **p;
 
 	if (!dir_emit_dots(file, ctx))
 		return 0;
 
-	if (ctx->pos == 2)
-		p = &dentry->d_children.first;
-	else
-		p = &cursor->d_sib.next;
+	if (ctx->pos > 2)
+		next = dget(cursor);
 
-	while ((next = scan_positives(cursor, p, 1, next)) != NULL) {
+	while ((next = scan_positives(cursor, next, 1)) != NULL) {
 		if (!dir_emit(ctx, next->d_name.name, next->d_name.len,
 			      d_inode(next)->i_ino,
 			      fs_umode_to_dtype(d_inode(next)->i_mode)))
 			break;
 		ctx->pos++;
-		p = &next->d_sib.next;
 	}
 	spin_lock(&dentry->d_lock);
 	if (next)
