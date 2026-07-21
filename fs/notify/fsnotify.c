@@ -85,16 +85,11 @@ void fsnotify_set_children_dentry_flags(struct inode *inode)
 		/* run all of the children of the original inode and fix their
 		 * d_flags to indicate parental interest (their parent is the
 		 * original inode) */
-		spin_lock(&alias->d_lock);
-		hlist_for_each_entry(child, &alias->d_children, d_sib) {
-			if (!child->d_inode)
-				continue;
-
+		d_for_each_positive_child(child, alias) {
 			spin_lock_nested(&child->d_lock, DENTRY_D_LOCK_NESTED);
 			child->d_flags |= DCACHE_FSNOTIFY_PARENT_WATCHED;
 			spin_unlock(&child->d_lock);
 		}
-		spin_unlock(&alias->d_lock);
 	}
 	spin_unlock(&inode->i_lock);
 }

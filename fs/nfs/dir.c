@@ -1492,10 +1492,8 @@ static void nfs_clear_verifier_directory(struct inode *dir)
 
 	spin_lock(&this_parent->d_lock);
 	nfs_unset_verifier_delegated(&this_parent->d_time);
-	dentry = d_first_child(this_parent);
-	hlist_for_each_entry_from(dentry, d_sib) {
-		if (unlikely(dentry->d_flags & DCACHE_DENTRY_CURSOR))
-			continue;
+	spin_unlock(&this_parent->d_lock);
+	d_for_each_positive_child(dentry, this_parent) {
 		inode = d_inode_rcu(dentry);
 		if (inode &&
 		    NFS_PROTO(inode)->have_delegation(inode, FMODE_READ, 0))
@@ -1504,7 +1502,6 @@ static void nfs_clear_verifier_directory(struct inode *dir)
 		nfs_unset_verifier_delegated(&dentry->d_time);
 		spin_unlock(&dentry->d_lock);
 	}
-	spin_unlock(&this_parent->d_lock);
 }
 
 /**

@@ -2182,14 +2182,10 @@ static bool drop_negative_children(struct dentry *dentry)
 	if (!d_is_dir(dentry))
 		goto out;
 
-	spin_lock(&dentry->d_lock);
-	hlist_for_each_entry(child, &dentry->d_children, d_sib) {
-		if (d_really_is_positive(child)) {
-			all_negative = false;
-			break;
-		}
+	d_for_each_positive_child(child, dentry) {
+		all_negative = false;
+		break;
 	}
-	spin_unlock(&dentry->d_lock);
 
 	if (all_negative)
 		shrink_dcache_parent(dentry);
