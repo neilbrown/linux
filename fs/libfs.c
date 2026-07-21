@@ -112,17 +112,9 @@ static struct dentry *scan_positives(struct dentry *cursor,
 				     loff_t count)
 {
 	struct dentry *dentry = cursor->d_parent, *found = NULL;
-	struct dentry *next;
+	struct dentry *d = last;
 
-	spin_lock(&dentry->d_lock);
-	next = last ? d_next_sibling(last) : d_first_child(dentry);
-	while (next) {
-		struct dentry *d = next;
-
-		next = d_next_sibling(next);
-		// we must at least skip cursors, to avoid livelocks
-		if (d->d_flags & DCACHE_DENTRY_CURSOR)
-			continue;
+	d_for_each_positive_child_continue(d, dentry) {
 		if (simple_positive(d) && !--count) {
 			spin_lock_nested(&d->d_lock, DENTRY_D_LOCK_NESTED);
 			if (simple_positive(d))
@@ -132,15 +124,7 @@ static struct dentry *scan_positives(struct dentry *cursor,
 				break;
 			count = 1;
 		}
-		if (need_resched()) {
-			hlist_move_behind(&cursor->d_sib, &d->d_sib);
-			spin_unlock(&dentry->d_lock);
-			cond_resched();
-			spin_lock(&dentry->d_lock);
-			next = d_next_sibling(cursor);
-		}
 	}
-	spin_unlock(&dentry->d_lock);
 	dput(last);
 	return found;
 }
