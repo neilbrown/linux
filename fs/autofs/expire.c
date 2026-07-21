@@ -72,10 +72,7 @@ done:
 
 static struct dentry *positive_after(struct dentry *p, struct dentry *child)
 {
-	spin_lock(&p->d_lock);
-	child = child ? d_next_sibling(child) : d_first_child(p);
-
-	hlist_for_each_entry_from(child, d_sib) {
+	d_for_each_positive_child_continue(child, p) {
 		spin_lock_nested(&child->d_lock, DENTRY_D_LOCK_NESTED);
 		if (simple_positive(child)) {
 			dget_dlock(child);
@@ -85,8 +82,6 @@ static struct dentry *positive_after(struct dentry *p, struct dentry *child)
 		}
 		spin_unlock(&child->d_lock);
 	}
-	spin_unlock(&p->d_lock);
-
 	return NULL;
 }
 
