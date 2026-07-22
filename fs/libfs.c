@@ -107,11 +107,11 @@ EXPORT_SYMBOL(dcache_dir_close);
  * (i.e. last->d_sib is unhashed) then it is treated like
  * the last element of the list and %NULL is returned.
  */
-static struct dentry *scan_positives(struct dentry *cursor,
+static struct dentry *scan_positives(struct dentry *dentry,
 				     struct dentry *last,
 				     loff_t count)
 {
-	struct dentry *dentry = cursor->d_parent, *found = NULL;
+	struct dentry *found = NULL;
 	struct dentry *d = last;
 
 	d_for_each_positive_child_continue(d, dentry) {
@@ -150,7 +150,7 @@ loff_t dcache_dir_lseek(struct file *file, loff_t offset, int whence)
 		inode_lock_shared(dentry->d_inode);
 
 		if (offset > 2)
-			to = scan_positives(cursor, NULL, offset - 2);
+			to = scan_positives(dentry, NULL, offset - 2);
 		spin_lock(&dentry->d_lock);
 		if (to)
 			hlist_move_behind(&cursor->d_sib, &to->d_sib);
@@ -185,7 +185,7 @@ int dcache_readdir(struct file *file, struct dir_context *ctx)
 	if (ctx->pos > 2)
 		next = dget(cursor);
 
-	while ((next = scan_positives(cursor, next, 1)) != NULL) {
+	while ((next = scan_positives(dentry, next, 1)) != NULL) {
 		if (!dir_emit(ctx, next->d_name.name, next->d_name.len,
 			      d_inode(next)->i_ino,
 			      fs_umode_to_dtype(d_inode(next)->i_mode)))
