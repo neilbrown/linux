@@ -136,11 +136,13 @@ void lockref_mark_dead(struct lockref *lockref)
 EXPORT_SYMBOL(lockref_mark_dead);
 
 /**
- * lockref_get_not_dead - Increments count unless the ref is dead
+ * lockref_get_not_dead_nested - Increments count unless the ref is dead
  * @lockref: pointer to lockref structure
+ * @subclass: lockdep class for taking ->lock
+ *
  * Return: 1 if count updated successfully or 0 if lockref was dead
  */
-bool lockref_get_not_dead(struct lockref *lockref)
+bool lockref_get_not_dead_nested(struct lockref *lockref, int subclass)
 {
 	bool retval = false;
 
@@ -152,7 +154,7 @@ bool lockref_get_not_dead(struct lockref *lockref)
 		return true;
 	);
 
-	spin_lock(&lockref->lock);
+	spin_lock_nested(&lockref->lock, subclass);
 	if (lockref->count >= 0) {
 		lockref->count++;
 		retval = true;
@@ -160,4 +162,4 @@ bool lockref_get_not_dead(struct lockref *lockref)
 	spin_unlock(&lockref->lock);
 	return retval;
 }
-EXPORT_SYMBOL(lockref_get_not_dead);
+EXPORT_SYMBOL(lockref_get_not_dead_nested);

@@ -52,7 +52,17 @@ bool lockref_get_not_zero(struct lockref *lockref);
 bool lockref_put_or_lock(struct lockref *lockref) __cond_acquires(false, &lockref->lock);
 
 void lockref_mark_dead(struct lockref *lockref);
-bool lockref_get_not_dead(struct lockref *lockref);
+bool lockref_get_not_dead_nested(struct lockref *lockref, int subclass);
+/**
+ * lockref_get_not_dead - Increments count unless the ref is dead
+ * @lockref: pointer to lockref structure
+ *
+ * Return: 1 if count updated successfully or 0 if lockref was dead
+ */
+static inline bool lockref_get_not_dead(struct lockref *lockref)
+{
+	return lockref_get_not_dead_nested(lockref, 0);
+}
 
 /* Must be called under spinlock for reliable results */
 static inline bool __lockref_is_dead(const struct lockref *l)
