@@ -656,10 +656,15 @@ static inline struct dentry *d_next_sibling(const struct dentry *dentry)
 	return hlist_entry_safe(dentry->d_sib.next, struct dentry, d_sib);
 }
 
+struct dentry *d_next_sibling_sched(struct dentry *child);
+
 static inline struct dentry *d_next_positive(struct dentry *child)
 {
 	do {
-		child = d_next_sibling(child);
+		if (need_resched())
+			child = d_next_sibling_sched(child);
+		else
+			child = d_next_sibling(child);
 	} while (child && !d_really_is_positive(child));
 	return child;
 }
@@ -691,9 +696,11 @@ static inline struct dentry *d_first_positive(const struct dentry *parent,
  * which have at some point in the past been positive.
  */
 #define d_for_each_positive_child(child, parent)			\
-	scoped_guard(spinlock, &parent->d_lock)				\
-		for (child = d_first_positive(parent, NULL); child;	\
-		     child = d_next_positive(child))
+	if (({might_sleep();0;})) ; else				\
+		scoped_guard(spinlock, &parent->d_lock)			\
+			for (child = d_first_positive(parent, NULL);	\
+			     child;					\
+			     child = d_next_positive(child))
 
 /**
  * d_for_each_positive_child_continue - iterate over remaining positive children
@@ -710,9 +717,11 @@ static inline struct dentry *d_first_positive(const struct dentry *parent,
  *
  */
 #define d_for_each_positive_child_continue(child, parent)		\
-	scoped_guard(spinlock, &parent->d_lock)				\
-		for (child = d_first_positive(parent, child); child;	\
-		     child = d_next_positive(child))
+	if (({might_sleep();0;})) ; else				\
+		scoped_guard(spinlock, &parent->d_lock)			\
+			for (child = d_first_positive(parent, child);	\
+			     child;					\
+			     child = d_next_positive(child))
 
 void set_default_d_op(struct super_block *, const struct dentry_operations *);
 struct dentry *d_make_persistent(struct dentry *, struct inode *);
