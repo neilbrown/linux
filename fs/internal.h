@@ -235,6 +235,7 @@ extern struct dentry *__d_lookup(const struct dentry *, const struct qstr *);
 extern struct dentry *d_lookup(const struct dentry *, const struct qstr *);
 extern struct dentry *__d_lookup_rcu(const struct dentry *parent,
 				const struct qstr *name, unsigned *seq);
+#define D_LOOKUP_NEEDS_RETRY ((void*)1)
 
 bool dentry_matches(struct dentry *dentry,
 		    struct dentry *base, const struct qstr *last,

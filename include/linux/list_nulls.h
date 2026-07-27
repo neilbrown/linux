@@ -30,6 +30,12 @@ struct hlist_nulls_node {
 	((ptr)->first = (struct hlist_nulls_node *) NULLS_MARKER(nulls))
 #define HLIST_NULLS_HEAD_INIT(nulls) {.first = (struct hlist_nulls_node *)NULLS_MARKER(nulls)}
 
+static inline void INIT_HLIST_NULLS_NODE(struct hlist_nulls_node *h)
+{
+	h->next = NULL;
+	h->pprev = NULL;
+}
+
 #define hlist_nulls_entry(ptr, type, member) container_of(ptr,type,member)
 
 #define hlist_nulls_entry_safe(ptr, type, member) \

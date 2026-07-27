@@ -42,7 +42,7 @@
  * Usage:
  * dcache->d_inode->i_lock protects:
  *   - i_dentry, d_alias, d_inode of aliases
- * dcache_hash_bucket lock protects:
+ * dcache_hash bucket bit-lock protects:
  *   - the dcache hash table
  * s_roots_lock protects:
  *   - the s_roots list (see __d_move()/dentry_unlist()/d_obtain_root())
@@ -102,8 +102,14 @@ EXPORT_SYMBOL(dotdot_name);
  * to the dcache: the hashtable for lookups. Somebody should try
  * to make this good - I've just made it work.
  *
- * This hash-function tries to avoid losing too many bits of hash
- * information, yet avoid using a prime hash-size or similar.
+ * Hash table is both "bl" with bit spin-locks in the head, and "nulls"
+ * with the ->next pointer of the final element in a chain (if there is
+ * one) being a NULLS_MARKER() of the hash value.  If d_move() races
+ * with an rcu-walk and causes the walker to go down a different chain,
+ * it will notice when it gets to the end and the NULLS marker is wrong.
+ *
+ * This hash-function hash_name() tries to avoid losing too many bits of
+ * hash information, yet avoid using a prime hash-size or similar.
  *
  * Marking the variables "used" ensures that the compiler doesn't
  * optimize them away completely on architectures with runtime
@@ -113,12 +119,19 @@ EXPORT_SYMBOL(dotdot_name);
 
 static unsigned int d_hash_shift __ro_after_init __used;
 
-static struct hlist_bl_head *dentry_hashtable __ro_after_init __used;
+static struct hlist_bl_nulls_head *dentry_hashtable __ro_after_init __used;
 
-static inline struct hlist_bl_head *d_hash(unsigned long hashlen)
+static inline struct hlist_bl_nulls_head *d_hash(unsigned long hashlen)
 {
 	return runtime_const_ptr(dentry_hashtable) +
 		runtime_const_shift_right_32(hashlen, d_hash_shift);
+}
+
+static inline struct hlist_nulls_node *d_nulls(unsigned long hashlen)
+{
+	return (struct hlist_nulls_node*)
+		NULLS_MARKER(runtime_const_shift_right_32(hashlen,
+							  d_hash_shift));
 }
 
 #define IN_LOOKUP_SHIFT 10
@@ -565,11 +578,9 @@ static void d_lru_shrink_move(struct list_lru_one *lru, struct dentry *dentry,
 
 static void ___d_drop(struct dentry *dentry)
 {
-	struct hlist_bl_head *b = d_hash(dentry->d_name.hash);
+	struct hlist_bl_nulls_head *b = d_hash(dentry->d_name.hash);
 
-	hlist_bl_lock(b);
-	__hlist_bl_del(&dentry->d_hash);
-	hlist_bl_unlock(b);
+	hlist_bl_nulls_lock_del(&dentry->d_hash, b);
 }
 
 void __d_drop(struct dentry *dentry)
@@ -1706,7 +1717,7 @@ static void __d_init(struct dentry *dentry, struct super_block *sb)
 	dentry->d_op = sb->__s_d_op;
 	dentry->d_flags = sb->s_d_flags;
 	dentry->d_fsdata = NULL;
-	INIT_HLIST_BL_NODE(&dentry->d_hash);
+	INIT_HLIST_NULLS_NODE(&dentry->d_hash);
 	INIT_LIST_HEAD(&dentry->d_lru);
 	INIT_HLIST_HEAD(&dentry->d_children);
 	dentry->waiters = NULL;
@@ -2370,8 +2381,8 @@ static __always_inline struct dentry *__do_d_lookup(
 	const int flags)
 {
 	u64 hashlen = name->hash_len;
-	struct hlist_bl_head *b = d_hash(hashlen);
-	struct hlist_bl_node *node;
+	struct hlist_bl_nulls_head *b = d_hash(hashlen);
+	struct hlist_nulls_node *node;
 	struct dentry *dentry;
 	const unsigned char *str = name->name;
 
@@ -2384,12 +2395,14 @@ static __always_inline struct dentry *__do_d_lookup(
 	 *
 	 * It is possible that concurrent renames can mess up our list
 	 * walk here and result in missing our dentry, resulting in the
-	 * false-negative result. d_lookup() protects against concurrent
-	 * renames using rename_lock seqlock.
+	 * false-negative result.  d_lookup() protects against
+	 * concurrent renames using rename_Lock_seqlock and the NULLS
+	 * pointer at the end of the chain.
 	 *
 	 * See Documentation/filesystems/path-lookup.txt for more details.
 	 */
-	hlist_bl_for_each_entry_rcu(dentry, node, b, d_hash) {
+	node = hlist_bl_nulls_first(b, d_nulls(hashlen));
+	hlist_nulls_for_each_entry_from_rcu(dentry, node, d_hash) {
 		unsigned int seq = 0;
 
 		if (dentry->d_name.hash_len != hashlen)
@@ -2460,7 +2473,19 @@ seqretry:
 			}
 		}
 	}
+	if (node != d_nulls(hashlen))
+		return D_LOOKUP_NEEDS_RETRY;
 	return NULL;
+}
+
+static struct dentry *__d_lookup_rcu_retry(const struct dentry *parent,
+					   const struct qstr *name,
+					   unsigned *seqp)
+{
+	if (unlikely(parent->d_flags & DCACHE_OP_COMPARE))
+		return __do_d_lookup(parent, name, seqp, D_LOOKUP_OP_COMPARE);
+	else
+		return __do_d_lookup(parent, name, seqp, 0);
 }
 
 /**
@@ -2493,10 +2518,10 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
 				const struct qstr *name,
 				unsigned *seqp)
 {
-	if (unlikely(parent->d_flags & DCACHE_OP_COMPARE))
-		return __do_d_lookup(parent, name, seqp, D_LOOKUP_OP_COMPARE);
-	else
-		return __do_d_lookup(parent, name, seqp, 0);
+	struct dentry *dentry = __d_lookup_rcu_retry(parent, name, seqp);
+	if (dentry == D_LOOKUP_NEEDS_RETRY)
+		dentry = NULL;
+	return dentry;
 }
 
 /**
@@ -2512,16 +2537,22 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
  */
 struct dentry *d_lookup(const struct dentry *parent, const struct qstr *name)
 {
-	struct dentry *dentry;
-	unsigned seq;
+	while (1) {
+		struct dentry *dentry;
+		unsigned int seq;
 
-	do {
-		seq = read_seqbegin(&rename_lock);
-		dentry = __d_lookup(parent, name);
-		if (dentry)
-			break;
-	} while (read_seqretry(&rename_lock, seq));
-	return dentry;
+		dentry = __d_lookup_rcu(parent, name, &seq);
+		if (!dentry)
+			return dentry;
+
+		if (dentry == D_LOOKUP_NEEDS_RETRY)
+			continue;
+		if (!lockref_get_not_dead(&dentry->d_lockref))
+			continue;
+		if (!read_seqcount_retry(&dentry->d_seq, seq))
+			return dentry;
+		dput(dentry);
+	}
 }
 
 /**
@@ -2533,9 +2564,8 @@ struct dentry *d_lookup(const struct dentry *parent, const struct qstr *name)
  * __d_lookup is like d_lookup, however it may (rarely) return a
  * false-negative result due to unrelated rename activity.
  *
- * __d_lookup is slightly faster by avoiding rename_lock read seqlock,
- * however it must be used carefully, eg. with a following d_lookup in
- * the case of failure.
+ * __d_lookup is appropriate when a failure will result in a repeated
+ * lookup which will be retry if needed.
  *
  * __d_lookup callers must be commented.
  */
@@ -2547,7 +2577,7 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 		unsigned int seq;
 
 		dentry = __d_lookup_rcu(parent, name, &seq);
-		if (!dentry)
+		if (!dentry || dentry == D_LOOKUP_NEEDS_RETRY)
 			return dentry;
 		if (!lockref_get_not_dead(&dentry->d_lockref))
 			continue;
@@ -2619,11 +2649,10 @@ EXPORT_SYMBOL(d_delete);
 
 static void __d_rehash(struct dentry *entry)
 {
-	struct hlist_bl_head *b = d_hash(entry->d_name.hash);
+	u32 hash = entry->d_name.hash;
+	struct hlist_bl_nulls_head *b = d_hash(hash);
 
-	hlist_bl_lock(b);
-	hlist_bl_add_head_rcu(&entry->d_hash, b);
-	hlist_bl_unlock(b);
+	hlist_bl_nulls_lock_add_head(&entry->d_hash, b, d_nulls(hash));
 }
 
 static inline unsigned start_dir_add(struct inode *dir)
@@ -2727,8 +2756,8 @@ retry:
 	seq = smp_load_acquire(&parent->d_inode->i_dir_seq);
 	r_seq = read_seqbegin(&rename_lock);
 	rcu_read_lock();
-	dentry = __d_lookup_rcu(parent, name, &d_seq);
-	if (unlikely(dentry)) {
+	dentry = __d_lookup_rcu_retry(parent, name, &d_seq);
+	if (unlikely(dentry != NULL && dentry != D_LOOKUP_NEEDS_RETRY)) {
 		if (!lockref_get_not_dead(&dentry->d_lockref)) {
 			rcu_read_unlock();
 			goto retry;
@@ -2743,6 +2772,9 @@ retry:
 	}
 	rcu_read_unlock();
 	if (unlikely(read_seqretry(&rename_lock, r_seq)))
+		goto retry;
+
+	if (unlikely(dentry == D_LOOKUP_NEEDS_RETRY))
 		goto retry;
 
 	if (unlikely(seq & 1))

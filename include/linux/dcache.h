@@ -1,3 +1,4 @@
+
 /* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __LINUX_DCACHE_H
 #define __LINUX_DCACHE_H
@@ -6,7 +7,7 @@
 #include <linux/list.h>
 #include <linux/math.h>
 #include <linux/rculist.h>
-#include <linux/rculist_bl.h>
+#include <linux/rculist_bl_nulls.h>
 #include <linux/spinlock.h>
 #include <linux/seqlock.h>
 #include <linux/cache.h>
@@ -94,7 +95,7 @@ struct dentry {
 	/* RCU lookup touched fields */
 	unsigned int d_flags;		/* protected by d_lock */
 	seqcount_spinlock_t d_seq;	/* per dentry seqlock */
-	struct hlist_bl_node d_hash;	/* lookup hash list */
+	struct hlist_nulls_node d_hash;	/* lookup hash list */
 	struct dentry *d_parent;	/* parent directory */
 	union {
 	struct qstr __d_name;		/* for use ONLY in fs/dcache.c */
@@ -406,7 +407,7 @@ extern struct dentry *dget_parent(struct dentry *dentry);
  */
 static inline int d_unhashed(const struct dentry *dentry)
 {
-	return hlist_bl_unhashed(&dentry->d_hash);
+	return hlist_nulls_unhashed(&dentry->d_hash);
 }
 
 static inline int d_unlinked(const struct dentry *dentry)
