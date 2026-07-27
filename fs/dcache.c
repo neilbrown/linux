@@ -3144,20 +3144,16 @@ static void __d_move(struct dentry *dentry, struct dentry *target,
 	} else {
 		target->d_parent = old_parent;
 		swap_names(dentry, target);
-		if (target->d_parent != dentry->d_parent) {
-			if (!hlist_unhashed(&target->d_sib))
-				__hlist_del(&target->d_sib);
-			hlist_add_head(&target->d_sib,
-				       &target->d_parent->d_children);
-		}
+		if (!hlist_unhashed(&target->d_sib))
+			__hlist_del(&target->d_sib);
+		hlist_add_head(&target->d_sib,
+			       &target->d_parent->d_children);
 		__d_rehash(target);
 		fsnotify_update_flags(target);
 	}
-	if (dentry->d_parent != old_parent) {
-		if (!hlist_unhashed(&dentry->d_sib))
-			__hlist_del(&dentry->d_sib);
-		hlist_add_head(&dentry->d_sib, &dentry->d_parent->d_children);
-	}
+	if (!hlist_unhashed(&dentry->d_sib))
+		__hlist_del(&dentry->d_sib);
+	hlist_add_head(&dentry->d_sib, &dentry->d_parent->d_children);
 
 	/*
 	 * Adjust parent refcounts if either d_children ended up empty.
@@ -3189,6 +3185,78 @@ static void __d_move(struct dentry *dentry, struct dentry *target,
 }
 
 /*
+ * __d_move - move a dentry without changing parent
+ * @dentry: entry to move
+ * @target: new dentry
+ * @exchange: exchange the two dentries
+ *
+ * Update the dcache to reflect the move of a file name. Negative dcache
+ * entries should not be moved in this way. Caller must hold the
+ * i_rwsem of the parent directory (exclusively).
+ */
+static void __d_move_sibs(struct dentry *dentry, struct dentry *target,
+			  bool exchange)
+{
+	struct inode *dir = NULL;
+	unsigned n;
+
+	WARN_ON(!dentry->d_inode);
+	if (WARN_ON(dentry == target))
+		return;
+	if (WARN_ON(dentry->d_parent != target->d_parent))
+		return;
+	if (WARN_ON(hlist_unhashed(&dentry->d_sib) ||
+		    hlist_unhashed(&target->d_sib)))
+		return;
+
+	/* This cannot deadlock as both dentries are locked
+	 * by start_renaming() or similar so no other thread
+	 * can try this on the same dentries in the reverse order.
+	 */
+	spin_lock_nested(&dentry->d_lock, 2);
+	spin_lock_nested(&target->d_lock, 3);
+
+	if (unlikely(d_in_lookup(target))) {
+		dir = target->d_parent->d_inode;
+		n = start_dir_add(dir);
+		__d_lookup_unhash(target);
+	}
+
+	write_seqcount_begin(&dentry->d_seq);
+	write_seqcount_begin_nested(&target->d_seq, DENTRY_D_LOCK_NESTED);
+
+	/* unhash both */
+	if (!d_unhashed(dentry))
+		___d_drop(dentry);
+	if (!d_unhashed(target))
+		___d_drop(target);
+
+	/* ... and switch them in the tree */
+
+	if (!exchange) {
+		copy_name(dentry, target);
+		target->d_hash.pprev = NULL;
+	} else {
+		swap_names(dentry, target);
+		__d_rehash(target);
+	}
+
+	__d_rehash(dentry);
+	fscrypt_handle_d_move(dentry);
+
+	write_seqcount_end(&target->d_seq);
+	write_seqcount_end(&dentry->d_seq);
+
+	if (dir) {
+		end_dir_add(dir, n);
+		__d_wake_in_lookup_waiters(target);
+	}
+
+	spin_unlock(&target->d_lock);
+	spin_unlock(&dentry->d_lock);
+}
+
+/*
  * d_move - move a dentry
  * @dentry: entry to move
  * @target: new dentry
@@ -3199,9 +3267,13 @@ static void __d_move(struct dentry *dentry, struct dentry *target,
  */
 void d_move(struct dentry *dentry, struct dentry *target)
 {
-	write_seqlock(&rename_lock);
-	__d_move(dentry, target, false);
-	write_sequnlock(&rename_lock);
+	if (dentry->d_parent == target->d_parent)
+		__d_move_sibs(dentry, target, false);
+	else {
+		write_seqlock(&rename_lock);
+		__d_move(dentry, target, false);
+		write_sequnlock(&rename_lock);
+	}
 }
 EXPORT_SYMBOL(d_move);
 
@@ -3212,16 +3284,18 @@ EXPORT_SYMBOL(d_move);
  */
 void d_exchange(struct dentry *dentry1, struct dentry *dentry2)
 {
-	write_seqlock(&rename_lock);
-
 	WARN_ON(!dentry1->d_inode);
 	WARN_ON(!dentry2->d_inode);
 	WARN_ON(IS_ROOT(dentry1));
 	WARN_ON(IS_ROOT(dentry2));
 
-	__d_move(dentry1, dentry2, true);
-
-	write_sequnlock(&rename_lock);
+	if (dentry1->d_parent == dentry2->d_parent)
+		__d_move_sibs(dentry1, dentry2, true);
+	else {
+		write_seqlock(&rename_lock);
+		__d_move(dentry1, dentry2, true);
+		write_sequnlock(&rename_lock);
+	}
 }
 EXPORT_SYMBOL(d_exchange);
 
