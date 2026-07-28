@@ -12,9 +12,40 @@
 struct prepend_buffer {
 	char *buf;
 	int len;
+	bool matched;
+	int retries; /* remaining retries.  On zero, take locks */
+	int lastlen; /* The previous length that we hope to match */
 };
-#define DECLARE_BUFFER(__name, __buf, __len) \
-	struct prepend_buffer __name = {.buf = __buf + __len, .len = __len}
+#define DECLARE_BUFFER(__name, __buf, __len)				\
+	struct prepend_buffer __name = {.buf = __buf + __len,		\
+					.len = __len, .retries = 8 }
+
+static void prepend_restart(struct prepend_buffer *b, char *buf, int len)
+{
+	/* Ensure we get the newest data */
+	smp_rmb();
+
+	b->lastlen = b->len;
+	b->buf = buf;
+	b->len = len;
+	b->matched = true; /* Assume a match until proven otherwise */
+	b->retries--;
+	if (b->retries == 0)
+		read_seqlock_excl(&rename_lock);
+	else
+		rcu_read_lock();
+}
+
+static bool prepend_done(struct prepend_buffer *b)
+{
+	if (b->retries == 0)
+		read_sequnlock_excl(&rename_lock);
+	else
+		rcu_read_unlock();
+	if (b->len != b->lastlen)
+		b->matched = false;
+	return b->matched || b->retries == 0;
+}
 
 static char *extract_string(struct prepend_buffer *p)
 {
@@ -26,6 +57,8 @@ static char *extract_string(struct prepend_buffer *p)
 static bool prepend_char(struct prepend_buffer *p, unsigned char c)
 {
 	if (likely(p->len > 0)) {
+		if (p->matched && p->buf[-1] != c)
+			p->matched = false;
 		p->len--;
 		*--p->buf = c;
 		return true;
@@ -54,6 +87,38 @@ static bool prepend_copy(void *dst, const void *src, int len)
 	return true;
 }
 
+static bool prepend_str(struct prepend_buffer *p, const char *str, int len)
+{
+	/*
+	 * We know this string fits.  We might need to check if it matches
+	 * the existing content.  If so we use prepend_copy() to a temp
+	 * buffer and compare that to the prepend_buffer.
+	 */
+	char b[32];
+	int start = 0;
+
+	while (p->matched && start < len) {
+		int clen = len - start;
+
+		if (clen > sizeof(b))
+			clen = sizeof(b);
+		if (!prepend_copy(b, str+start, clen)) {
+			p->matched = false;
+			memset(p->buf, len, 'x');
+			return false;
+		}
+		if (memcmp(p->buf + start, b, clen) != 0) {
+			p->matched = false;
+			memcpy(p->buf + start, b, clen);
+		}
+		start += clen;
+	}
+	if (start == len)
+		return true;
+	/* No check needed for the rest */
+	return prepend_copy(p->buf + start, str + start, len - start);
+}
+
 static bool prepend(struct prepend_buffer *p, const char *str, int namelen)
 {
 	// Already overflowed?
@@ -65,7 +130,7 @@ static bool prepend(struct prepend_buffer *p, const char *str, int namelen)
 		// Fill as much as possible from the end of the name
 		str += namelen - p->len;
 		p->buf -= p->len;
-		prepend_copy(p->buf, str, p->len);
+		prepend_str(p, str, p->len);
 		p->len = -1;
 		return false;
 	}
@@ -73,32 +138,46 @@ static bool prepend(struct prepend_buffer *p, const char *str, int namelen)
 	// Fits fully
 	p->len -= namelen;
 	p->buf -= namelen;
-	return prepend_copy(p->buf, str, namelen);
+	return prepend_str(p, str, namelen);
 }
 
 /**
  * prepend_name - prepend a pathname in front of current buffer pointer
  * @p: prepend buffer which contains buffer pointer and allocated length
- * @name: name string and length qstr structure
+ * @dentry: dentry which has the name.
  *
  * With RCU path tracing, it may race with d_move(). Use READ_ONCE() to
  * make sure that either the old or the new name pointer and length are
  * fetched. However, there may be mismatch between length and pointer.
  * But since the length cannot be trusted, we need to copy the name very
  * carefully when doing the prepend_copy(). It also prepends "/" at
- * the beginning of the name. The sequence number check at the caller will
- * retry it again when a d_move() does happen. So any garbage in the buffer
- * due to mismatched pointer and length will be discarded.
+ * the beginning of the name. Caller will retry until two consecutive runs
+ * produce the same result. So any garbage in the buffer due to
+ * mismatched pointer and length will be discarded.
+ *
+ * On the final attempt we use take_dentry_name_snapshot() to ensure
+ * we don't get garbage.
  *
  * Load acquire is needed to make sure that we see the new name data even
  * if we might get the length wrong.
  */
-static bool prepend_name(struct prepend_buffer *p, const struct qstr *name)
+static bool prepend_name(struct prepend_buffer *p, const struct dentry *d)
 {
-	const char *dname = smp_load_acquire(&name->name); /* ^^^ */
-	u32 dlen = READ_ONCE(name->len);
+	if (p->retries > 0) {
+		const char *dname = smp_load_acquire(&d->d_name.name); /* ^^^ */
+		u32 dlen = READ_ONCE(d->d_name.len);
 
-	return prepend(p, dname, dlen) && prepend_char(p, '/');
+		return prepend(p, dname, dlen) && prepend_char(p, '/');
+	} else {
+		struct name_snapshot ss;
+		bool ret;
+
+		take_dentry_name_snapshot(&ss, d);
+		ret = prepend(p, ss.name.name, ss.name.len) &&
+			prepend_char(p, '/');
+		release_dentry_name_snapshot(&ss);
+		return ret;
+	}
 }
 
 static int __prepend_path(const struct dentry *dentry, const struct mount *mnt,
@@ -130,7 +209,7 @@ static int __prepend_path(const struct dentry *dentry, const struct mount *mnt,
 			return 3;
 
 		prefetch(parent);
-		if (!prepend_name(p, &dentry->d_name))
+		if (!prepend_name(p, dentry))
 			break;
 		dentry = parent;
 	}
@@ -143,48 +222,36 @@ static int __prepend_path(const struct dentry *dentry, const struct mount *mnt,
  * @root: root vfsmnt/dentry
  * @p: prepend buffer which contains buffer pointer and allocated length
  *
- * The function will first try to write out the pathname without taking any
- * lock other than the RCU read lock to make sure that dentries won't go away.
- * It only checks the sequence number of the global rename_lock as any change
- * in the dentry's d_seq will be preceded by changes in the rename_lock
- * sequence number. If the sequence number had been changed, it will restart
- * the whole pathname back-tracing sequence again by taking the rename_lock.
- * In this case, there is no need to take the RCU read lock as the recursive
- * parent pointer references will keep the dentry chain alive as long as no
- * rename operation is performed.
+ * The function will first try to write out the pathname without taking
+ * any lock other than the RCU read lock to make sure that dentries
+ * won't go away.  The path is generated twice and checked to be sure it
+ * hasn't changed.  This will ensure we don't race with a rename of an
+ * ancestor.  At most 8 attempts are made: if we cannot get a match in
+ * that time anything we return won't be reliable anyway.  On the last
+ * attempt we get exclusive read locks on mount_lock and rename_lock,
+ * and use take_dentry_name_snapshot() to make the final path as sane as
+ * possible.
  */
 static int prepend_path(const struct path *path,
 			const struct path *root,
 			struct prepend_buffer *p)
 {
-	unsigned seq, m_seq = 0;
-	struct prepend_buffer b;
+	struct prepend_buffer b = *p;
 	int error;
 
-	rcu_read_lock();
-restart_mnt:
-	read_seqbegin_or_lock(&mount_lock, &m_seq);
-	seq = 0;
-	rcu_read_lock();
-restart:
-	b = *p;
-	read_seqbegin_or_lock(&rename_lock, &seq);
-	error = __prepend_path(path->dentry, real_mount(path->mnt), root, &b);
-	if (!(seq & 1))
-		rcu_read_unlock();
-	if (need_seqretry(&rename_lock, seq)) {
-		seq = 1;
-		goto restart;
-	}
-	done_seqretry(&rename_lock, seq);
-
-	if (!(m_seq & 1))
-		rcu_read_unlock();
-	if (need_seqretry(&mount_lock, m_seq)) {
-		m_seq = 1;
-		goto restart_mnt;
-	}
-	done_seqretry(&mount_lock, m_seq);
+	do {
+		/*
+		 * restart/done helpers don't use mount_lock,
+		 * and we must take it first - while retries is still 1.
+		 */
+		if (b.retries == 1)
+			read_seqlock_excl(&mount_lock);
+		prepend_restart(&b, p->buf, p->len);
+		error = __prepend_path(path->dentry, real_mount(path->mnt),
+				       root, &b);
+		if (b.retries == 0)
+			read_sequnlock_excl(&mount_lock);
+	} while (!prepend_done(&b));
 
 	if (unlikely(error == 3))
 		b = *p;
@@ -333,31 +400,24 @@ char *simple_dname(struct dentry *dentry, char *buffer, int buflen)
 static char *__dentry_path(const struct dentry *d, struct prepend_buffer *p)
 {
 	const struct dentry *dentry;
-	struct prepend_buffer b;
-	int seq = 0;
+	struct prepend_buffer b = *p;
 
-	rcu_read_lock();
-restart:
-	dentry = d;
-	b = *p;
-	read_seqbegin_or_lock(&rename_lock, &seq);
-	while (!IS_ROOT(dentry)) {
-		const struct dentry *parent = dentry->d_parent;
+	do {
+		dentry = d;
+		prepend_restart(&b, p->buf, p->len);
+		while (!IS_ROOT(dentry)) {
+			const struct dentry *parent = dentry->d_parent;
 
-		prefetch(parent);
-		if (!prepend_name(&b, &dentry->d_name))
-			break;
-		dentry = parent;
-	}
-	if (!(seq & 1))
-		rcu_read_unlock();
-	if (need_seqretry(&rename_lock, seq)) {
-		seq = 1;
-		goto restart;
-	}
-	done_seqretry(&rename_lock, seq);
-	if (b.len == p->len)
-		prepend_char(&b, '/');
+			prefetch(parent);
+			if (!prepend_name(&b, dentry))
+				break;
+			dentry = parent;
+		}
+		if (b.len == p->len)
+			/* empty path... */
+			prepend_char(&b, '/');
+	} while (!prepend_done(&b));
+
 	return extract_string(&b);
 }
 

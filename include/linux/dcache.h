@@ -672,7 +672,7 @@ struct name_snapshot {
 	struct qstr name;
 	union shortname_store inline_name;
 };
-void take_dentry_name_snapshot(struct name_snapshot *, struct dentry *);
+void take_dentry_name_snapshot(struct name_snapshot *, const struct dentry *);
 void release_dentry_name_snapshot(struct name_snapshot *);
 
 static inline struct dentry *d_first_child(const struct dentry *dentry)

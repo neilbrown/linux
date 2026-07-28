@@ -372,7 +372,7 @@ static inline int dname_external(const struct dentry *dentry)
 	return dentry->d_name.name != dentry->d_shortname.string;
 }
 
-void take_dentry_name_snapshot(struct name_snapshot *name, struct dentry *dentry)
+void take_dentry_name_snapshot(struct name_snapshot *name, const struct dentry *dentry)
 {
 	unsigned seq;
 	const unsigned char *s;
