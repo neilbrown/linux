@@ -48,6 +48,12 @@ static inline char *d_extract_string(struct prepend_buffer *p)
 	return ERR_PTR(-ENAMETOOLONG);
 }
 
+static inline void d_path_trim(struct prepend_buffer *p, int len)
+{
+	p->len += len;
+	p->buf += len;
+}
+
 bool d_prepend(struct prepend_buffer *p, const char *str, int namelen);
 bool d_prepend_name(struct prepend_buffer *p, const struct dentry *d);
 

@@ -16,6 +16,7 @@
 #include <linux/bitmap.h>
 #include <linux/mnt_idmapping.h>
 #include <linux/namei.h>
+#include <linux/d_path.h>
 
 #include "super.h"
 #include "mds_client.h"
@@ -2899,120 +2900,92 @@ char *ceph_mdsc_build_path(struct ceph_mds_client *mdsc, struct dentry *dentry,
 	struct ceph_client *cl = mdsc->fsc->client;
 	struct dentry *cur;
 	struct inode *inode;
-	char *path;
-	int pos;
-	unsigned seq;
+	char *path __free(kfree) = __getname();
+	char *result;
+	DECLARE_PREPEND_BUFFER(b, path, PATH_MAX);
+	int ret = 0;
 	u64 base;
 
 	if (!dentry)
 		return ERR_PTR(-EINVAL);
 
-	path = __getname();
 	if (!path)
 		return ERR_PTR(-ENOMEM);
+
 retry:
-	pos = PATH_MAX - 1;
-	path[pos] = '\0';
+	d_prepend_restart(&b, path+PATH_MAX, PATH_MAX);
+	d_prepend(&b, "", 1);
 
-	seq = read_seqbegin(&rename_lock);
-	cur = dget(dentry);
-	for (;;) {
-		struct dentry *parent;
+	cur = dentry;
+	do {
 
-		spin_lock(&cur->d_lock);
-		inode = d_inode(cur);
+		inode = d_inode_rcu(cur);
 		if (inode && ceph_snap(inode) == CEPH_SNAPDIR) {
-			doutc(cl, "path+%d: %p SNAPDIR\n", pos, cur);
-			spin_unlock(&cur->d_lock);
-			parent = dget_parent(cur);
+			doutc(cl, "path+%d: %p SNAPDIR\n", b.len, cur);
+			d_prepend(&b, "/", 1);
 		} else if (for_wire && inode && dentry != cur &&
 			   ceph_snap(inode) == CEPH_NOSNAP) {
-			spin_unlock(&cur->d_lock);
-			pos++; /* get rid of any prepended '/' */
+			d_path_trim(&b, 1); /* get rid of any prepended '/' */
 			break;
-		} else if (!for_wire || !IS_ENCRYPTED(d_inode(cur->d_parent))) {
-			pos -= cur->d_name.len;
-			if (pos < 0) {
-				spin_unlock(&cur->d_lock);
+		} else if (!for_wire || !IS_ENCRYPTED(d_inode_rcu(cur->d_parent))) {
+			if (!d_prepend_name(&b, cur))
 				break;
-			}
-			memcpy(path + pos, cur->d_name.name, cur->d_name.len);
-			spin_unlock(&cur->d_lock);
-			parent = dget_parent(cur);
 		} else {
-			int len, ret;
+			int len;
 			char buf[NAME_MAX];
+			struct name_snapshot ss;
+			struct dentry *parent = cur->d_parent;
 
 			/*
 			 * Proactively copy name into buf, in case we need to
 			 * present it as-is.
 			 */
-			memcpy(buf, cur->d_name.name, cur->d_name.len);
-			len = cur->d_name.len;
-			spin_unlock(&cur->d_lock);
-			parent = dget_parent(cur);
+			take_dentry_name_snapshot(&ss, cur);
+			memcpy(buf, ss.name.name, ss.name.len);
+			release_dentry_name_snapshot(&ss);
 
-			ret = ceph_fscrypt_prepare_readdir(d_inode(parent));
-			if (ret < 0) {
-				dput(parent);
-				dput(cur);
-				__putname(path);
-				return ERR_PTR(ret);
-			}
+			ret = ceph_fscrypt_prepare_readdir(d_inode_rcu(parent));
+			if (ret < 0)
+				break;
 
 			if (fscrypt_has_encryption_key(d_inode(parent))) {
 				len = ceph_encode_encrypted_dname(d_inode(parent),
 								  buf, len);
 				if (len < 0) {
-					dput(parent);
-					dput(cur);
-					__putname(path);
-					return ERR_PTR(len);
+					ret = len;
+					break;
 				}
 			}
-			pos -= len;
-			if (pos < 0) {
-				dput(parent);
+			if (d_prepend(&b, buf, len))
 				break;
-			}
-			memcpy(path + pos, buf, len);
 		}
-		dput(cur);
-		cur = parent;
+		cur = cur->d_parent;
 
 		/* Are we at the root? */
-		if (IS_ROOT(cur))
-			break;
+	} while (!IS_ROOT(cur));
 
-		/* Are we out of buffer? */
-		if (--pos < 0)
-			break;
-
-		path[pos] = '/';
-	}
-	inode = d_inode(cur);
+	inode = d_inode_rcu(cur);
 	base = inode ? ceph_ino(inode) : 0;
-	dput(cur);
 
-	if (read_seqretry(&rename_lock, seq))
+	if (!d_prepend_done(&b) && !ret)
 		goto retry;
 
-	if (pos < 0) {
-		/*
-		 * The path is longer than PATH_MAX and this function
-		 * cannot ever succeed.  Creating paths that long is
-		 * possible with Ceph, but Linux cannot use them.
-		 */
-		__putname(path);
-		return ERR_PTR(-ENAMETOOLONG);
-	}
+	if (ret < 0)
+		return ERR_PTR(ret);
+
+	result = d_extract_string(&b);
+	if (IS_ERR(result))
+		return result;
+
+	/* Ensure path isn't freed */
+	path = NULL;
 
 	/* Initialize the output structure */
 	memset(path_info, 0, sizeof(*path_info));
 
 	path_info->vino.ino = base;
-	path_info->pathlen = PATH_MAX - 1 - pos;
-	path_info->path = path + pos;
+	path_info->pathlen = PATH_MAX - 1 - b.len;
+	path_info->path = result;
 	path_info->freepath = true;
 
 	/* Set snap from dentry if available */
@@ -3022,8 +2995,8 @@ retry:
 		path_info->vino.snap = CEPH_NOSNAP;
 
 	doutc(cl, "on %p %d built %llx '%.*s'\n", dentry, d_count(dentry),
-	      base, PATH_MAX - 1 - pos, path + pos);
-	return path + pos;
+	      base, path_info->pathlen, result);
+	return result;
 }
 
 static int build_dentry_path(struct ceph_mds_client *mdsc, struct dentry *dentry,
