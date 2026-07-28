@@ -63,7 +63,7 @@ char *nfs_path(char **p, struct dentry *dentry_in, char *buffer,
 	guard(rcu)();
 
 	do {
-		d_prepend_restart(&b, buffer + buflen_in, buflen_in);
+		d_prepend_restart(&b, buffer + buflen_in, buflen_in, dentry_in);
 		dentry = dentry_in;
 		d_prepend(&b, "", 1);
 

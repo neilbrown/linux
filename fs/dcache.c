@@ -72,7 +72,7 @@
  *       dentry->d_lock
  *
  * If no ancestor relationship:
- * arbitrary, since it's serialized on rename_lock
+ * arbitrary, since it's serialized on sb->s_rename_lock
  */
 static int sysctl_vfs_cache_pressure __read_mostly = 100;
 static int sysctl_vfs_cache_pressure_denom __read_mostly = 100;
@@ -82,10 +82,6 @@ unsigned long vfs_pressure_ratio(unsigned long val)
 	return mult_frac(val, sysctl_vfs_cache_pressure, sysctl_vfs_cache_pressure_denom);
 }
 EXPORT_SYMBOL_GPL(vfs_pressure_ratio);
-
-__cacheline_aligned_in_smp DEFINE_SEQLOCK(rename_lock);
-
-EXPORT_SYMBOL(rename_lock);
 
 static struct kmem_cache *__dentry_cache __ro_after_init;
 #define dentry_cache runtime_const_ptr(__dentry_cache)
@@ -1430,13 +1426,15 @@ EXPORT_SYMBOL(path_has_submounts);
  * subtree can become unreachable).
  *
  * Only one of d_invalidate() and d_set_mounted() must succeed.  For
- * this reason take rename_lock and d_lock on dentry and ancestors.
+ * this reason take s_rename_lock and d_lock on dentry and ancestors.
  */
 int d_set_mounted(struct dentry *dentry)
 {
+	struct super_block *sb = dentry->d_sb;
 	struct dentry *p;
 	int ret = -ENOENT;
-	read_seqlock_excl(&rename_lock);
+
+	read_seqlock_excl(&sb->s_rename_lock);
 	for (p = dentry->d_parent; !IS_ROOT(p); p = p->d_parent) {
 		/* Need exclusion wrt. d_invalidate() */
 		spin_lock(&p->d_lock);
@@ -1456,7 +1454,7 @@ int d_set_mounted(struct dentry *dentry)
 	}
  	spin_unlock(&dentry->d_lock);
 out:
-	read_sequnlock_excl(&rename_lock);
+	read_sequnlock_excl(&sb->s_rename_lock);
 	return ret;
 }
 
@@ -2695,6 +2693,8 @@ bool dentry_matches(struct dentry *dentry,
 		    struct dentry *base, const struct qstr *last,
 		    unsigned int seq)
 {
+	struct super_block *sb = dentry->d_sb;
+
 	if (d_in_lookup(dentry))
 		/* in-lookup dentries must always match */
 		return true;
@@ -2709,7 +2709,7 @@ bool dentry_matches(struct dentry *dentry,
 	if (!base)
 		/* No matching required */
 		return true;
-	if (!read_seqretry(&rename_lock,seq))
+	if (!read_seqretry(&sb->s_rename_lock,seq))
 		/* Nothing has been renamed, not need to check */
 		return true;
 	if (dentry->d_parent != base)
@@ -2754,7 +2754,7 @@ struct dentry *__d_alloc_parallel(struct dentry *parent,
 
 retry:
 	seq = smp_load_acquire(&parent->d_inode->i_dir_seq);
-	r_seq = read_seqbegin(&rename_lock);
+	r_seq = read_seqbegin(&parent->d_sb->s_rename_lock);
 	rcu_read_lock();
 	dentry = __d_lookup_rcu_retry(parent, name, &d_seq);
 	if (unlikely(dentry != NULL && dentry != D_LOOKUP_NEEDS_RETRY)) {
@@ -2771,7 +2771,7 @@ retry:
 		return dentry;
 	}
 	rcu_read_unlock();
-	if (unlikely(read_seqretry(&rename_lock, r_seq)))
+	if (unlikely(read_seqretry(&parent->d_sb->s_rename_lock, r_seq)))
 		goto retry;
 
 	if (unlikely(dentry == D_LOOKUP_NEEDS_RETRY))
@@ -3071,7 +3071,7 @@ static void copy_name(struct dentry *dentry, struct dentry *target)
  * @exchange: exchange the two dentries
  *
  * Update the dcache to reflect the move of a file name. Negative dcache
- * entries should not be moved in this way. Caller must hold rename_lock, the
+ * entries should not be moved in this way. Caller must hold s_rename_lock, the
  * i_rwsem of the source and target directories (exclusively), and the sb->
  * s_vfs_rename_mutex if they differ. See lock_rename().
  *
@@ -3270,9 +3270,11 @@ void d_move(struct dentry *dentry, struct dentry *target)
 	if (dentry->d_parent == target->d_parent)
 		__d_move_sibs(dentry, target, false);
 	else {
-		write_seqlock(&rename_lock);
+		struct super_block *sb = dentry->d_sb;
+
+		write_seqlock(&sb->s_rename_lock);
 		__d_move(dentry, target, false);
-		write_sequnlock(&rename_lock);
+		write_sequnlock(&sb->s_rename_lock);
 	}
 }
 EXPORT_SYMBOL(d_move);
@@ -3292,9 +3294,11 @@ void d_exchange(struct dentry *dentry1, struct dentry *dentry2)
 	if (dentry1->d_parent == dentry2->d_parent)
 		__d_move_sibs(dentry1, dentry2, true);
 	else {
-		write_seqlock(&rename_lock);
+		struct super_block *sb = dentry1->d_sb;
+
+		write_seqlock(&sb->s_rename_lock);
 		__d_move(dentry1, dentry2, true);
-		write_sequnlock(&rename_lock);
+		write_sequnlock(&sb->s_rename_lock);
 	}
 }
 EXPORT_SYMBOL(d_exchange);
@@ -3322,7 +3326,7 @@ struct dentry *d_ancestor(struct dentry *p1, struct dentry *p2)
  * This helper attempts to cope with remotely renamed directories
  *
  * It assumes that the caller is already holding
- * dentry->d_parent->d_inode->i_rwsem, and rename_lock
+ * dentry->d_parent->d_inode->i_rwsem, and s_rename_lock
  *
  * Note: If ever the locking in lock_rename() changes, then please
  * remember to update this too...
@@ -3376,11 +3380,13 @@ struct dentry *d_splice_alias_ops(struct inode *inode, struct dentry *dentry,
 	if (S_ISDIR(inode->i_mode)) {
 		struct dentry *new = __d_find_dir_alias(inode);
 		if (unlikely(new)) {
+			struct super_block *sb;
 			/* The reference to new ensures it remains an alias */
 			spin_unlock(&inode->i_lock);
-			write_seqlock(&rename_lock);
+			sb = dentry->d_sb;
+			write_seqlock(&sb->s_rename_lock);
 			if (unlikely(d_ancestor(new, dentry))) {
-				write_sequnlock(&rename_lock);
+				write_sequnlock(&sb->s_rename_lock);
 				dput(new);
 				new = ERR_PTR(-ELOOP);
 				pr_warn_ratelimited(
@@ -3392,7 +3398,7 @@ struct dentry *d_splice_alias_ops(struct inode *inode, struct dentry *dentry,
 			} else if (!IS_ROOT(new)) {
 				struct dentry *old_parent = dget(new->d_parent);
 				int err = __d_unalias(dentry, new);
-				write_sequnlock(&rename_lock);
+				write_sequnlock(&sb->s_rename_lock);
 				if (err) {
 					dput(new);
 					new = ERR_PTR(err);
@@ -3406,7 +3412,7 @@ struct dentry *d_splice_alias_ops(struct inode *inode, struct dentry *dentry,
 					spin_unlock(&new->d_lock);
 				}
 				__d_move(new, dentry, false);
-				write_sequnlock(&rename_lock);
+				write_sequnlock(&sb->s_rename_lock);
 			}
 			iput(inode);
 			return new;
@@ -3464,6 +3470,7 @@ EXPORT_SYMBOL(d_splice_alias);
   
 bool is_subdir(struct dentry *new_dentry, struct dentry *old_dentry)
 {
+	struct super_block *sb = new_dentry->d_sb;
 	bool subdir;
 	unsigned seq;
 
@@ -3472,14 +3479,14 @@ bool is_subdir(struct dentry *new_dentry, struct dentry *old_dentry)
 
 	/* Access d_parent under rcu as d_move() may change it. */
 	rcu_read_lock();
-	seq = read_seqbegin(&rename_lock);
+	seq = read_seqbegin(&sb->s_rename_lock);
 	subdir = d_ancestor(old_dentry, new_dentry);
 	 /* Try lockless once... */
-	if (read_seqretry(&rename_lock, seq)) {
+	if (read_seqretry(&sb->s_rename_lock, seq)) {
 		/* ...else acquire lock for progress even on deep chains. */
-		read_seqlock_excl(&rename_lock);
+		read_seqlock_excl(&sb->s_rename_lock);
 		subdir = d_ancestor(old_dentry, new_dentry);
-		read_sequnlock_excl(&rename_lock);
+		read_sequnlock_excl(&sb->s_rename_lock);
 	}
 	rcu_read_unlock();
 	return subdir;

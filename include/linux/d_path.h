@@ -8,13 +8,14 @@ struct prepend_buffer {
 	bool matched;
 	int retries; /* remaining retries.  On zero, take locks */
 	int lastlen; /* The previous length that we hope to match */
+	struct super_block *sb;
 };
 #define DECLARE_PREPEND_BUFFER(__name, __buf, __len)			\
 	struct prepend_buffer __name = {.buf = __buf + __len,		\
 					.len = __len, .retries = 8 }
 
 static inline void d_prepend_restart(struct prepend_buffer *b,
-				     char *buf, int len)
+				     char *buf, int len, const struct dentry *de)
 {
 	/* Ensure we get the newest data */
 	smp_rmb();
@@ -24,8 +25,9 @@ static inline void d_prepend_restart(struct prepend_buffer *b,
 	b->len = len;
 	b->matched = true; /* Assume a match until proven otherwise */
 	b->retries--;
+	b->sb = de->d_sb;
 	if (b->retries == 0)
-		read_seqlock_excl(&rename_lock);
+		read_seqlock_excl(&b->sb->s_rename_lock);
 	else
 		rcu_read_lock();
 }
@@ -33,7 +35,7 @@ static inline void d_prepend_restart(struct prepend_buffer *b,
 static inline bool d_prepend_done(struct prepend_buffer *b)
 {
 	if (b->retries == 0)
-		read_sequnlock_excl(&rename_lock);
+		read_sequnlock_excl(&b->sb->s_rename_lock);
 	else
 		rcu_read_unlock();
 	if (b->len != b->lastlen)

@@ -1147,6 +1147,8 @@ static int nd_jump_root(struct nameidata *nd)
 		struct dentry *d;
 		nd->path = nd->root;
 		d = nd->path.dentry;
+		nd->r_seq = __read_seqcount_begin(
+			&nd->path.mnt->mnt_sb->s_rename_lock.seqcount);
 		nd->inode = d->d_inode;
 		nd->seq = nd->root_seq;
 		if (read_seqcount_retry(&d->d_seq, nd->seq))
@@ -1155,6 +1157,8 @@ static int nd_jump_root(struct nameidata *nd)
 		path_put(&nd->path);
 		nd->path = nd->root;
 		path_get(&nd->path);
+		nd->r_seq = __read_seqcount_begin(
+			&nd->path.mnt->mnt_sb->s_rename_lock.seqcount);
 		nd->inode = nd->path.dentry->d_inode;
 	}
 	nd->state |= ND_JUMPED;
@@ -1185,6 +1189,8 @@ int nd_jump_link(const struct path *path)
 	path_put(&nd->path);
 	nd->path = *path;
 	nd->inode = nd->path.dentry->d_inode;
+	nd->r_seq = __read_seqcount_begin(
+		&nd->path.mnt->mnt_sb->s_rename_lock.seqcount);
 	nd->state |= ND_JUMPED;
 	return 0;
 
@@ -2111,6 +2117,8 @@ static noinline const char *step_into_slowpath(struct nameidata *nd, int flags,
 				mntput(nd->path.mnt);
 		}
 		nd->path = path;
+		nd->r_seq = __read_seqcount_begin(
+			&nd->path.mnt->mnt_sb->s_rename_lock.seqcount);
 		nd->inode = inode;
 		nd->seq = nd->next_seq;
 		return NULL;
@@ -2158,6 +2166,8 @@ static struct dentry *follow_dotdot_rcu(struct nameidata *nd)
 		if (unlikely(nd->flags & LOOKUP_NO_XDEV))
 			return ERR_PTR(-ECHILD);
 		nd->path = path;
+		nd->r_seq = __read_seqcount_begin(
+			&nd->path.mnt->mnt_sb->s_rename_lock.seqcount);
 		nd->inode = path.dentry->d_inode;
 		nd->seq = seq;
 		// makes sure that non-RCU pathwalk could reach this state
@@ -2197,6 +2207,8 @@ static struct dentry *follow_dotdot(struct nameidata *nd)
 			goto in_root;
 		path_put(&nd->path);
 		nd->path = path;
+		nd->r_seq = __read_seqcount_begin(
+			&nd->path.mnt->mnt_sb->s_rename_lock.seqcount);
 		nd->inode = path.dentry->d_inode;
 		if (unlikely(nd->flags & LOOKUP_NO_XDEV))
 			return ERR_PTR(-EXDEV);
@@ -2246,7 +2258,9 @@ static const char *handle_dots(struct nameidata *nd, enum last_type type)
 			smp_rmb();
 			if (__read_seqcount_retry(&mount_lock.seqcount, nd->m_seq))
 				return ERR_PTR(-EAGAIN);
-			if (__read_seqcount_retry(&rename_lock.seqcount, nd->r_seq))
+			if (__read_seqcount_retry(&nd->path.mnt->mnt_sb->
+						  s_rename_lock.seqcount,
+						  nd->r_seq))
 				return ERR_PTR(-EAGAIN);
 		}
 	}
@@ -2685,7 +2699,6 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	nd->state |= ND_JUMPED;
 
 	nd->m_seq = __read_seqcount_begin(&mount_lock.seqcount);
-	nd->r_seq = __read_seqcount_begin(&rename_lock.seqcount);
 	smp_rmb();
 
 	if (unlikely(nd->state & ND_ROOT_PRESET)) {
@@ -2694,6 +2707,8 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		if (*s && unlikely(!d_can_lookup(root)))
 			return ERR_PTR(-ENOTDIR);
 		nd->path = nd->root;
+		nd->r_seq = __read_seqcount_begin(
+			&nd->path.mnt->mnt_sb->s_rename_lock.seqcount);
 		nd->inode = inode;
 		if (flags & LOOKUP_RCU) {
 			nd->seq = read_seqcount_begin(&nd->path.dentry->d_seq);
@@ -2724,10 +2739,14 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 				seq = read_seqbegin(&fs->seq);
 				nd->path = fs->pwd;
 				nd->inode = nd->path.dentry->d_inode;
+				nd->r_seq = __read_seqcount_begin(
+					&nd->path.mnt->mnt_sb->s_rename_lock.seqcount);
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			} while (read_seqretry(&fs->seq, seq));
 		} else {
 			get_fs_pwd(current->fs, &nd->path);
+			nd->r_seq = __read_seqcount_begin(
+				&nd->path.mnt->mnt_sb->s_rename_lock.seqcount);
 			nd->inode = nd->path.dentry->d_inode;
 		}
 	} else {
@@ -2757,6 +2776,8 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			path_get(&nd->path);
 			nd->inode = nd->path.dentry->d_inode;
 		}
+		nd->m_seq = __read_seqcount_begin(
+			&nd->path.mnt->mnt_sb->s_rename_lock.seqcount);
 	}
 
 	/* For scoped-lookups we need to set the root to the dirfd as well. */
@@ -2913,9 +2934,10 @@ struct dentry *start_dirop(struct dentry *parent, struct qstr *name,
 {
 	struct dentry *dentry;
 	struct inode *dir = d_inode(parent);
+	struct super_block *sb= parent->d_sb;
 
 	while(1) {
-		unsigned int seq = raw_seqcount_begin(&rename_lock.seqcount);
+		unsigned int seq = raw_seqcount_begin(&sb->s_rename_lock.seqcount);
 
 		dentry = lookup_one_qstr(name, parent, lookup_flags);
 		if (IS_ERR(dentry))
@@ -3719,6 +3741,7 @@ __start_renaming(struct renamedata *rd, int lookup_flags,
 	struct dentry *trap;
 	struct dentry *d1, *d2;
 	int target_flags = LOOKUP_RENAME_TARGET | LOOKUP_CREATE;
+	struct super_block *sb = rd->new_parent->d_sb;
 	unsigned int seq;
 	int err;
 
@@ -3728,7 +3751,7 @@ __start_renaming(struct renamedata *rd, int lookup_flags,
 		target_flags |= LOOKUP_EXCL;
 
 retry:
-	seq = raw_seqcount_begin(&rename_lock.seqcount);
+	seq = raw_seqcount_begin(&sb->s_rename_lock.seqcount);
 	d1 = lookup_one_qstr(old_last, rd->old_parent,
 			     lookup_flags);
 	err = PTR_ERR(d1);
@@ -3831,6 +3854,7 @@ __start_renaming_dentry(struct renamedata *rd, int lookup_flags,
 	struct dentry *d2;
 	int target_flags = LOOKUP_RENAME_TARGET | LOOKUP_CREATE;
 	unsigned int seq;
+	struct super_block *sb = rd->new_parent->d_sb;
 	int err;
 
 	if (rd->flags & RENAME_EXCHANGE)
@@ -3839,7 +3863,7 @@ __start_renaming_dentry(struct renamedata *rd, int lookup_flags,
 		target_flags |= LOOKUP_EXCL;
 
 retry:
-	seq = raw_seqcount_begin(&rename_lock.seqcount);
+	seq = raw_seqcount_begin(&sb->s_rename_lock.seqcount);
 	d2 = lookup_one_qstr(new_last, rd->new_parent,
 			     lookup_flags | target_flags);
 	err = PTR_ERR(d2);

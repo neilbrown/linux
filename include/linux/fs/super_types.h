@@ -223,6 +223,14 @@ struct super_block {
 	struct mutex				s_vfs_rename_mutex;	/* Kludge */
 
 	/*
+	 * When any ->d_parent in the filesystem changes, ->s_rename_lock
+	 * will be held for write, so the accompanying seq number can be
+	 * used to detect if a walk through multiple parents produced
+	 * a reliable result.
+	 */
+	seqlock_t				s_rename_lock;
+
+	/*
 	 * Filesystem subtype.  If non-empty the filesystem type field
 	 * in /proc/mounts will be "type.subtype"
 	 */

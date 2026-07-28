@@ -2913,7 +2913,7 @@ char *ceph_mdsc_build_path(struct ceph_mds_client *mdsc, struct dentry *dentry,
 		return ERR_PTR(-ENOMEM);
 
 retry:
-	d_prepend_restart(&b, path+PATH_MAX, PATH_MAX);
+	d_prepend_restart(&b, path+PATH_MAX, PATH_MAX, dentry);
 	d_prepend(&b, "", 1);
 
 	cur = dentry;

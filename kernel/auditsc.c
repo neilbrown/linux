@@ -2088,6 +2088,7 @@ static inline void handle_one(const struct inode *inode)
 
 static void handle_path(const struct dentry *dentry)
 {
+	struct super_block *sb = dentry->d_sb;
 	struct audit_context *context;
 	struct audit_tree_refs *p;
 	const struct dentry *d, *parent;
@@ -2102,7 +2103,7 @@ retry:
 	drop = NULL;
 	d = dentry;
 	rcu_read_lock();
-	seq = read_seqbegin(&rename_lock);
+	seq = read_seqbegin(&sb->s_rename_lock);
 	for (;;) {
 		struct inode *inode = d_backing_inode(d);
 
@@ -2122,7 +2123,7 @@ retry:
 			break;
 		d = parent;
 	}
-	if (unlikely(read_seqretry(&rename_lock, seq) || drop)) {  /* in this order */
+	if (unlikely(read_seqretry(&sb->s_rename_lock, seq) || drop)) {  /* in this order */
 		rcu_read_unlock();
 		if (!drop) {
 			/* just a race with rename */

@@ -151,6 +151,12 @@ static int __prepend_path(const struct dentry *dentry, const struct mount *mnt,
 			if (likely(mnt != m)) {
 				dentry = READ_ONCE(mnt->mnt_mountpoint);
 				mnt = m;
+
+				if (p->retries == 0)
+					read_sequnlock_excl(&p->sb->s_rename_lock);
+				p->sb = mnt->mnt.mnt_sb;
+				if (p->retries == 0)
+					read_seqlock_excl(&p->sb->s_rename_lock);
 				continue;
 			}
 			/* Global root */
@@ -186,7 +192,7 @@ static int __prepend_path(const struct dentry *dentry, const struct mount *mnt,
  * hasn't changed.  This will ensure we don't race with a rename of an
  * ancestor.  At most 8 attempts are made: if we cannot get a match in
  * that time anything we return won't be reliable anyway.  On the last
- * attempt we get exclusive read locks on mount_lock and rename_lock,
+ * attempt we get exclusive read locks on mount_lock and s_rename_lock,
  * and use take_dentry_name_snapshot() to make the final path as sane as
  * possible.
  */
@@ -204,7 +210,7 @@ static int prepend_path(const struct path *path,
 		 */
 		if (b.retries == 1)
 			read_seqlock_excl(&mount_lock);
-		d_prepend_restart(&b, p->buf, p->len);
+		d_prepend_restart(&b, p->buf, p->len, path->dentry);
 		error = __prepend_path(path->dentry, real_mount(path->mnt),
 				       root, &b);
 		if (b.retries == 0)
@@ -362,7 +368,7 @@ static char *__dentry_path(const struct dentry *d, struct prepend_buffer *p)
 
 	do {
 		dentry = d;
-		d_prepend_restart(&b, p->buf, p->len);
+		d_prepend_restart(&b, p->buf, p->len, d);
 		while (!IS_ROOT(dentry)) {
 			const struct dentry *parent = dentry->d_parent;
 

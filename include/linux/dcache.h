@@ -247,8 +247,6 @@ enum dentry_flags {
 #define DCACHE_MANAGED_DENTRY \
 	(DCACHE_MOUNTED|DCACHE_NEED_AUTOMOUNT|DCACHE_MANAGE_TRANSIT)
 
-extern seqlock_t rename_lock;
-
 /*
  * These are the low-level FS interfaces to the dcache..
  */

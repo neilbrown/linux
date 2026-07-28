@@ -220,7 +220,7 @@ static int vfs_dentry_acceptable(void *context, struct dentry *dentry)
 		return 0;
 
 	/*
-	 * It's racy as we're not taking rename_lock but we're able to ignore
+	 * It's racy as we're not taking s_rename_lock but we're able to ignore
 	 * permissions and we just need an approximation whether we were able
 	 * to follow a path to the file.
 	 *
