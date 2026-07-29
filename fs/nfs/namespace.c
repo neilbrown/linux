@@ -18,6 +18,7 @@
 #include <linux/sunrpc/clnt.h>
 #include <linux/vfs.h>
 #include <linux/sunrpc/gss_api.h>
+#include <linux/d_path.h>
 #include "internal.h"
 #include "nfs.h"
 
@@ -52,54 +53,39 @@ int nfs_mountpoint_expiry_timeout = 500 * HZ;
 char *nfs_path(char **p, struct dentry *dentry_in, char *buffer,
 	       ssize_t buflen_in, unsigned flags)
 {
+	DECLARE_PREPEND_BUFFER(b, buffer, buflen_in);
 	char *end;
 	int namelen;
-	unsigned seq;
 	const char *base;
 	struct dentry *dentry;
-	ssize_t buflen;
 
-rename_retry:
-	buflen = buflen_in;
-	dentry = dentry_in;
-	end = buffer+buflen;
-	*--end = '\0';
-	buflen--;
+	/* RCU needed to ensure the root dentry is safe */
+	guard(rcu)();
 
-	seq = read_seqbegin(&rename_lock);
-	rcu_read_lock();
-	while (1) {
-		spin_lock(&dentry->d_lock);
-		if (IS_ROOT(dentry))
-			break;
-		namelen = dentry->d_name.len;
-		buflen -= namelen + 1;
-		if (buflen < 0)
-			goto Elong_unlock;
-		end -= namelen;
-		memcpy(end, dentry->d_name.name, namelen);
-		*--end = '/';
-		spin_unlock(&dentry->d_lock);
-		dentry = dentry->d_parent;
-	}
-	if (read_seqretry(&rename_lock, seq)) {
-		spin_unlock(&dentry->d_lock);
-		rcu_read_unlock();
-		goto rename_retry;
-	}
-	if ((flags & NFS_PATH_CANONICAL) && *end != '/') {
-		if (--buflen < 0) {
-			spin_unlock(&dentry->d_lock);
-			rcu_read_unlock();
-			goto Elong;
+	do {
+		d_prepend_restart(&b, buffer + buflen_in, buflen_in);
+		dentry = dentry_in;
+		d_prepend(&b, "", 1);
+
+		while (!IS_ROOT(dentry)) {
+			if (!d_prepend_name(&b, dentry))
+				break;
+			dentry = dentry->d_parent;
 		}
-		*--end = '/';
+	} while (!d_prepend_done(&b));
+	end = d_extract_string(&b);
+	if (!IS_ERR(end))
+		return end;
+	if ((flags & NFS_PATH_CANONICAL) && *end != '/') {
+		d_prepend(&b, "/", 1);
+		end = d_extract_string(&b);
 	}
-	*p = end;
+
+	/* stablise ->d_fsdata */
+	guard(spinlock)(&dentry->d_lock);
+
 	base = dentry->d_fsdata;
 	if (!base) {
-		spin_unlock(&dentry->d_lock);
-		rcu_read_unlock();
 		WARN_ON(1);
 		return end;
 	}
@@ -109,24 +95,8 @@ rename_retry:
 		while (namelen > 0 && base[namelen - 1] == '/')
 			namelen--;
 	}
-	buflen -= namelen;
-	if (buflen < 0) {
-		spin_unlock(&dentry->d_lock);
-		rcu_read_unlock();
-		goto Elong;
-	}
-	end -= namelen;
-	memcpy(end, base, namelen);
-	spin_unlock(&dentry->d_lock);
-	rcu_read_unlock();
-	return end;
-Elong_unlock:
-	spin_unlock(&dentry->d_lock);
-	rcu_read_unlock();
-	if (read_seqretry(&rename_lock, seq))
-		goto rename_retry;
-Elong:
-	return ERR_PTR(-ENAMETOOLONG);
+	d_prepend(&b, base, namelen);
+	return d_extract_string(&b);
 }
 EXPORT_SYMBOL_GPL(nfs_path);
 
