@@ -6,53 +6,9 @@
 #include <linux/fs.h>
 #include <linux/slab.h>
 #include <linux/prefetch.h>
+#include <linux/d_path.h>
 #include "mount.h"
 #include "internal.h"
-
-struct prepend_buffer {
-	char *buf;
-	int len;
-	bool matched;
-	int retries; /* remaining retries.  On zero, take locks */
-	int lastlen; /* The previous length that we hope to match */
-};
-#define DECLARE_BUFFER(__name, __buf, __len)				\
-	struct prepend_buffer __name = {.buf = __buf + __len,		\
-					.len = __len, .retries = 8 }
-
-static void prepend_restart(struct prepend_buffer *b, char *buf, int len)
-{
-	/* Ensure we get the newest data */
-	smp_rmb();
-
-	b->lastlen = b->len;
-	b->buf = buf;
-	b->len = len;
-	b->matched = true; /* Assume a match until proven otherwise */
-	b->retries--;
-	if (b->retries == 0)
-		read_seqlock_excl(&rename_lock);
-	else
-		rcu_read_lock();
-}
-
-static bool prepend_done(struct prepend_buffer *b)
-{
-	if (b->retries == 0)
-		read_sequnlock_excl(&rename_lock);
-	else
-		rcu_read_unlock();
-	if (b->len != b->lastlen)
-		b->matched = false;
-	return b->matched || b->retries == 0;
-}
-
-static char *extract_string(struct prepend_buffer *p)
-{
-	if (likely(p->len >= 0))
-		return p->buf;
-	return ERR_PTR(-ENAMETOOLONG);
-}
 
 static bool prepend_char(struct prepend_buffer *p, unsigned char c)
 {
@@ -119,7 +75,7 @@ static bool prepend_str(struct prepend_buffer *p, const char *str, int len)
 	return prepend_copy(p->buf + start, str + start, len - start);
 }
 
-static bool prepend(struct prepend_buffer *p, const char *str, int namelen)
+bool d_prepend(struct prepend_buffer *p, const char *str, int namelen)
 {
 	// Already overflowed?
 	if (p->len < 0)
@@ -140,9 +96,10 @@ static bool prepend(struct prepend_buffer *p, const char *str, int namelen)
 	p->buf -= namelen;
 	return prepend_str(p, str, namelen);
 }
+EXPORT_SYMBOL(d_prepend);
 
 /**
- * prepend_name - prepend a pathname in front of current buffer pointer
+ * d_prepend_name - prepend a pathname in front of current buffer pointer
  * @p: prepend buffer which contains buffer pointer and allocated length
  * @dentry: dentry which has the name.
  *
@@ -161,24 +118,25 @@ static bool prepend(struct prepend_buffer *p, const char *str, int namelen)
  * Load acquire is needed to make sure that we see the new name data even
  * if we might get the length wrong.
  */
-static bool prepend_name(struct prepend_buffer *p, const struct dentry *d)
+bool d_prepend_name(struct prepend_buffer *p, const struct dentry *d)
 {
 	if (p->retries > 0) {
 		const char *dname = smp_load_acquire(&d->d_name.name); /* ^^^ */
 		u32 dlen = READ_ONCE(d->d_name.len);
 
-		return prepend(p, dname, dlen) && prepend_char(p, '/');
+		return d_prepend(p, dname, dlen) && prepend_char(p, '/');
 	} else {
 		struct name_snapshot ss;
 		bool ret;
 
 		take_dentry_name_snapshot(&ss, d);
-		ret = prepend(p, ss.name.name, ss.name.len) &&
+		ret = d_prepend(p, ss.name.name, ss.name.len) &&
 			prepend_char(p, '/');
 		release_dentry_name_snapshot(&ss);
 		return ret;
 	}
 }
+EXPORT_SYMBOL(d_prepend_name);
 
 static int __prepend_path(const struct dentry *dentry, const struct mount *mnt,
 			  const struct path *root, struct prepend_buffer *p)
@@ -209,7 +167,7 @@ static int __prepend_path(const struct dentry *dentry, const struct mount *mnt,
 			return 3;
 
 		prefetch(parent);
-		if (!prepend_name(p, dentry))
+		if (!d_prepend_name(p, dentry))
 			break;
 		dentry = parent;
 	}
@@ -246,12 +204,12 @@ static int prepend_path(const struct path *path,
 		 */
 		if (b.retries == 1)
 			read_seqlock_excl(&mount_lock);
-		prepend_restart(&b, p->buf, p->len);
+		d_prepend_restart(&b, p->buf, p->len);
 		error = __prepend_path(path->dentry, real_mount(path->mnt),
 				       root, &b);
 		if (b.retries == 0)
 			read_sequnlock_excl(&mount_lock);
-	} while (!prepend_done(&b));
+	} while (!d_prepend_done(&b));
 
 	if (unlikely(error == 3))
 		b = *p;
@@ -283,24 +241,24 @@ char *__d_path(const struct path *path,
 	       const struct path *root,
 	       char *buf, int buflen)
 {
-	DECLARE_BUFFER(b, buf, buflen);
+	DECLARE_PREPEND_BUFFER(b, buf, buflen);
 
 	prepend_char(&b, 0);
 	if (unlikely(prepend_path(path, root, &b) > 0))
 		return NULL;
-	return extract_string(&b);
+	return d_extract_string(&b);
 }
 
 char *d_absolute_path(const struct path *path,
 	       char *buf, int buflen)
 {
 	struct path root = {};
-	DECLARE_BUFFER(b, buf, buflen);
+	DECLARE_PREPEND_BUFFER(b, buf, buflen);
 
 	prepend_char(&b, 0);
 	if (unlikely(prepend_path(path, &root, &b) > 1))
 		return ERR_PTR(-EINVAL);
-	return extract_string(&b);
+	return d_extract_string(&b);
 }
 
 static void get_fs_root_rcu(struct fs_struct *fs, struct path *root)
@@ -331,7 +289,7 @@ static void get_fs_root_rcu(struct fs_struct *fs, struct path *root)
  */
 char *d_path(const struct path *path, char *buf, int buflen)
 {
-	DECLARE_BUFFER(b, buf, buflen);
+	DECLARE_PREPEND_BUFFER(b, buf, buflen);
 	struct path root;
 
 	/*
@@ -353,13 +311,13 @@ char *d_path(const struct path *path, char *buf, int buflen)
 	rcu_read_lock();
 	get_fs_root_rcu(current->fs, &root);
 	if (unlikely(d_unlinked(path->dentry)))
-		prepend(&b, " (deleted)", 11);
+		d_prepend(&b, " (deleted)", 11);
 	else
 		prepend_char(&b, 0);
 	prepend_path(path, &root, &b);
 	rcu_read_unlock();
 
-	return extract_string(&b);
+	return d_extract_string(&b);
 }
 EXPORT_SYMBOL(d_path);
 
@@ -386,12 +344,12 @@ char *dynamic_dname(char *buffer, int buflen, const char *fmt, ...)
 
 char *simple_dname(struct dentry *dentry, char *buffer, int buflen)
 {
-	DECLARE_BUFFER(b, buffer, buflen);
+	DECLARE_PREPEND_BUFFER(b, buffer, buflen);
 	/* these dentries are never renamed, so d_lock is not needed */
-	prepend(&b, " (deleted)", 11);
-	prepend(&b, dentry->d_name.name, dentry->d_name.len);
+	d_prepend(&b, " (deleted)", 11);
+	d_prepend(&b, dentry->d_name.name, dentry->d_name.len);
 	prepend_char(&b, '/');
-	return extract_string(&b);
+	return d_extract_string(&b);
 }
 
 /*
@@ -404,26 +362,26 @@ static char *__dentry_path(const struct dentry *d, struct prepend_buffer *p)
 
 	do {
 		dentry = d;
-		prepend_restart(&b, p->buf, p->len);
+		d_prepend_restart(&b, p->buf, p->len);
 		while (!IS_ROOT(dentry)) {
 			const struct dentry *parent = dentry->d_parent;
 
 			prefetch(parent);
-			if (!prepend_name(&b, dentry))
+			if (!d_prepend_name(&b, dentry))
 				break;
 			dentry = parent;
 		}
 		if (b.len == p->len)
 			/* empty path... */
 			prepend_char(&b, '/');
-	} while (!prepend_done(&b));
+	} while (!d_prepend_done(&b));
 
-	return extract_string(&b);
+	return d_extract_string(&b);
 }
 
 char *dentry_path_raw(const struct dentry *dentry, char *buf, int buflen)
 {
-	DECLARE_BUFFER(b, buf, buflen);
+	DECLARE_PREPEND_BUFFER(b, buf, buflen);
 
 	prepend_char(&b, 0);
 	return __dentry_path(dentry, &b);
@@ -432,10 +390,10 @@ EXPORT_SYMBOL(dentry_path_raw);
 
 char *dentry_path(const struct dentry *dentry, char *buf, int buflen)
 {
-	DECLARE_BUFFER(b, buf, buflen);
+	DECLARE_PREPEND_BUFFER(b, buf, buflen);
 
 	if (unlikely(d_unlinked(dentry)))
-		prepend(&b, "//deleted", 10);
+		d_prepend(&b, "//deleted", 10);
 	else
 		prepend_char(&b, 0);
 	return __dentry_path(dentry, &b);
@@ -488,11 +446,11 @@ SYSCALL_DEFINE2(getcwd, char __user *, buf, unsigned long, size)
 		error = -ENOENT;
 	} else {
 		unsigned len;
-		DECLARE_BUFFER(b, page, PATH_MAX);
+		DECLARE_PREPEND_BUFFER(b, page, PATH_MAX);
 
 		prepend_char(&b, 0);
 		if (unlikely(prepend_path(&pwd, &root, &b) > 0))
-			prepend(&b, "(unreachable)", 13);
+			d_prepend(&b, "(unreachable)", 13);
 		rcu_read_unlock();
 
 		len = PATH_MAX - b.len;
