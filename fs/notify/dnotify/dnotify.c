@@ -52,14 +52,15 @@ struct dnotify_mark {
 };
 
 /*
- * When a process starts or stops watching an inode the set of events which
- * dnotify cares about for that inode may change.  This function runs the
- * list of everything receiving dnotify events about this directory and calculates
- * the set of all those events.  After it updates what dnotify is interested in
- * it calls the fsnotify function so it can update the set of all events relevant
- * to this inode.
+ * When a process starts or stops watching an inode the set of events
+ * which dnotify cares about for that inode may change.  This function
+ * runs the list of everything receiving dnotify events about this
+ * directory and calculates the set of all those events.  After it
+ * updates what dnotify is interested in it returns true if the fsnotify
+ * function should be called (after dropping the lock) so it can update
+ * the set of all events relevant to this inode.
  */
-static void dnotify_recalc_inode_mask(struct fsnotify_mark *fsn_mark)
+static bool dnotify_recalc_inode_mask(struct fsnotify_mark *fsn_mark)
 {
 	__u32 new_mask = 0;
 	struct dnotify_struct *dn;
@@ -72,10 +73,9 @@ static void dnotify_recalc_inode_mask(struct fsnotify_mark *fsn_mark)
 	for (dn = dn_mark->dn; dn != NULL; dn = dn->dn_next)
 		new_mask |= (dn->dn_mask & ~FS_DN_MULTISHOT);
 	if (fsn_mark->mask == new_mask)
-		return;
+		return false;
 	fsn_mark->mask = new_mask;
-
-	fsnotify_recalc_mask(fsn_mark->connector);
+	return true;
 }
 
 /*
@@ -94,6 +94,7 @@ static int dnotify_handle_event(struct fsnotify_mark *inode_mark, u32 mask,
 	struct dnotify_struct *dn;
 	struct dnotify_struct **prev;
 	struct fown_struct *fown;
+	bool need_recalc = false;
 	__u32 test_mask = mask & ~FS_EVENT_ON_CHILD;
 
 	/* not a dir, dnotify doesn't care */
@@ -116,11 +117,15 @@ static int dnotify_handle_event(struct fsnotify_mark *inode_mark, u32 mask,
 		else {
 			*prev = dn->dn_next;
 			kmem_cache_free(dnotify_struct_cache, dn);
-			dnotify_recalc_inode_mask(inode_mark);
+			need_recalc = true;
 		}
 	}
 
+	if (need_recalc)
+		need_recalc = dnotify_recalc_inode_mask(inode_mark);
 	spin_unlock(&inode_mark->lock);
+	if (need_recalc)
+		fsnotify_recalc_mask(inode_mark->connector);
 
 	return 0;
 }
@@ -156,6 +161,7 @@ void dnotify_flush(struct file *filp, fl_owner_t id)
 	struct dnotify_struct **prev;
 	struct inode *inode;
 	bool free = false;
+	bool need_recalc = false;
 
 	inode = file_inode(filp);
 	if (!S_ISDIR(inode->i_mode))
@@ -174,13 +180,16 @@ void dnotify_flush(struct file *filp, fl_owner_t id)
 		if ((dn->dn_owner == id) && (dn->dn_filp == filp)) {
 			*prev = dn->dn_next;
 			kmem_cache_free(dnotify_struct_cache, dn);
-			dnotify_recalc_inode_mask(fsn_mark);
+			if (dnotify_recalc_inode_mask(fsn_mark))
+				need_recalc = true;
 			break;
 		}
 		prev = &dn->dn_next;
 	}
 
 	spin_unlock(&fsn_mark->lock);
+	if (need_recalc)
+		fsnotify_recalc_mask(fsn_mark->connector);
 
 	/* nothing else could have found us thanks to the dnotify_groups
 	   mark_mutex */
@@ -265,6 +274,7 @@ int fcntl_dirnotify(int fd, struct file *filp, unsigned int arg)
 	fl_owner_t id = current->files;
 	struct file *f = NULL;
 	int destroy = 0, error = 0;
+	bool need_recalc = false;
 	__u32 mask;
 
 	/* we use these to tell if we need to kfree */
@@ -377,9 +387,11 @@ int fcntl_dirnotify(int fd, struct file *filp, unsigned int arg)
 	else if (error == -EEXIST)
 		error = 0;
 
-	dnotify_recalc_inode_mask(fsn_mark);
+	need_recalc = dnotify_recalc_inode_mask(fsn_mark);
 out:
 	spin_unlock(&fsn_mark->lock);
+	if (need_recalc)
+		fsnotify_recalc_mask(fsn_mark->connector);
 
 	if (destroy)
 		fsnotify_detach_mark(fsn_mark);
