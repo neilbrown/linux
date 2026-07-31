@@ -887,8 +887,11 @@ static inline __u32 fsnotify_calc_mask(struct fsnotify_mark *mark)
 extern __u32 fsnotify_conn_mask(struct fsnotify_mark_connector *conn);
 /* Calculate mask of events for a list of marks */
 extern void fsnotify_recalc_mask(struct fsnotify_mark_connector *conn);
+extern bool fsnotify_recalc_mask_noupdate(struct fsnotify_mark_connector *conn);
 extern void fsnotify_init_mark(struct fsnotify_mark *mark,
 			       struct fsnotify_group *group);
+extern void fsnotify_conn_set_children_dentry_flags(
+	struct fsnotify_mark_connector *conn);
 /* Find mark belonging to given group in the list of marks */
 struct fsnotify_mark *fsnotify_find_mark(void *obj, unsigned int obj_type,
 					 struct fsnotify_group *group);

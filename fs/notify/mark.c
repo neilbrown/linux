@@ -307,8 +307,8 @@ static bool fsnotify_conn_watches_children(
 	return fsnotify_inode_watches_children(fsnotify_conn_inode(conn));
 }
 
-static void fsnotify_conn_set_children_dentry_flags(
-					struct fsnotify_mark_connector *conn)
+void fsnotify_conn_set_children_dentry_flags(
+	struct fsnotify_mark_connector *conn)
 {
 	if (conn->type != FSNOTIFY_OBJ_TYPE_INODE)
 		return;
@@ -322,12 +322,12 @@ static void fsnotify_conn_set_children_dentry_flags(
  * this by holding a mark->lock or mark->group->mark_mutex for a mark on this
  * list.
  */
-void fsnotify_recalc_mask(struct fsnotify_mark_connector *conn)
+bool fsnotify_recalc_mask_noupdate(struct fsnotify_mark_connector *conn)
 {
 	bool update_children;
 
 	if (!conn)
-		return;
+		return false;
 
 	spin_lock(&conn->lock);
 	update_children = !fsnotify_conn_watches_children(conn);
@@ -339,7 +339,12 @@ void fsnotify_recalc_mask(struct fsnotify_mark_connector *conn)
 	 * When parent stops watching, we clear false positive PARENT_WATCHED
 	 * flags lazily in __fsnotify_parent().
 	 */
-	if (update_children)
+	return update_children;
+}
+
+void fsnotify_recalc_mask(struct fsnotify_mark_connector *conn)
+{
+	if (fsnotify_recalc_mask_noupdate(conn))
 		fsnotify_conn_set_children_dentry_flags(conn);
 }
 
