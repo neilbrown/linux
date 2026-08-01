@@ -1440,6 +1440,7 @@ enum d_walk_ret {
  *
  * The @enter() callbacks are called with d_lock held.
  */
+__maybe_unused
 static void d_walk(struct dentry *parent, void *data,
 		   enum d_walk_ret (*enter)(void *, struct dentry *))
 {
@@ -1540,26 +1541,6 @@ rename_retry:
 	goto again;
 }
 
-struct check_mount {
-	struct vfsmount *mnt;
-	unsigned int mounted;
-};
-
-/* locks: mount_locked_reader && dentry->d_lock */
-static enum d_walk_ret path_check_mount(void *data, struct dentry *dentry)
-{
-	struct check_mount *info = data;
-	struct path path = { .mnt = info->mnt, .dentry = dentry };
-
-	if (likely(!d_mountpoint(dentry)))
-		return D_WALK_CONTINUE;
-	if (__path_is_mountpoint(&path)) {
-		info->mounted = 1;
-		return D_WALK_QUIT;
-	}
-	return D_WALK_CONTINUE;
-}
-
 /**
  * path_has_submounts - check for mounts over a dentry in the
  *                      current namespace.
@@ -1570,12 +1551,14 @@ static enum d_walk_ret path_check_mount(void *data, struct dentry *dentry)
  */
 int path_has_submounts(const struct path *parent)
 {
-	struct check_mount data = { .mnt = parent->mnt, .mounted = 0 };
+	struct mount *m;
 
 	guard(mount_locked_reader)();
-	d_walk(parent->dentry, &data, path_check_mount);
+	list_for_each_entry(m, &real_mount(parent->mnt)->mnt_mounts, mnt_child)
+		if (is_subdir(m->mnt_mountpoint, parent->dentry))
+			return 1;
 
-	return data.mounted;
+	return 0;
 }
 EXPORT_SYMBOL(path_has_submounts);
 
