@@ -3052,6 +3052,9 @@ static void copy_name(struct dentry *dentry, struct dentry *target)
  * entries should not be moved in this way. Caller must hold rename_lock, the
  * i_rwsem of the source and target directories (exclusively), and the sb->
  * s_vfs_rename_mutex if they differ. See lock_rename().
+ *
+ * If @dentry and @target have the same parent, then neither is
+ * moved in the d_sib list.
  */
 static void __d_move(struct dentry *dentry, struct dentry *target,
 		     bool exchange)
@@ -3119,15 +3122,20 @@ static void __d_move(struct dentry *dentry, struct dentry *target,
 	} else {
 		target->d_parent = old_parent;
 		swap_names(dentry, target);
-		if (!hlist_unhashed(&target->d_sib))
-			__hlist_del(&target->d_sib);
-		hlist_add_head(&target->d_sib, &target->d_parent->d_children);
+		if (target->d_parent != dentry->d_parent) {
+			if (!hlist_unhashed(&target->d_sib))
+				__hlist_del(&target->d_sib);
+			hlist_add_head(&target->d_sib,
+				       &target->d_parent->d_children);
+		}
 		__d_rehash(target);
 		fsnotify_update_flags(target);
 	}
-	if (!hlist_unhashed(&dentry->d_sib))
-		__hlist_del(&dentry->d_sib);
-	hlist_add_head(&dentry->d_sib, &dentry->d_parent->d_children);
+	if (dentry->d_parent != old_parent) {
+		if (!hlist_unhashed(&dentry->d_sib))
+			__hlist_del(&dentry->d_sib);
+		hlist_add_head(&dentry->d_sib, &dentry->d_parent->d_children);
+	}
 
 	/*
 	 * Adjust parent refcounts if either d_children ended up empty.
