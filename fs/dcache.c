@@ -1615,95 +1615,14 @@ out:
 	return ret;
 }
 
-/*
- * Search the dentry child list of the specified parent,
- * and move any unused dentries to the end of the unused
- * list for prune_dcache(). We descend to the next level
- * whenever the d_children list is non-empty and continue
- * searching.
- *
- * It returns zero iff there are no unused children,
- * otherwise  it returns the number of children moved to
- * the end of the unused list. This may not be the total
- * number of unused children, because select_parent can
- * drop the lock and return early due to latency
- * constraints.
- */
-
-struct select_data {
-	struct dentry *start;
-	union {
-		long found;
-		struct dentry *victim;
-	};
-	struct list_head dispose;
-};
-
-static enum d_walk_ret select_collect(void *_data, struct dentry *dentry)
+static void move_to_shrink_list(struct dentry *d, struct list_head *l)
 {
-	struct select_data *data = _data;
-	enum d_walk_ret ret = D_WALK_CONTINUE;
-
-	if (data->start == dentry)
-		goto out;
-
-	if (lockref_is_dead_or_zero(&dentry->d_lockref)) {
-		__move_to_shrink_list(dentry, &data->dispose);
-		data->found++;
-	}
-	/*
-	 * We can return to the caller if we have found some (this
-	 * ensures forward progress). We'll be coming back to find
-	 * the rest.
-	 */
-	if (!list_empty(&data->dispose))
-		ret = need_resched() ? D_WALK_QUIT : D_WALK_NORETRY;
-out:
-	return ret;
-}
-
-static enum d_walk_ret select_collect_umount(void *_data, struct dentry *dentry)
-{
-	if (dentry->d_flags & DCACHE_PERSISTENT) {
-		dentry->d_flags &= ~DCACHE_PERSISTENT;
-		dentry->d_lockref.count--;
-	}
-	return select_collect(_data, dentry);
-}
-
-static enum d_walk_ret select_collect2(void *_data, struct dentry *dentry)
-{
-	struct select_data *data = _data;
-	enum d_walk_ret ret = D_WALK_CONTINUE;
-
-	if (data->start == dentry)
-		goto out;
-
-	if (lockref_is_dead_or_zero(&dentry->d_lockref)) {
-		if (!__move_to_shrink_list(dentry, &data->dispose)) {
-			/*
-			 * We need an enter RCU read-side critical area that
-			 * would extend past the return from d_walk() and
-			 * we are in the scope of ->d_lock that will terminate
-			 * before that, so we use rcu_read_lock() to bridge
-			 * over to the scope of ->d_lock in d_walk() caller.
-			 * The scope of rcu_read_lock() spans from here to
-			 * paired rcu_read_unlock() in shrink_dcache_tree().
-			 */
-			rcu_read_lock();
-			data->victim = dentry;
-			return D_WALK_QUIT;
-		}
-	}
-	/*
-	 * We can return to the caller if we have found some (this
-	 * ensures forward progress). We'll be coming back to find
-	 * the rest.
-	 */
-	if (!list_empty(&data->dispose))
-		ret = need_resched() ? D_WALK_QUIT : D_WALK_NORETRY;
-out:
-	return ret;
+	if (d->d_flags & DCACHE_SHRINK_LIST)
+		/* Somebody else's problem */
+		return;
+	if (d->d_flags & DCACHE_LRU_LIST)
+		d_lru_del(d);
+	d_shrink_add(d, l);
 }
 
 /**
@@ -1712,57 +1631,142 @@ out:
  * @for_umount: true if we want to unpin the persistent ones
  *
  * Prune the dcache to remove unused children of the parent dentry.
+ * DOCUMENT
  */
 static void shrink_dcache_tree(struct dentry *parent, bool for_umount)
 {
-	for (;;) {
-		struct completion_list wait;
-		bool need_wait = false;
-		struct select_data data = { .start = parent };
+	/*
+	 * "todo" is a stack of dentries still to consider, mostly children
+	 * of previous dentries.
+	 * "pending" is a list fs dentries that need to be visited again
+	 * after "todo" is fully processed
+	 * "dispose" is anything that can be disposed of once we have
+	 * dropped spinlocks.
+	 */
+	LIST_HEAD(dispose);
+	LIST_HEAD(todo);
+	LIST_HEAD(pending);
+	struct dentry *d;
+	bool progress;
+	struct completion_list wait;
+	bool need_wait = false;
 
-		INIT_LIST_HEAD(&data.dispose);
-		d_walk(parent, &data,
-			for_umount ? select_collect_umount : select_collect);
+	spin_lock(&parent->d_lock);
+	move_to_shrink_list(parent, &todo);
+	spin_unlock(&parent->d_lock);
 
-		if (!list_empty(&data.dispose)) {
-			shrink_dentry_list(&data.dispose);
+//	FIXME rcu ??;
+again:
+	progress = false;
+	while ((d = list_first_entry(&todo, struct dentry, d_lru)) != NULL) {
+		struct dentry *child;
+		bool still_subdir;
+
+		still_subdir = is_subdir(d, parent);
+		spin_lock(&d->d_lock);
+		if (lockref_is_dead(&d->d_lockref)) {
+			need_wait = d_add_waiter(d, &wait);
+			d_shrink_del(d);
+			spin_unlock(&d->d_lock);
+			if (need_wait)
+				wait_for_completion(&wait.completion);
+			else
+				dentry_free(d);
 			continue;
 		}
 
-		cond_resched();
-		if (!data.found)
-			break;
-		data.victim = NULL;
-		d_walk(parent, &data, select_collect2);
-		if (data.victim) {
-			struct dentry *v = data.victim;
-			/*
-			 * select_collect2() has picked a dentry that was
-			 * either dying or on a shrink list and arranged
-			 * for it to be returned to us.  We are still in
-			 * the RCU read-side critical area started there
-			 * (rcu_read_lock() scope opened in select_collect2()),
-			 * so dentry couldn't have been freed yet, but its
-			 * state might've changed since we dropped ->d_lock
-			 * on the way out.  Switch over to ->d_lock scope
-			 * and recheck the dentry state.
-			 */
-			spin_lock(&v->d_lock);
-			rcu_read_unlock();
-
-			if (unlikely(lockref_is_dead(&v->d_lockref))) {
-				// It's doomed; if it isn't dead yet, notify us
-				// once it becomes invisible to d_walk().
-				need_wait = d_add_waiter(v, &wait);
-				spin_unlock(&v->d_lock);
-			} else {
-				shrink_kill(v);
-			}
+		if (d_count(d) == 0) {
+			list_move(&d->d_lru, &dispose);
+			spin_unlock(&d->d_lock);
+			continue;
 		}
-		shrink_dentry_list(&data.dispose);
-		if (unlikely(need_wait))
+		if (!still_subdir) {
+			/* someone else holds a reference, so it is safe
+			 * to simply remove from the list
+			 */
+			d_shrink_del(d);
+			spin_unlock(&d->d_lock);
+			continue;
+		}
+
+		list_move(&d->d_lru, &pending);
+
+		need_wait = false;
+		/* Need to hold a reference for d_next_sibling_sched() */
+		dget_dlock(d);
+		for (child = d_first_child(d);
+		     child;
+		     child = (need_resched()
+			      ? d_next_sibling_sched(child)
+			      : d_next_sibling(child))) {
+			if (child->d_flags & DCACHE_DENTRY_CURSOR)
+				continue;
+			spin_lock_nested(&child->d_lock, DENTRY_D_LOCK_NESTED);
+			if (for_umount && child->d_flags & DCACHE_PERSISTENT) {
+				child->d_flags &= ~DCACHE_PERSISTENT;
+				child->d_lockref.count--;
+			}
+			if (d_first_child(child))
+				move_to_shrink_list(child, &todo);
+			else if (lockref_is_dead(&child->d_lockref)) {
+				if (!need_wait)
+					need_wait = d_add_waiter(child, &wait);
+			} else if (!__move_to_shrink_list(child, &dispose))
+				move_to_shrink_list(child, &pending);
+			spin_unlock(&child->d_lock);
+		}
+		/*
+		 * It is safe for this to go to zero.
+		 * d is on the pending list and we will eventually
+		 * pass it to shrink_dentry_list().
+		 */
+		d->d_lockref.count -= 1;
+		spin_unlock(&d->d_lock);
+		if (!list_empty(&dispose) || need_wait)
+			progress = true;
+		shrink_dentry_list(&dispose);
+		if (need_wait)
 			wait_for_completion(&wait.completion);
 	}
+	if (progress) {
+		list_splice_init(&pending, &todo);
+		goto again;
+	}
+	while ((d = list_first_entry(&pending, struct dentry, d_lru)) != NULL) {
+		need_wait = false;
+		spin_lock(&d->d_lock);
+		if (lockref_is_dead(&d->d_lockref)) {
+			need_wait = d_add_waiter(d, &wait);
+			d_shrink_del(d);
+		} else if (d_count(d) == 0)
+			list_move(&d->d_lru, &dispose);
+		else {
+			d_shrink_del(d);
+
+			/*
+			 * On unmount, complain about the leaves, except
+			 * for the parent if its refcount is 1
+			 */
+			if (for_umount && hlist_empty(&d->d_children) &&
+			    (d != parent || d_count(d) != 1)) {
+				WARN(1, "BUG: Dentry %p{i=%llx,n=%pd} "
+				     " still in use (%d) [unmount of %s %s]\n",
+				     d,
+				     d->d_inode ?
+				     d->d_inode->i_ino : (u64)0,
+				     d,
+				     d->d_lockref.count,
+				     d->d_sb->s_type->name,
+				     d->d_sb->s_id);
+			}
+		}
+		spin_unlock(&d->d_lock);
+		if (need_wait)
+			wait_for_completion(&wait.completion);
+		else
+			dentry_free(d);
+	}
+	shrink_dentry_list(&dispose);
 }
 
 void shrink_dcache_parent(struct dentry *parent)
@@ -1771,32 +1775,9 @@ void shrink_dcache_parent(struct dentry *parent)
 }
 EXPORT_SYMBOL(shrink_dcache_parent);
 
-static enum d_walk_ret umount_check(void *_data, struct dentry *dentry)
-{
-	/* it has busy descendents; complain about those instead */
-	if (!hlist_empty(&dentry->d_children))
-		return D_WALK_CONTINUE;
-
-	/* root with refcount 1 is fine */
-	if (dentry == _data && dentry->d_lockref.count == 1)
-		return D_WALK_CONTINUE;
-
-	WARN(1, "BUG: Dentry %p{i=%llx,n=%pd} "
-			" still in use (%d) [unmount of %s %s]\n",
-		       dentry,
-		       dentry->d_inode ?
-		       dentry->d_inode->i_ino : (u64)0,
-		       dentry,
-		       dentry->d_lockref.count,
-		       dentry->d_sb->s_type->name,
-		       dentry->d_sb->s_id);
-	return D_WALK_CONTINUE;
-}
-
 static void do_one_tree(struct dentry *dentry)
 {
 	shrink_dcache_tree(dentry, true);
-	d_walk(dentry, dentry, umount_check);
 	spin_lock(&dentry->d_lock);
 	__d_drop(dentry);
 	/* A busy root survives the dput() below so don't leave it on ->s_roots. */
