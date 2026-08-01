@@ -1633,7 +1633,8 @@ static void move_to_shrink_list(struct dentry *d, struct list_head *l)
  * Prune the dcache to remove unused children of the parent dentry.
  * DOCUMENT
  */
-static void shrink_dcache_tree(struct dentry *parent, bool for_umount)
+static void shrink_dcache_tree(struct dentry *parent, bool for_umount,
+			       struct dentry **victim)
 {
 	/*
 	 * "todo" is a stack of dentries still to consider, mostly children
@@ -1743,6 +1744,9 @@ again:
 		else {
 			d_shrink_del(d);
 
+			if (!*victim && d_mountpoint(d))
+				*victim = dget_dlock(d);
+
 			/*
 			 * On unmount, complain about the leaves, except
 			 * for the parent if its refcount is 1
@@ -1771,13 +1775,13 @@ again:
 
 void shrink_dcache_parent(struct dentry *parent)
 {
-	shrink_dcache_tree(parent, false);
+	shrink_dcache_tree(parent, false, NULL);
 }
 EXPORT_SYMBOL(shrink_dcache_parent);
 
 static void do_one_tree(struct dentry *dentry)
 {
-	shrink_dcache_tree(dentry, true);
+	shrink_dcache_tree(dentry, true, NULL);
 	spin_lock(&dentry->d_lock);
 	__d_drop(dentry);
 	/* A busy root survives the dput() below so don't leave it on ->s_roots. */
@@ -1827,23 +1831,12 @@ void shrink_dcache_for_umount(struct super_block *sb)
 	}
 }
 
-static enum d_walk_ret find_submount(void *_data, struct dentry *dentry)
-{
-	struct dentry **victim = _data;
-	if (d_mountpoint(dentry)) {
-		*victim = dget_dlock(dentry);
-		return D_WALK_QUIT;
-	}
-	return D_WALK_CONTINUE;
-}
-
 /**
  * d_invalidate - detach submounts, prune dcache, and drop
  * @dentry: dentry to invalidate (aka detach, prune and drop)
  */
 void d_invalidate(struct dentry *dentry)
 {
-	bool had_submounts = false;
 	spin_lock(&dentry->d_lock);
 	if (d_unhashed(dentry)) {
 		spin_unlock(&dentry->d_lock);
@@ -1856,18 +1849,14 @@ void d_invalidate(struct dentry *dentry)
 	if (!dentry->d_inode)
 		return;
 
-	shrink_dcache_parent(dentry);
 	for (;;) {
 		struct dentry *victim = NULL;
-		d_walk(dentry, &victim, find_submount);
-		if (!victim) {
-			if (had_submounts)
-				shrink_dcache_parent(dentry);
-			return;
-		}
-		had_submounts = true;
-		detach_mounts(victim);
-		dput(victim);
+		shrink_dcache_tree(dentry, false, &victim);
+		if (victim) {
+			detach_mounts(victim);
+			dput(victim);
+		} else
+			break;
 	}
 }
 EXPORT_SYMBOL(d_invalidate);
