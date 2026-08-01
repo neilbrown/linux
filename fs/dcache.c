@@ -657,9 +657,8 @@ static void unlink_secondary_root(struct dentry *dentry)
 
 static inline void dentry_unlist(struct dentry *dentry)
 {
-	struct dentry *next;
 	/*
-	 * Inform d_walk() and shrink_dentry_list() that we are no longer
+	 * Inform shrink_dentry_list() that we are no longer
 	 * attached to the dentry tree
 	 */
 	dentry->d_flags |= DCACHE_DENTRY_KILLED;
@@ -673,31 +672,6 @@ static inline void dentry_unlist(struct dentry *dentry)
 	__hlist_del(&dentry->d_sib);
 	if (hlist_empty(&dentry->d_parent->d_children))
 		dentry->d_parent->d_lockref.count--;
-	/*
-	 * Cursors can move around the list of children.  While we'd been
-	 * a normal list member, it didn't matter - ->d_sib.next would've
-	 * been updated.  However, from now on it won't be and for the
-	 * things like d_walk() it might end up with a nasty surprise.
-	 * Normally d_walk() doesn't care about cursors moving around -
-	 * ->d_lock on parent prevents that and since a cursor has no children
-	 * of its own, we get through it without ever unlocking the parent.
-	 * There is one exception, though - if we ascend from a child that
-	 * gets killed as soon as we unlock it, the next sibling is found
-	 * using the value left in its ->d_sib.next.  And if _that_
-	 * pointed to a cursor, and cursor got moved (e.g. by lseek())
-	 * before d_walk() regains parent->d_lock, we'll end up skipping
-	 * everything the cursor had been moved past.
-	 *
-	 * Solution: make sure that the pointer left behind in ->d_sib.next
-	 * points to something that won't be moving around.  I.e. skip the
-	 * cursors.
-	 */
-	while (dentry->d_sib.next) {
-		next = hlist_entry(dentry->d_sib.next, struct dentry, d_sib);
-		if (likely(!(next->d_flags & DCACHE_DENTRY_CURSOR)))
-			break;
-		dentry->d_sib.next = next->d_sib.next;
-	}
 }
 
 /*
@@ -1417,129 +1391,6 @@ void shrink_dcache_sb(struct super_block *sb)
 	} while (list_lru_count(&sb->s_dentry_lru) > 0);
 }
 EXPORT_SYMBOL(shrink_dcache_sb);
-
-/**
- * enum d_walk_ret - action to take during tree walk
- * @D_WALK_CONTINUE:	continue walk
- * @D_WALK_QUIT:	quit walk
- * @D_WALK_NORETRY:	quit when retry is needed
- * @D_WALK_SKIP:	skip this dentry and its children
- */
-enum d_walk_ret {
-	D_WALK_CONTINUE,
-	D_WALK_QUIT,
-	D_WALK_NORETRY,
-	D_WALK_SKIP,
-};
-
-/**
- * d_walk - walk the dentry tree
- * @parent:	start of walk
- * @data:	data passed to @enter() and @finish()
- * @enter:	callback when first entering the dentry
- *
- * The @enter() callbacks are called with d_lock held.
- */
-__maybe_unused
-static void d_walk(struct dentry *parent, void *data,
-		   enum d_walk_ret (*enter)(void *, struct dentry *))
-{
-	struct dentry *this_parent, *dentry;
-	unsigned seq = 0;
-	enum d_walk_ret ret;
-	bool retry = true;
-
-again:
-	read_seqbegin_or_lock(&rename_lock, &seq);
-	this_parent = parent;
-	spin_lock(&this_parent->d_lock);
-	if (unlikely(this_parent->d_flags & DCACHE_DENTRY_CURSOR))
-		goto out_unlock;
-
-	ret = enter(data, this_parent);
-	switch (ret) {
-	case D_WALK_CONTINUE:
-		break;
-	case D_WALK_QUIT:
-	case D_WALK_SKIP:
-		goto out_unlock;
-	case D_WALK_NORETRY:
-		retry = false;
-		break;
-	}
-repeat:
-	dentry = d_first_child(this_parent);
-resume:
-	hlist_for_each_entry_from(dentry, d_sib) {
-		if (unlikely(dentry->d_flags & DCACHE_DENTRY_CURSOR))
-			continue;
-
-		spin_lock_nested(&dentry->d_lock, DENTRY_D_LOCK_NESTED);
-
-		ret = enter(data, dentry);
-		switch (ret) {
-		case D_WALK_CONTINUE:
-			break;
-		case D_WALK_QUIT:
-			spin_unlock(&dentry->d_lock);
-			goto out_unlock;
-		case D_WALK_NORETRY:
-			retry = false;
-			break;
-		case D_WALK_SKIP:
-			spin_unlock(&dentry->d_lock);
-			continue;
-		}
-
-		if (!hlist_empty(&dentry->d_children)) {
-			spin_unlock(&this_parent->d_lock);
-			spin_release(&dentry->d_lock.dep_map, _RET_IP_);
-			this_parent = dentry;
-			spin_acquire(&this_parent->d_lock.dep_map, 0, 1, _RET_IP_);
-			goto repeat;
-		}
-		spin_unlock(&dentry->d_lock);
-	}
-	/*
-	 * All done at this level ... ascend and resume the search.
-	 */
-ascend:
-	if (this_parent != parent) {
-		dentry = this_parent;
-		this_parent = dentry->d_parent;
-
-		rcu_read_lock();
-		spin_unlock(&dentry->d_lock);
-		spin_lock(&this_parent->d_lock);
-		rcu_read_unlock();
-
-		/* might go back up the wrong parent if we have had a rename. */
-		if (need_seqretry(&rename_lock, seq))
-			goto rename_retry;
-		/* go into the first sibling still alive */
-		hlist_for_each_entry_continue(dentry, d_sib) {
-			if (likely(!(dentry->d_flags & DCACHE_DENTRY_KILLED))) {
-				goto resume;
-			}
-		}
-		goto ascend;
-	}
-	if (need_seqretry(&rename_lock, seq))
-		goto rename_retry;
-
-out_unlock:
-	spin_unlock(&this_parent->d_lock);
-	done_seqretry(&rename_lock, seq);
-	return;
-
-rename_retry:
-	spin_unlock(&this_parent->d_lock);
-	BUG_ON(seq & 1);
-	if (!retry)
-		return;
-	seq = 1;
-	goto again;
-}
 
 /**
  * path_has_submounts - check for mounts over a dentry in the
