@@ -91,12 +91,9 @@ static struct dentry *positive_after(struct dentry *p, struct dentry *child)
 static struct dentry *get_next_positive_subdir(struct dentry *prev,
 					       struct dentry *root)
 {
-	struct autofs_sb_info *sbi = autofs_sbi(root->d_sb);
 	struct dentry *q;
 
-	spin_lock(&sbi->lookup_lock);
 	q = positive_after(root, prev);
-	spin_unlock(&sbi->lookup_lock);
 	dput(prev);
 	return q;
 }
@@ -107,13 +104,11 @@ static struct dentry *get_next_positive_subdir(struct dentry *prev,
 static struct dentry *get_next_positive_dentry(struct dentry *prev,
 					       struct dentry *root)
 {
-	struct autofs_sb_info *sbi = autofs_sbi(root->d_sb);
 	struct dentry *p = prev, *ret = NULL, *d = NULL;
 
 	if (prev == NULL)
 		return dget(root);
 
-	spin_lock(&sbi->lookup_lock);
 	while (1) {
 		struct dentry *parent;
 
@@ -124,7 +119,6 @@ static struct dentry *get_next_positive_dentry(struct dentry *prev,
 		d = p;
 		p = parent;
 	}
-	spin_unlock(&sbi->lookup_lock);
 	dput(prev);
 	return ret;
 }
