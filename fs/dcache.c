@@ -654,6 +654,11 @@ static void unlink_secondary_root(struct dentry *dentry)
 	spin_unlock(&dentry->d_sb->s_roots_lock);
 }
 
+static inline bool d_norefs(const struct dentry *dentry)
+{
+	return d_count(dentry) == 0 && hlist_empty(&dentry->d_children);
+}
+
 static inline void dentry_unlist(struct dentry *dentry)
 {
 	struct dentry *next;
@@ -670,8 +675,6 @@ static inline void dentry_unlist(struct dentry *dentry)
 		return;
 	}
 	__hlist_del(&dentry->d_sib);
-	if (hlist_empty(&dentry->d_parent->d_children))
-		dentry->d_parent->d_lockref.count--;
 	/*
 	 * Cursors can move around the list of children.  While we'd been
 	 * a normal list member, it didn't matter - ->d_sib.next would've
@@ -728,7 +731,7 @@ static bool lock_for_kill(struct dentry *dentry)
 {
 	struct inode *inode = dentry->d_inode;
 
-	if (unlikely(dentry->d_lockref.count)) {
+	if (unlikely(!d_norefs(dentry))) {
 		spin_unlock(&dentry->d_lock);
 		return false;
 	}
@@ -752,7 +755,7 @@ static bool lock_for_kill(struct dentry *dentry)
 		inode = dentry->d_inode;
 	} while (inode);
 	rcu_read_unlock();
-	if (likely(!dentry->d_lockref.count))
+	if (likely(d_norefs(dentry)))
 		return true;
 	if (inode)
 		spin_unlock(&inode->i_lock);
@@ -845,7 +848,7 @@ static struct dentry *dentry_kill(struct dentry *dentry)
 	spin_unlock(&dentry->d_lock);
 	if (likely(can_free))
 		dentry_free(dentry);
-	if (parent && parent->d_lockref.count) {
+	if (parent && !d_norefs(parent)) {
 		spin_unlock(&parent->d_lock);
 		return NULL;
 	}
@@ -869,6 +872,10 @@ static inline bool retain_dentry(struct dentry *dentry, bool locked)
 
 	smp_rmb();
 	d_flags = READ_ONCE(dentry->d_flags);
+
+	// Have to keep any dentry with children
+	if (!hlist_empty(&dentry->d_children))
+		return true;
 
 	// Unreachable? Nobody would be able to look it up, no point retaining
 	if (unlikely(d_unhashed(dentry)))
@@ -1075,8 +1082,8 @@ EXPORT_SYMBOL(d_make_discardable);
 bool __move_to_shrink_list(struct dentry *dentry, struct list_head *list)
 __must_hold(&dentry->d_lock)
 {
-	if (likely(!dentry->d_lockref.count &&
-	    !(dentry->d_flags & DCACHE_SHRINK_LIST))) {
+	if (likely(d_norefs(dentry) &&
+		   !(dentry->d_flags & DCACHE_SHRINK_LIST))) {
 		if (dentry->d_flags & DCACHE_LRU_LIST)
 			d_lru_del(dentry);
 		d_shrink_add(dentry, list);
@@ -1129,7 +1136,7 @@ repeat:
 		goto repeat;
 	}
 	rcu_read_unlock();
-	BUG_ON(!ret->d_lockref.count);
+	BUG_ON(d_norefs(ret));
 	ret->d_lockref.count++;
 	spin_unlock(&ret->d_lock);
 	return ret;
@@ -1316,7 +1323,7 @@ static enum lru_status dentry_lru_isolate(struct list_head *item,
 	 * counts, just remove them from the LRU. Otherwise give them
 	 * another pass through the LRU.
 	 */
-	if (dentry->d_lockref.count) {
+	if (!d_norefs(dentry)) {
 		d_lru_isolate(lru, dentry);
 		spin_unlock(&dentry->d_lock);
 		return LRU_REMOVED;
@@ -1646,10 +1653,10 @@ static enum d_walk_ret select_collect(void *_data, struct dentry *dentry)
 	if (data->start == dentry)
 		goto out;
 
-	if (dentry->d_lockref.count <= 0) {
-		__move_to_shrink_list(dentry, &data->dispose);
+	if (__move_to_shrink_list(dentry, &data->dispose) ||
+	    __lockref_is_dead(&dentry->d_lockref))
 		data->found++;
-	}
+
 	/*
 	 * We can return to the caller if we have found some (this
 	 * ensures forward progress). We'll be coming back to find
@@ -1678,21 +1685,19 @@ static enum d_walk_ret select_collect2(void *_data, struct dentry *dentry)
 	if (data->start == dentry)
 		goto out;
 
-	if (dentry->d_lockref.count <= 0) {
-		if (!__move_to_shrink_list(dentry, &data->dispose)) {
-			/*
-			 * We need an enter RCU read-side critical area that
-			 * would extend past the return from d_walk() and
-			 * we are in the scope of ->d_lock that will terminate
-			 * before that, so we use rcu_read_lock() to bridge
-			 * over to the scope of ->d_lock in d_walk() caller.
-			 * The scope of rcu_read_lock() spans from here to
-			 * paired rcu_read_unlock() in shrink_dcache_tree().
-			 */
-			rcu_read_lock();
-			data->victim = dentry;
-			return D_WALK_QUIT;
-		}
+	if (!__move_to_shrink_list(dentry, &data->dispose)) {
+		/*
+		 * We need an enter RCU read-side critical area that
+		 * would extend past the return from d_walk() and
+		 * we are in the scope of ->d_lock that will terminate
+		 * before that, so we use rcu_read_lock() to bridge
+		 * over to the scope of ->d_lock in d_walk() caller.
+		 * The scope of rcu_read_lock() spans from here to
+		 * paired rcu_read_unlock() in shrink_dcache_tree().
+		 */
+		rcu_read_lock();
+		data->victim = dentry;
+		return D_WALK_QUIT;
 	}
 	/*
 	 * We can return to the caller if we have found some (this
@@ -1989,8 +1994,6 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name)
 	 * to concurrency here
 	 */
 	dentry->d_parent = parent;
-	if (hlist_empty(&parent->d_children))
-		dget_dlock(parent);
 	hlist_add_head(&dentry->d_sib, &parent->d_children);
 	spin_unlock(&parent->d_lock);
 
@@ -2692,7 +2695,7 @@ void d_delete(struct dentry * dentry)
 	/*
 	 * Are we the only user?
 	 */
-	if (dentry->d_lockref.count == 1) {
+	if (dentry->d_lockref.count == 1 && hlist_empty(&dentry->d_children)) {
 		if (dentry_negative_policy)
 			__d_drop(dentry);
 		dentry->d_flags &= ~DCACHE_CANT_MOUNT;
@@ -2772,8 +2775,6 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 	new->d_flags |= DCACHE_PAR_LOOKUP;
 	spin_lock(&parent->d_lock);
 	new->d_parent = parent;
-	if (hlist_empty(&parent->d_children))
-		dget_dlock(parent);
 	hlist_add_head(&new->d_sib, &parent->d_children);
 	if (parent->d_flags & DCACHE_DISCONNECTED)
 		new->d_flags |= DCACHE_DISCONNECTED;
@@ -3101,18 +3102,6 @@ static void __d_move(struct dentry *dentry, struct dentry *target,
 
 	/* ... and switch them in the tree */
 	dentry->d_parent = target->d_parent;
-
-	/*
-	 * Ensure ref count on parents reflect d_children being non-empty,
-	 * which they almost certainly are.  If either end up being empty,
-	 * this is handled below after the moves.
-	 */
-	if (hlist_empty(&old_parent->d_children))
-		dget_dlock(old_parent);
-	if (dentry->d_parent != old_parent &&
-	    hlist_empty(&dentry->d_parent->d_children))
-		dget_dlock(dentry->d_parent);
-
 	if (!exchange) {
 		copy_name(dentry, target);
 		target->d_hash.pprev = NULL;
@@ -3128,17 +3117,6 @@ static void __d_move(struct dentry *dentry, struct dentry *target,
 	if (!hlist_unhashed(&dentry->d_sib))
 		__hlist_del(&dentry->d_sib);
 	hlist_add_head(&dentry->d_sib, &dentry->d_parent->d_children);
-
-	/*
-	 * Adjust parent refcounts if either d_children ended up empty.
-	 * This should only ever be old_parent.
-	 */
-	if (hlist_empty(&old_parent->d_children))
-		dput_dlock(old_parent);
-	if (dentry->d_parent != old_parent &&
-	    hlist_empty(&dentry->d_parent->d_children))
-		dput_dlock(dentry->d_parent);
-
 	__d_rehash(dentry);
 	fsnotify_update_flags(dentry);
 	fscrypt_handle_d_move(dentry);
