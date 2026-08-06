@@ -3861,6 +3861,42 @@ out_iput:
 	return error;
 }
 
+static int
+shmem_tmpdir(struct mnt_idmap *idmap, struct inode *dir,
+	     struct file *file, umode_t mode)
+{
+	struct inode *inode;
+	struct dentry *dentry;
+	int error;
+
+	inode = shmem_get_inode(idmap, dir->i_sb, dir, mode | S_IFDIR, 0,
+				mk_vma_flags(VMA_NORESERVE_BIT));
+	if (IS_ERR(inode))
+		return PTR_ERR(inode);
+
+	error = security_inode_init_security(inode, dir, NULL,
+					     shmem_initxattrs, NULL);
+	if (error && error != -EOPNOTSUPP)
+		goto out_iput;
+	error = simple_acl_create(dir, inode);
+	if (error)
+		goto out_iput;
+	dentry = d_tmpdir(file, inode);
+	if (IS_ERR(dentry)) {
+		error = PTR_ERR(dentry);
+		goto out_iput;
+	}
+
+	error = finish_open(file, dentry, NULL);
+	dput(dentry);
+	/* Now the open file is the only thing keeping dentry alive */
+	return error;
+
+out_iput:
+	iput(inode);
+	return error;
+}
+
 static struct dentry *shmem_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 				  struct dentry *dentry, umode_t mode)
 {
@@ -4895,6 +4931,72 @@ static int shmem_show_options(struct seq_file *seq, struct dentry *root)
 	return 0;
 }
 
+static void shmem_tmpdir_clean(struct work_struct *work)
+{
+	struct shmem_sb_info *sbinfo = container_of(work, struct shmem_sb_info,
+						    tmpdir_work);
+	struct dentry *victim = NULL, *c;
+	struct hlist_bl_node *t;
+
+	spin_lock(&sbinfo->shrinklist_lock);
+	hlist_bl_for_each_entry(victim, t,
+				&sbinfo->tmpdir_shrinklist, d_hash) {
+		__hlist_bl_del(&victim->d_hash);
+		victim->d_hash.pprev = NULL;
+		break;
+	}
+	spin_unlock(&sbinfo->shrinklist_lock);
+	if (!victim)
+		return;
+
+	schedule_work(work);
+	spin_lock(&victim->d_lock);
+	while ((c = d_first_child(victim)) != NULL) {
+		spin_lock_nested(&c->d_lock, DENTRY_D_LOCK_NESTED);
+
+		spin_lock(&c->d_sb->s_roots_lock);
+		__hlist_del(&c->d_sib);
+		hlist_add_head(&c->d_sib, &c->d_sb->s_roots);
+		spin_unlock(&c->d_sb->s_roots_lock);
+		__d_drop(c);
+		c->d_parent = c;
+
+		WARN_ON(!(c->d_flags & DCACHE_PERSISTENT));
+		c->d_flags &= ~DCACHE_PERSISTENT;
+
+		spin_unlock(&c->d_lock);
+		spin_unlock(&victim->d_lock);
+		/*
+		 * Now put the persistent reference, which might result
+		 * in c landing on tmpdir_shrinklist.
+		 */
+		dput(c);
+
+		cond_resched();
+		spin_lock(&victim->d_lock);
+	}
+	spin_unlock(&victim->d_lock);
+	dput(victim);
+	return;
+}
+
+static void shmem_cleanup(struct dentry *dentry)
+{
+	struct shmem_sb_info *sbinfo = SHMEM_SB(dentry->d_sb);
+
+	/*
+	 * This is a tmpdir. It mustn't be freed until
+	 * all children are gone.  So we put it on the
+	 * cleanup list and schedule some work.
+	 *
+	 */
+	dget_dlock(dentry);
+	spin_lock(&sbinfo->shrinklist_lock);
+	hlist_bl_add_head(&dentry->d_hash, &sbinfo->tmpdir_shrinklist);
+	spin_unlock(&sbinfo->shrinklist_lock);
+	schedule_work(&sbinfo->tmpdir_work); // FIXME clean up on unmount
+}
+
 #endif /* CONFIG_TMPFS */
 
 static void shmem_put_super(struct super_block *sb)
@@ -5006,6 +5108,8 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 		goto failed;
 	spin_lock_init(&sbinfo->shrinklist_lock);
 	INIT_LIST_HEAD(&sbinfo->shrinklist);
+	INIT_HLIST_BL_HEAD(&sbinfo->tmpdir_shrinklist);
+	INIT_WORK(&sbinfo->tmpdir_work, shmem_tmpdir_clean);
 
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	sb->s_blocksize = PAGE_SIZE;
@@ -5185,6 +5289,8 @@ static const struct inode_operations shmem_dir_inode_operations = {
 	.mknod		= shmem_mknod,
 	.rename		= shmem_rename2,
 	.tmpfile	= shmem_tmpfile,
+	.tmpdir		= shmem_tmpdir,
+	.cleanup	= shmem_cleanup,
 	.get_offset_ctx	= shmem_get_offset_ctx,
 #endif
 #ifdef CONFIG_TMPFS_XATTR

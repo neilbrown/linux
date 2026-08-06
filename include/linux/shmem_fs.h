@@ -88,8 +88,10 @@ struct shmem_sb_info {
 	spinlock_t shrinklist_lock;   /* Protects shrinklist */
 	struct list_head shrinklist;  /* List of shinkable inodes */
 	unsigned long shrinklist_len; /* Length of shrinklist */
+	struct hlist_bl_head tmpdir_shrinklist; /* list of dying tmpdirs */
 	struct shmem_quota_limits qlimits; /* Default quota limits */
 	struct simple_xattr_cache xa_cache;
+	struct work_struct tmpdir_work;
 };
 
 static inline struct shmem_inode_info *SHMEM_I(struct inode *inode)

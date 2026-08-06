@@ -1202,7 +1202,10 @@ inline int build_open_flags(const struct open_how *how, struct open_flags *op)
 	 * Note, that blocking O_DIRECTORY | O_CREAT here also protects
 	 * O_TMPFILE below which requires O_DIRECTORY being raised.
 	 */
-	if ((flags & (O_DIRECTORY | O_CREAT)) == (O_DIRECTORY | O_CREAT))
+	if ((flags & (O_DIRECTORY | O_CREAT | __O_TMPFILE)) ==
+	    (O_DIRECTORY | O_CREAT | __O_TMPFILE))
+		/* allow this to create temp directory */;
+	else if ((flags & (O_DIRECTORY | O_CREAT)) == (O_DIRECTORY | O_CREAT))
 		return -EINVAL;
 
 	/* Now handle the creative implementation of O_TMPFILE. */
@@ -1216,6 +1219,14 @@ inline int build_open_flags(const struct open_how *how, struct open_flags *op)
 			return -EINVAL;
 		if (!(acc_mode & MAY_WRITE))
 			return -EINVAL;
+		if (flags & O_CREAT) {
+			/* We are creating a directory, don't need that flag */
+			flags &= ~O_CREAT;
+			flags = (flags & ~O_ACCMODE) | O_RDONLY;
+			acc_mode = MAY_READ;
+		} else
+			/* Create a file, not a directory */
+			flags &= ~O_DIRECTORY;
 	}
 	/*
 	 * Asking to open a directory and a regular file at the same time is

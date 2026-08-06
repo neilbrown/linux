@@ -277,6 +277,7 @@ extern struct dentry * d_make_root(struct inode *);
 extern void d_mark_tmpfile(struct file *, struct inode *);
 int d_mark_tmpfile_name(struct file *file, const struct qstr *name);
 extern void d_tmpfile(struct file *, struct inode *);
+extern struct dentry *d_tmpdir(struct file *, struct inode *);
 
 extern struct dentry *d_find_alias(struct inode *);
 extern void d_prune_aliases(struct inode *);

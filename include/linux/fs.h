@@ -2028,6 +2028,9 @@ struct inode_operations {
 			   umode_t create_mode);
 	int (*tmpfile) (struct mnt_idmap *, struct inode *,
 			struct file *, umode_t);
+	int (*tmpdir) (struct mnt_idmap *, struct inode *,
+			struct file *, umode_t);
+	void (*cleanup) (struct dentry *);
 	struct posix_acl *(*get_acl)(struct mnt_idmap *, struct dentry *,
 				     int);
 	int (*set_acl)(struct mnt_idmap *, struct dentry *,

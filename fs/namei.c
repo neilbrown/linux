@@ -4744,15 +4744,25 @@ int vfs_tmpfile(struct mnt_idmap *idmap,
 	error = inode_permission(idmap, dir, MAY_WRITE | MAY_EXEC);
 	if (error)
 		return error;
-	if (!dir->i_op->tmpfile)
-		return -EOPNOTSUPP;
+	if (open_flag & O_DIRECTORY) {
+		if (!dir->i_op->tmpdir)
+			return -EOPNOTSUPP;
+	} else {
+		if (!dir->i_op->tmpfile)
+			return -EOPNOTSUPP;
+	}
 	child = d_alloc(parentpath->dentry, &slash_name);
 	if (unlikely(!child))
 		return -ENOMEM;
 	file->__f_path.mnt = parentpath->mnt;
 	file->__f_path.dentry = child;
-	mode = vfs_prepare_mode(idmap, dir, mode, mode, mode);
-	error = dir->i_op->tmpfile(idmap, dir, file, mode);
+	if (open_flag & O_DIRECTORY) {
+		mode = vfs_prepare_mode(idmap, dir, mode, mode, S_IFDIR);
+		error = dir->i_op->tmpdir(idmap, dir, file, mode);
+	} else {
+		mode = vfs_prepare_mode(idmap, dir, mode, mode, mode);
+		error = dir->i_op->tmpfile(idmap, dir, file, mode);
+	}
 	dput(child);
 	if (file->f_mode & FMODE_OPENED)
 		fsnotify_open(file);

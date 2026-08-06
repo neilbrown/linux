@@ -874,8 +874,22 @@ static inline bool retain_dentry(struct dentry *dentry, bool locked)
 	d_flags = READ_ONCE(dentry->d_flags);
 
 	// Have to keep any dentry with children
-	if (!hlist_empty(&dentry->d_children))
+	if (!hlist_empty(&dentry->d_children)) {
+		if (unlikely(d_unhashed(dentry))) {
+			/*
+			 * Must be a temp-directory. FS might want
+			 * to clean out.
+			 */
+			struct inode *inode = d_inode_rcu(dentry);
+			if (inode && inode->i_op->cleanup) {
+				if (locked)
+					inode->i_op->cleanup(dentry);
+				else
+					return false;
+			}
+		}
 		return true;
+	}
 
 	// Unreachable? Nobody would be able to look it up, no point retaining
 	if (unlikely(d_unhashed(dentry)))
@@ -3408,6 +3422,32 @@ void d_tmpfile(struct file *file, struct inode *inode)
 	d_instantiate(dentry, inode);
 }
 EXPORT_SYMBOL(d_tmpfile);
+
+static void d_mark_tmpdir(struct dentry *dentry)
+{
+	struct inode *inode = dentry->d_inode;
+
+	BUG_ON(dname_external(dentry) || !IS_ROOT(dentry));
+
+	spin_lock(&dentry->d_lock);
+	dentry->__d_name.len = sprintf(dentry->d_shortname.string, "#%llu",
+				(unsigned long long)inode->i_ino);
+	spin_unlock(&dentry->d_lock);
+}
+
+struct dentry *d_tmpdir(struct file *file, struct inode *inode)
+{
+	struct dentry *dentry = d_obtain_root(inode);
+
+	if (IS_ERR(dentry))
+		return dentry;
+
+	inode_dec_link_count(inode);
+	d_mark_tmpdir(dentry);
+
+	return dentry;
+}
+EXPORT_SYMBOL(d_tmpdir);
 
 /*
  * Obtain inode number of the parent dentry.
