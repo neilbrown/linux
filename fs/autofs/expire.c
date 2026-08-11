@@ -70,54 +70,26 @@ done:
 	return status;
 }
 
-static struct dentry *positive_after(struct dentry *p, struct dentry *child)
-{
-	d_for_each_positive_child_continue(child, p) {
-		spin_lock_nested(&child->d_lock, DENTRY_D_LOCK_NESTED);
-		if (simple_positive(child)) {
-			dget_dlock(child);
-			spin_unlock(&child->d_lock);
-			spin_unlock(&p->d_lock);
-			return child;
-		}
-		spin_unlock(&child->d_lock);
-	}
-	return NULL;
-}
-
 /*
- * Calculate and dget next entry in the subdirs list under root.
- */
-static struct dentry *get_next_positive_subdir(struct dentry *prev,
-					       struct dentry *root)
-{
-	struct dentry *q;
-
-	q = positive_after(root, prev);
-	dput(prev);
-	return q;
-}
-
-/*
- * Calculate and dget next entry in top down tree traversal.
+ * Calculate and dget() next entry in top down tree traversal,
+ * and dput() the previous dentry.  If there are no positive
+ * children, we stop up to the parent and look for next
+ * sibling.
+ * As autofs does not support rename, there is no risk
+ * for the parent changing before we step up.
  */
 static struct dentry *get_next_positive_dentry(struct dentry *prev,
 					       struct dentry *root)
 {
-	struct dentry *p = prev, *ret = NULL, *d = NULL;
+	struct dentry *ret = NULL;
 
 	if (prev == NULL)
 		return dget(root);
 
-	while (1) {
-		struct dentry *parent;
-
-		ret = positive_after(p, d);
-		if (ret || p == root)
-			break;
-		parent = p->d_parent;
-		d = p;
-		p = parent;
+	while ((ret = d_scan_positives(prev, ret, 0)) == NULL &&
+	       prev != root) {
+		ret = prev;
+		prev = dget_parent(prev);
 	}
 	dput(prev);
 	return ret;
@@ -415,7 +387,7 @@ static struct dentry *autofs_expire_indirect(struct super_block *sb,
 		return NULL;
 
 	dentry = NULL;
-	while ((dentry = get_next_positive_subdir(dentry, root))) {
+	while ((dentry = d_scan_positives(root, dentry, 0))) {
 		spin_lock(&sbi->fs_lock);
 		ino = autofs_dentry_ino(dentry);
 		if (ino->flags & AUTOFS_INF_WANT_EXPIRE) {
