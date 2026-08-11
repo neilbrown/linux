@@ -70,9 +70,9 @@ done:
 	return status;
 }
 
-/* p->d_lock held */
 static struct dentry *positive_after(struct dentry *p, struct dentry *child)
 {
+	spin_lock(&p->d_lock);
 	child = child ? d_next_sibling(child) : d_first_child(p);
 
 	hlist_for_each_entry_from(child, d_sib) {
@@ -80,10 +80,12 @@ static struct dentry *positive_after(struct dentry *p, struct dentry *child)
 		if (simple_positive(child)) {
 			dget_dlock(child);
 			spin_unlock(&child->d_lock);
+			spin_unlock(&p->d_lock);
 			return child;
 		}
 		spin_unlock(&child->d_lock);
 	}
+	spin_unlock(&p->d_lock);
 
 	return NULL;
 }
@@ -98,9 +100,7 @@ static struct dentry *get_next_positive_subdir(struct dentry *prev,
 	struct dentry *q;
 
 	spin_lock(&sbi->lookup_lock);
-	spin_lock(&root->d_lock);
 	q = positive_after(root, prev);
-	spin_unlock(&root->d_lock);
 	spin_unlock(&sbi->lookup_lock);
 	dput(prev);
 	return q;
@@ -119,7 +119,6 @@ static struct dentry *get_next_positive_dentry(struct dentry *prev,
 		return dget(root);
 
 	spin_lock(&sbi->lookup_lock);
-	spin_lock(&p->d_lock);
 	while (1) {
 		struct dentry *parent;
 
@@ -127,12 +126,9 @@ static struct dentry *get_next_positive_dentry(struct dentry *prev,
 		if (ret || p == root)
 			break;
 		parent = p->d_parent;
-		spin_unlock(&p->d_lock);
-		spin_lock(&parent->d_lock);
 		d = p;
 		p = parent;
 	}
-	spin_unlock(&p->d_lock);
 	spin_unlock(&sbi->lookup_lock);
 	dput(prev);
 	return ret;
