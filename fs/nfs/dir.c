@@ -1489,6 +1489,9 @@ static void nfs_clear_verifier_directory(struct inode *dir)
 
 	spin_lock(&this_parent->d_lock);
 	nfs_unset_verifier_delegated(&this_parent->d_time);
+	spin_unlock(&this_parent->d_lock);
+
+	spin_lock(&this_parent->d_lock);
 	dentry = d_first_child(this_parent);
 	hlist_for_each_entry_from(dentry, d_sib) {
 		if (unlikely(dentry->d_flags & DCACHE_DENTRY_CURSOR))
