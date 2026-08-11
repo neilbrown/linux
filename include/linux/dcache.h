@@ -751,6 +751,10 @@ static inline struct dentry *d_first_positive(const struct dentry *parent,
 			     child;					\
 			     child = d_next_positive(child))
 
+struct dentry *d_scan_positives(struct dentry *dentry,
+				struct dentry *last,
+				loff_t skip);
+
 void set_default_d_op(struct super_block *, const struct dentry_operations *);
 struct dentry *d_make_persistent(struct dentry *, struct inode *);
 void d_make_discardable(struct dentry *dentry);

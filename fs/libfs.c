@@ -97,37 +97,48 @@ int dcache_dir_close(struct inode *inode, struct file *file)
 }
 EXPORT_SYMBOL(dcache_dir_close);
 
-/* parent is locked at least shared */
-/*
- * Returns an element of siblings' list.
- * We are looking for <count>th positive after <p>; if
- * found, dentry is grabbed and returned to caller.
- * If no such element exists, NULL is returned.
- * If last has been removed from the d_children list
- * (i.e. last->d_sib is unhashed) then it is treated like
+/**
+ * d_scan_positives - return next positive dentry after skipping some.
+ * @dentry: the parent dentry to scan
+ * @last: the place to start search, or %NULL to begin at start.
+ * @skip: number of positive dentries to skip over
+ *
+ * Returns the next, or first, positive element of siblings list after
+ * skipping over @skip positive elements.
+ * The child dentry is grabbed and returned to caller.
+ * If no such element exists, %NULL is returned.
+ *
+ * Caller must ensure returned dentry cannot be moved from
+ * the parent, possibly by holding i_rwsem.
+ *
+ * If @last has been removed from the d_children list
+ * (i.e. @last->d_sib is unhashed) then it is treated like
  * the last element of the list and %NULL is returned.
+ *
+ * Returns: a counted ref to a dentry, or %NULL
  */
-static struct dentry *scan_positives(struct dentry *dentry,
-				     struct dentry *last,
-				     loff_t count)
+struct dentry *d_scan_positives(struct dentry *dentry,
+				struct dentry *last,
+				loff_t skip)
 {
 	struct dentry *found = NULL;
 	struct dentry *d = last;
 
 	d_for_each_positive_child_continue(d, dentry) {
-		if (simple_positive(d) && !--count) {
+		if (simple_positive(d) && !skip--) {
 			spin_lock_nested(&d->d_lock, DENTRY_D_LOCK_NESTED);
 			if (simple_positive(d))
 				found = dget_dlock(d);
 			spin_unlock(&d->d_lock);
 			if (likely(found))
 				break;
-			count = 1;
+			skip = 0;
 		}
 	}
 	dput(last);
 	return found;
 }
+EXPORT_SYMBOL(d_scan_positives);
 
 loff_t dcache_dir_lseek(struct file *file, loff_t offset, int whence)
 {
@@ -149,8 +160,8 @@ loff_t dcache_dir_lseek(struct file *file, loff_t offset, int whence)
 
 		inode_lock_shared(dentry->d_inode);
 
-		if (offset > 2)
-			to = scan_positives(dentry, NULL, offset - 2);
+		if (offset >= 3)
+			to = d_scan_positives(dentry, to, offset - 3);
 		spin_lock(&dentry->d_lock);
 		if (to)
 			hlist_move_behind(&cursor->d_sib, &to->d_sib);
@@ -185,7 +196,7 @@ int dcache_readdir(struct file *file, struct dir_context *ctx)
 	if (ctx->pos > 2)
 		next = dget(cursor);
 
-	while ((next = scan_positives(dentry, next, 1)) != NULL) {
+	while ((next = d_scan_positives(dentry, next, 0)) != NULL) {
 		if (!dir_emit(ctx, next->d_name.name, next->d_name.len,
 			      d_inode(next)->i_ino,
 			      fs_umode_to_dtype(d_inode(next)->i_mode)))
