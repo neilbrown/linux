@@ -83,9 +83,6 @@ static struct dentry *get_next_positive_dentry(struct dentry *prev,
 {
 	struct dentry *ret = NULL;
 
-	if (prev == NULL)
-		return dget(root);
-
 	while ((ret = d_scan_positives(prev, ret, 0)) == NULL &&
 	       prev != root) {
 		ret = prev;
@@ -148,7 +145,7 @@ static int autofs_tree_busy(struct vfsmount *mnt,
 		return 1;
 
 	p = NULL;
-	while ((p = get_next_positive_dentry(p, top))) {
+	for (p = dget(top); p; p = get_next_positive_dentry(p, top)) {
 		pr_debug("dentry %p %pd\n", p, p);
 
 		/*
@@ -201,8 +198,7 @@ static struct dentry *autofs_check_leaves(struct vfsmount *mnt,
 
 	pr_debug("parent %p %pd\n", parent, parent);
 
-	p = NULL;
-	while ((p = get_next_positive_dentry(p, parent))) {
+	for (p = dget(parent); p; p = get_next_positive_dentry(p, parent)) {
 		pr_debug("dentry %p %pd\n", p, p);
 
 		if (d_mountpoint(p)) {
