@@ -275,7 +275,6 @@ void simple_offset_init(struct offset_ctx *octx)
 {
 	mt_init_flags(&octx->mt, MT_FLAGS_ALLOC_RANGE);
 	lockdep_set_class(&octx->mt.ma_lock, &simple_offset_lock_class);
-	octx->next_offset = DIR_OFFSET_MIN;
 }
 
 /**
@@ -294,9 +293,9 @@ int simple_offset_add(struct offset_ctx *octx, struct dentry *dentry)
 	if (dentry2offset(dentry) != 0)
 		return -EBUSY;
 
-	ret = mtree_alloc_cyclic(&octx->mt, &offset, dentry, DIR_OFFSET_MIN,
-				 DIR_OFFSET_MAX, &octx->next_offset,
-				 GFP_KERNEL);
+	ret = mtree_alloc_range(&octx->mt, &offset, dentry, 1,
+				DIR_OFFSET_MIN, DIR_OFFSET_MAX,
+				GFP_KERNEL);
 	if (unlikely(ret < 0))
 		return ret == -EBUSY ? -ENOSPC : ret;
 
@@ -447,86 +446,13 @@ static loff_t offset_dir_llseek(struct file *file, loff_t offset, int whence)
 	return vfs_setpos(file, offset, LONG_MAX);
 }
 
-static struct dentry *find_positive_dentry(struct dentry *parent,
-					   struct dentry *dentry,
-					   bool next)
-{
-	struct dentry *found = NULL;
-
-	spin_lock(&parent->d_lock);
-	if (next)
-		dentry = d_next_sibling(dentry);
-	else if (!dentry)
-		dentry = d_first_child(parent);
-	hlist_for_each_entry_from(dentry, d_sib) {
-		if (!simple_positive(dentry))
-			continue;
-		spin_lock_nested(&dentry->d_lock, DENTRY_D_LOCK_NESTED);
-		if (simple_positive(dentry))
-			found = dget_dlock(dentry);
-		spin_unlock(&dentry->d_lock);
-		if (likely(found))
-			break;
-	}
-	spin_unlock(&parent->d_lock);
-	return found;
-}
-
-static noinline_for_stack struct dentry *
-offset_dir_lookup(struct dentry *parent, loff_t offset)
-{
-	struct inode *inode = d_inode(parent);
-	struct offset_ctx *octx = inode->i_op->get_offset_ctx(inode);
-	struct dentry *child, *found = NULL;
-
-	MA_STATE(mas, &octx->mt, offset, offset);
-
-	if (offset == DIR_OFFSET_FIRST)
-		found = find_positive_dentry(parent, NULL, false);
-	else {
-		rcu_read_lock();
-		child = mas_find_rev(&mas, DIR_OFFSET_MIN);
-		found = find_positive_dentry(parent, child, false);
-		rcu_read_unlock();
-	}
-	return found;
-}
-
 static bool offset_dir_emit(struct dir_context *ctx, struct dentry *dentry)
 {
 	struct inode *inode = d_inode(dentry);
 
+	ctx->pos = dentry2offset(dentry);
 	return dir_emit(ctx, dentry->d_name.name, dentry->d_name.len,
 			inode->i_ino, fs_umode_to_dtype(inode->i_mode));
-}
-
-static void offset_iterate_dir(struct file *file, struct dir_context *ctx)
-{
-	struct dentry *dir = file->f_path.dentry;
-	struct dentry *dentry;
-
-	dentry = offset_dir_lookup(dir, ctx->pos);
-	if (!dentry)
-		goto out_eod;
-	while (true) {
-		struct dentry *next;
-
-		ctx->pos = dentry2offset(dentry);
-		if (!offset_dir_emit(ctx, dentry))
-			break;
-
-		next = find_positive_dentry(dir, dentry, true);
-		dput(dentry);
-
-		if (!next)
-			goto out_eod;
-		dentry = next;
-	}
-	dput(dentry);
-	return;
-
-out_eod:
-	ctx->pos = DIR_OFFSET_EOD;
 }
 
 /**
@@ -554,14 +480,21 @@ out_eod:
  */
 static int offset_readdir(struct file *file, struct dir_context *ctx)
 {
-	struct dentry *dir = file->f_path.dentry;
+	struct inode *dir = file_inode(file);
+	struct offset_ctx *octx = dir->i_op->get_offset_ctx(dir);
+	struct dentry *dentry;
+	unsigned long pos;
 
-	lockdep_assert_held(&d_inode(dir)->i_rwsem);
+	lockdep_assert_held(&dir->i_rwsem);
 
 	if (!dir_emit_dots(file, ctx))
 		return 0;
-	if (ctx->pos != DIR_OFFSET_EOD)
-		offset_iterate_dir(file, ctx);
+
+	pos = ctx->pos;
+	mt_for_each(&octx->mt, dentry, pos, DIR_OFFSET_MAX)
+		if (!offset_dir_emit(ctx, dentry))
+			return 0;
+	ctx->pos = DIR_OFFSET_EOD;
 	return 0;
 }
 

@@ -3337,7 +3337,6 @@ extern ssize_t simple_write_to_buffer(void *to, size_t available, loff_t *ppos,
 
 struct offset_ctx {
 	struct maple_tree	mt;
-	unsigned long		next_offset;
 };
 
 void simple_offset_init(struct offset_ctx *octx);
