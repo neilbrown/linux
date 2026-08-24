@@ -2530,7 +2530,6 @@ struct dentry *d_lookup(const struct dentry *parent, const struct qstr *name)
 	} while (read_seqretry(&rename_lock, seq));
 	return dentry;
 }
-EXPORT_SYMBOL(d_lookup);
 
 /**
  * __d_lookup - search for a dentry (racy)

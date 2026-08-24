@@ -3,6 +3,7 @@
  * Copyright (c) 2023-2024 Oracle.  All Rights Reserved.
  * Author: Darrick J. Wong <djwong@kernel.org>
  */
+#include <linux/namei.h>
 #include "xfs_platform.h"
 #include "xfs_fs.h"
 #include "xfs_shared.h"
@@ -309,8 +310,7 @@ xrep_dirtree_purge_dentry(
 	 * Try to find the dirent pointing to the child.  If there isn't one,
 	 * we're done.
 	 */
-	qname.hash = full_name_hash(parent_dentry, name->name, name->len);
-	child_dentry = d_lookup(parent_dentry, &qname);
+	child_dentry = try_lookup_noperm(&qname, parent_dentry);
 	if (!child_dentry) {
 		error = 0;
 		goto out_dput_parent;

@@ -15,6 +15,7 @@
 #include <linux/ktime.h>
 #include <linux/bitmap.h>
 #include <linux/mnt_idmapping.h>
+#include <linux/namei.h>
 
 #include "super.h"
 #include "mds_client.h"
@@ -6076,8 +6077,7 @@ static void handle_lease(struct ceph_mds_client *mdsc,
 		WARN_ON(1);
 		goto release;  /* hrm... */
 	}
-	dname.hash = full_name_hash(parent, dname.name, dname.len);
-	dentry = d_lookup(parent, &dname);
+	dentry = try_lookup_noperm(&dname, parent);
 	dput(parent);
 	if (!dentry)
 		goto release;

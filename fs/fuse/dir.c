@@ -1617,8 +1617,7 @@ int fuse_reverse_inval_entry(struct fuse_conn *fc, u64 parent_nodeid,
 	if (!dir)
 		goto unlock;
 
-	name->hash = full_name_hash(dir, name->name, name->len);
-	entry = d_lookup(dir, name);
+	entry = try_lookup_noperm(name, dir);
 	dput(dir);
 	if (!entry)
 		goto unlock;

@@ -490,7 +490,7 @@ xrep_adoption_zap_dcache(
 		ASSERT(d_is_negative(d_child));
 		d_invalidate(d_child);
 		dput(d_child);
-		d_child = d_lookup(d_orphanage, &qname);
+		d_child = try_lookup_noperm(&qname, d_orphanage);
 	}
 
 	dput(d_orphanage);
