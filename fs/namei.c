@@ -3474,7 +3474,7 @@ int path_pts(struct path *path)
 	}
 	dput(path->dentry);
 	path->dentry = parent;
-	child = d_hash_and_lookup(parent, &QSTR("pts"));
+	child = try_lookup_noperm(&QSTR("ptr"), parent);
 	if (IS_ERR_OR_NULL(child))
 		return -ENOENT;
 

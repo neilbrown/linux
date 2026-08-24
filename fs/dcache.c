@@ -2306,7 +2306,7 @@ struct dentry *d_add_ci(struct dentry *dentry, struct inode *inode,
 	 * First check if a dentry matching the name already exists,
 	 * if not go ahead and create it now.
 	 */
-	found = d_hash_and_lookup(dentry->d_parent, name);
+	found = try_lookup_noperm(name, dentry->d_parent);
 	if (found) {
 		iput(inode);
 		return found;
@@ -2601,29 +2601,6 @@ next:
  	rcu_read_unlock();
 
  	return found;
-}
-
-/**
- * d_hash_and_lookup - hash the qstr then search for a dentry
- * @dir: Directory to search in
- * @name: qstr of name we wish to find
- *
- * On lookup failure NULL is returned; on bad name - ERR_PTR(-error)
- */
-struct dentry *d_hash_and_lookup(struct dentry *dir, struct qstr *name)
-{
-	/*
-	 * Check for a fs-specific hash function. Note that we must
-	 * calculate the standard hash first, as the d_op->d_hash()
-	 * routine may choose to leave the hash value unchanged.
-	 */
-	name->hash = full_name_hash(dir, name->name, name->len);
-	if (dir->d_flags & DCACHE_OP_HASH) {
-		int err = dir->d_op->d_hash(dir, name);
-		if (unlikely(err < 0))
-			return ERR_PTR(err);
-	}
-	return d_lookup(dir, name);
 }
 
 /*
