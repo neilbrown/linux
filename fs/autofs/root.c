@@ -315,11 +315,10 @@ static struct dentry *autofs_mountpoint_changed(struct path *path)
 	 * dentry created.
 	 */
 	if (autofs_type_indirect(sbi->type) && d_unhashed(dentry)) {
-		struct dentry *parent = dentry->d_parent;
 		struct autofs_info *ino;
 		struct dentry *new;
 
-		new = d_lookup(parent, &dentry->d_name);
+		new = d_relookup(dentry);
 		if (!new)
 			return NULL;
 		ino = autofs_dentry_ino(new);

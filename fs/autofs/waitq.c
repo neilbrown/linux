@@ -280,9 +280,7 @@ static int validate_request(struct autofs_wait_queue **wait,
 		if (!IS_ROOT(dentry)) {
 			if (d_unhashed(dentry) &&
 			    d_really_is_positive(dentry)) {
-				struct dentry *parent = dentry->d_parent;
-
-				new = d_lookup(parent, &dentry->d_name);
+				new = d_relookup(dentry);
 				if (new)
 					dentry = new;
 			}
@@ -457,7 +455,7 @@ int autofs_wait(struct autofs_sb_info *sbi,
 		ino = autofs_dentry_ino(dentry);
 		if (!ino) {
 			/* If not lookup actual dentry used */
-			de = d_lookup(dentry->d_parent, &dentry->d_name);
+			de = d_relookup(dentry);
 			if (de)
 				ino = autofs_dentry_ino(de);
 		}

@@ -299,6 +299,7 @@ extern void d_exchange(struct dentry *, struct dentry *);
 extern struct dentry *d_ancestor(struct dentry *, struct dentry *);
 
 extern struct dentry *d_lookup(const struct dentry *, const struct qstr *);
+extern struct dentry *d_relookup(const struct dentry *);
 
 static inline unsigned d_count(const struct dentry *dentry)
 {

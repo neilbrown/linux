@@ -2603,6 +2603,23 @@ next:
  	return found;
 }
 
+/**
+ * d_relookup - look for a new instance of a dentry
+ * @dentry: old unhashed dentry to seek replacement for
+ *
+ * Lookup a dentry with the same parent and name as the
+ * given dentry, which is assumed to be unhashed.
+ * autofs needs this in cases where the original dentry was
+ * unlinked while waiting for a user-space callback to complete.
+ *
+ * Returns: the hashed dentry, or %NULL
+ */
+struct dentry *d_relookup(const struct dentry *dentry)
+{
+	return d_lookup(dentry->d_parent, &dentry->d_name);
+}
+EXPORT_SYMBOL(d_relookup);
+
 /*
  * When a file is deleted, we have two options:
  * - turn this dentry into a negative dentry
