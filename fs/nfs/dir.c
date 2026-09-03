@@ -47,6 +47,12 @@
 
 #include "nfstrace.h"
 
+/*
+ * use private dcache flag to indicate that opens
+ * are blocked.
+ */
+#define DCACHE_BLOCKED DCACHE_PRIVATE
+
 /* #define NFS_DEBUG_VERBOSE 1 */
 
 static int nfs_opendir(struct inode *, struct file *);
@@ -1836,12 +1842,12 @@ static int
 __nfs_lookup_revalidate(struct dentry *dentry, unsigned int flags)
 {
 	if (flags & LOOKUP_RCU) {
-		if (dentry->d_fsdata == NFS_FSDATA_BLOCKED)
+		if (dentry->d_flags & DCACHE_BLOCKED)
 			return -ECHILD;
 	} else {
 		/* Wait for unlink to complete - see unblock_revalidate() */
-		wait_var_event(&dentry->d_fsdata,
-			       dentry->d_fsdata != NFS_FSDATA_BLOCKED);
+		wait_var_event(&dentry->d_flags,
+			       !(dentry->d_flags & DCACHE_BLOCKED));
 	}
 	return 0;
 }
@@ -1856,9 +1862,6 @@ static int nfs_lookup_revalidate(struct inode *dir, const struct qstr *name,
 
 static void block_revalidate(struct dentry *dentry)
 {
-	/* old devname - just in case */
-	kfree(dentry->d_fsdata);
-
 	/* Any new reference that could lead to an open
 	 * will either:
 	 *  - take ->d_lock in lookup_open() -> d_lookup() or
@@ -1870,12 +1873,15 @@ static void block_revalidate(struct dentry *dentry)
 	lockdep_assert_held(&dentry->d_lock);
 	write_seqcount_invalidate(&dentry->d_seq);
 
-	dentry->d_fsdata = NFS_FSDATA_BLOCKED;
+	dentry->d_flags |= DCACHE_BLOCKED;
 }
 
 static void unblock_revalidate(struct dentry *dentry)
 {
-	store_release_wake_up(&dentry->d_fsdata, NULL);
+	spin_lock(&dentry->d_lock);
+	store_release_wake_up(&dentry->d_flags,
+			      dentry->d_flags & ~DCACHE_BLOCKED);
+	spin_unlock(&dentry->d_lock);
 }
 
 /*
@@ -2587,13 +2593,13 @@ int nfs_unlink(struct inode *dir, struct dentry *dentry)
 		goto out;
 	}
 	/* We must prevent any concurrent open until the unlink
-	 * completes.  ->d_revalidate will wait for ->d_fsdata
+	 * completes.  ->d_revalidate will wait for DCACHE_BLOCKED
 	 * to clear.  We set it here to ensure no lookup succeeds until
 	 * the unlink is complete on the server.
 	 */
 	error = -ETXTBSY;
 	if (WARN_ON(dentry->d_flags & DCACHE_NFSFS_RENAMED) ||
-	    WARN_ON(dentry->d_fsdata == NFS_FSDATA_BLOCKED)) {
+	    WARN_ON(dentry->d_flags & DCACHE_BLOCKED)) {
 		spin_unlock(&dentry->d_lock);
 		goto out;
 	}
@@ -2783,13 +2789,13 @@ int nfs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 	 */
 	if (new_inode && !S_ISDIR(new_inode->i_mode)) {
 		/* We must prevent any concurrent open until the unlink
-		 * completes.  ->d_revalidate will wait for ->d_fsdata
+		 * completes.  ->d_revalidate will wait for DCACHE_BLOCKED
 		 * to clear.  We set it here to ensure no lookup succeeds until
 		 * the unlink is complete on the server.
 		 */
 		error = -ETXTBSY;
 		if (WARN_ON(new_dentry->d_flags & DCACHE_NFSFS_RENAMED) ||
-		    WARN_ON(new_dentry->d_fsdata == NFS_FSDATA_BLOCKED))
+		    WARN_ON(new_dentry->d_flags & DCACHE_BLOCKED))
 			goto out;
 
 		spin_lock(&new_dentry->d_lock);
