@@ -84,9 +84,8 @@ int nfs_get_root(struct super_block *s, struct fs_context *fc)
 
 	security_d_instantiate(root, inode);
 	spin_lock(&root->d_lock);
-	if (IS_ROOT(root) && !root->d_fsdata &&
-	    !(root->d_flags & DCACHE_NFSFS_RENAMED)) {
-		root->d_fsdata = name;
+	if (IS_ROOT(root) && NFS_I(inode)->root_name) {
+		NFS_I(inode)->root_name = name;
 		name = NULL;
 	}
 	spin_unlock(&root->d_lock);

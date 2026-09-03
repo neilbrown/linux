@@ -136,7 +136,6 @@ static int nfs_call_unlink(struct dentry *dentry, struct inode *inode, struct nf
 	}
 	if (!d_in_lookup(alias)) {
 		int ret;
-		void *devname_garbage = NULL;
 
 		/*
 		 * Hey, we raced with lookup... See if we need to transfer
@@ -146,7 +145,6 @@ static int nfs_call_unlink(struct dentry *dentry, struct inode *inode, struct nf
 		if (d_really_is_positive(alias) &&
 		    !nfs_compare_fh(NFS_FH(inode), NFS_FH(d_inode(alias))) &&
 		    !(alias->d_flags & DCACHE_NFSFS_RENAMED)) {
-			devname_garbage = alias->d_fsdata;
 			alias->d_fsdata = data;
 			alias->d_flags |= DCACHE_NFSFS_RENAMED;
 			ret = 1;
@@ -154,12 +152,6 @@ static int nfs_call_unlink(struct dentry *dentry, struct inode *inode, struct nf
 			ret = 0;
 		spin_unlock(&alias->d_lock);
 		dput(alias);
-		/*
-		 * If we'd displaced old cached devname, free it.  At that
-		 * point dentry is definitely not a root, so we won't need
-		 * that anymore.
-		 */
-		kfree(devname_garbage);
 		return ret;
 	}
 	data->dentry = alias;
@@ -179,7 +171,6 @@ nfs_async_unlink(struct dentry *dentry, const struct qstr *name)
 {
 	struct nfs_unlinkdata *data;
 	int status = -ENOMEM;
-	void *devname_garbage = NULL;
 
 	data = kzalloc_obj(*data);
 	if (data == NULL)
@@ -197,15 +188,8 @@ nfs_async_unlink(struct dentry *dentry, const struct qstr *name)
 	if (dentry->d_flags & DCACHE_NFSFS_RENAMED)
 		goto out_unlock;
 	dentry->d_flags |= DCACHE_NFSFS_RENAMED;
-	devname_garbage = dentry->d_fsdata;
 	dentry->d_fsdata = data;
 	spin_unlock(&dentry->d_lock);
-	/*
-	 * If we'd displaced old cached devname, free it.  At that
-	 * point dentry is definitely not a root, so we won't need
-	 * that anymore.
-	 */
-	kfree(devname_garbage);
 	return 0;
 out_unlock:
 	spin_unlock(&dentry->d_lock);

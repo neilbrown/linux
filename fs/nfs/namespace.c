@@ -81,10 +81,10 @@ char *nfs_path(char **p, struct dentry *dentry_in, char *buffer,
 		end = d_extract_string(&b);
 	}
 
-	/* stablise ->d_fsdata */
+	/* stablise root_name */
 	guard(spinlock)(&dentry->d_lock);
 
-	base = dentry->d_fsdata;
+	base = NFS_I(dentry->d_inode)->root_name;
 	if (!base) {
 		WARN_ON(1);
 		return end;

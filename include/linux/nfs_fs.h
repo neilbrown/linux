@@ -202,6 +202,10 @@ struct nfs_inode {
 			 * operations
 			 */
 			__be32		cookieverf[NFS_DIR_VERIFIER_SIZE];
+			/*
+			 * For a mountpoint, remember the path from server root
+			 */
+			char		*root_name;
 		};
 		/* Regular file */
 		struct {

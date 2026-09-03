@@ -2524,6 +2524,7 @@ struct inode *nfs_alloc_inode(struct super_block *sb)
 	nfsi->flags = 0UL;
 	nfsi->cache_validity = 0UL;
 	nfsi->ooo = NULL;
+	nfsi->root_name = NULL;
 #if IS_ENABLED(CONFIG_NFS_V4)
 	nfsi->nfs4_acl = NULL;
 #endif /* CONFIG_NFS_V4 */
@@ -2538,6 +2539,7 @@ EXPORT_SYMBOL_GPL(nfs_alloc_inode);
 
 void nfs_free_inode(struct inode *inode)
 {
+	kfree(NFS_I(inode)->root_name);
 	kfree(NFS_I(inode)->ooo);
 	kmem_cache_free(nfs_inode_cachep, NFS_I(inode));
 }

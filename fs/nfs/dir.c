@@ -1976,24 +1976,12 @@ static void nfs_dentry_iput(struct dentry *dentry, struct inode *inode)
 	iput(inode);
 }
 
-static void nfs_d_release(struct dentry *dentry)
-{
-	/* free cached devname value, if it survived that far */
-	if (unlikely(dentry->d_fsdata)) {
-		if (dentry->d_flags & DCACHE_NFSFS_RENAMED)
-			WARN_ON(1);
-		else
-			kfree(dentry->d_fsdata);
-	}
-}
-
 const struct dentry_operations nfs_dentry_operations = {
 	.d_revalidate	= nfs_lookup_revalidate,
 	.d_weak_revalidate	= nfs_weak_revalidate,
 	.d_delete	= nfs_dentry_delete,
 	.d_iput		= nfs_dentry_iput,
 	.d_automount	= nfs_d_automount,
-	.d_release	= nfs_d_release,
 };
 EXPORT_SYMBOL_GPL(nfs_dentry_operations);
 
@@ -2081,7 +2069,6 @@ const struct dentry_operations nfs4_dentry_operations = {
 	.d_delete	= nfs_dentry_delete,
 	.d_iput		= nfs_dentry_iput,
 	.d_automount	= nfs_d_automount,
-	.d_release	= nfs_d_release,
 };
 EXPORT_SYMBOL_GPL(nfs4_dentry_operations);
 
