@@ -47,12 +47,12 @@ static int afs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 static int afs_dir_writepages(struct address_space *mapping,
 			      struct writeback_control *wbc);
 
-/* This is stored in ->d_fsdata to stop d_revalidate looking at,
- * and possibly changing, ->d_time on a dentry which is being moved
- * between directories, and to block lookup for dentry that is
- * being removed without silly-rename.
+/*
+ * This is set to stop d_revalidate looking at, and possibly changing,
+ * ->d_time on a dentry which is being moved between directories, and to
+ * block lookup for dentry that is being removed without silly-rename.
  */
-#define AFS_FSDATA_BLOCKED ((void*)1)
+#define DCACHE_BLOCKED DCACHE_PRIVATE
 
 const struct file_operations afs_dir_file_operations = {
 	.open		= afs_dir_open,
@@ -1049,7 +1049,7 @@ static int afs_d_revalidate_rcu(struct afs_vnode *dvnode, struct dentry *dentry)
 		return -ECHILD;
 
 	/* A rename/unlink is pending */
-	if (dentry->d_fsdata)
+	if (dentry->d_flags & DCACHE_BLOCKED)
 		return -ECHILD;
 
 	/* We only need to invalidate a dentry if the server's copy changed
@@ -1089,7 +1089,7 @@ static int afs_d_revalidate(struct inode *parent_dir, const struct qstr *name,
 
 	/* Wait for rename/unlink to complete */
 wait_for_rename:
-	wait_var_event(&dentry->d_fsdata, dentry->d_fsdata == NULL);
+	wait_var_event(&dentry->d_flags, !(dentry->d_flags & DCACHE_BLOCKED));
 
 	if (d_really_is_positive(dentry)) {
 		vnode = AFS_FS_I(d_inode(dentry));
@@ -1184,7 +1184,7 @@ wait_for_rename:
 
 out_valid:
 	spin_lock(&dentry->d_lock);
-	if (dentry->d_fsdata) {
+	if (dentry->d_flags & DCACHE_BLOCKED) {
 		spin_unlock(&dentry->d_lock);
 		goto wait_for_rename;
 	}
@@ -1556,7 +1556,10 @@ static void afs_unlink_edit_dir(struct afs_operation *op)
 static void afs_unlink_put(struct afs_operation *op)
 {
 	_enter("op=%08x", op->debug_id);
-	store_release_wake_up(&op->dentry->d_fsdata, NULL);
+	spin_lock(&op->dentry->d_lock);
+	store_release_wake_up(&op->dentry->d_flags,
+			      op->dentry->d_flags &~ DCACHE_BLOCKED);
+	spin_unlock(&op->dentry->d_lock);
 }
 
 static const struct afs_operation_ops afs_unlink_operation = {
@@ -1616,7 +1619,7 @@ static int afs_unlink(struct inode *dir, struct dentry *dentry)
 	 * legitimize_path() will trigger a retry.
 	 */
 	write_seqcount_invalidate(&dentry->d_seq);
-	dentry->d_fsdata = AFS_FSDATA_BLOCKED;
+	dentry->d_flags |= DCACHE_BLOCKED;
 	spin_unlock(&dentry->d_lock);
 
 	op->file[1].vnode = vnode;
@@ -1925,7 +1928,10 @@ static void afs_rename_edit_dir(struct afs_operation *op)
 
 	if (op->rename.unblock) {
 		/* Rename has finished, so unlock lookups to target */
-		store_release_wake_up(&op->rename.unblock->d_fsdata, NULL);
+		spin_lock(&op->rename.unblock->d_lock);
+		store_release_wake_up(&op->rename.unblock->d_flags,
+				      op->rename.unblock->d_flags &~ DCACHE_BLOCKED);
+		spin_unlock(&op->rename.unblock->d_lock);
 		op->rename.unblock = NULL;
 	}
 
@@ -2045,15 +2051,26 @@ static void afs_rename_exchange_edit_dir(struct afs_operation *op)
 	}
 
 	/* dentry has been moved, so d_validate can safely proceed */
-	store_release_wake_up(&old_dentry->d_fsdata, NULL);
+	spin_lock(&old_dentry->d_lock);
+	store_release_wake_up(&old_dentry->d_flags,
+			      old_dentry->d_flags &~ DCACHE_BLOCKED);
+	spin_unlock(&old_dentry->d_lock);
 }
 
 static void afs_rename_put(struct afs_operation *op)
 {
 	_enter("op=%08x", op->debug_id);
-	if (op->rename.unblock)
-		store_release_wake_up(&op->rename.unblock->d_fsdata, NULL);
-	store_release_wake_up(&op->dentry->d_fsdata, NULL);
+	if (op->rename.unblock) {
+		spin_lock(&op->rename.unblock->d_lock);
+		store_release_wake_up(&op->rename.unblock->d_flags,
+				      op->rename.unblock->d_flags &~ DCACHE_BLOCKED);
+		spin_unlock(&op->rename.unblock->d_lock);
+		op->rename.unblock = NULL;
+	}
+	spin_lock(&op->dentry->d_lock);
+	store_release_wake_up(&op->dentry->d_flags,
+			      op->dentry->d_flags &~ DCACHE_BLOCKED);
+	spin_unlock(&op->dentry->d_lock);
 	if (op->rename.tmp) {
 		dentry_unlock(op->rename.tmp);
 		dput(op->rename.tmp);
@@ -2177,10 +2194,15 @@ static int afs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		 * and becomes the new target.
 		 */
 		if (d_is_positive(new_dentry) && !d_is_dir(new_dentry)) {
-			/* To prevent any new references to the target during
-			 * the rename, we set d_fsdata which afs_d_revalidate will wait for.
-			 * d_lock ensures d_count() and ->d_fsdata are consistent.
+
+			/*
+			 * To prevent any new references to the target
+			 * during the rename, we set DCACHE_BLOCKED
+			 * which afs_d_revalidate will wait for.  d_lock
+			 * ensures d_count() and DCACHE_BLOCKED are
+			 * consistent.
 			 */
+
 			spin_lock(&new_dentry->d_lock);
 			if (d_count(new_dentry) > 2) {
 				spin_unlock(&new_dentry->d_lock);
@@ -2206,7 +2228,7 @@ static int afs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 			} else {
 				/* Block any lookups to target until the rename completes */
 				write_seqcount_invalidate(&new_dentry->d_seq);
-				new_dentry->d_fsdata = AFS_FSDATA_BLOCKED;
+				new_dentry->d_flags |= DCACHE_BLOCKED;
 				op->rename.unblock = new_dentry;
 				spin_unlock(&new_dentry->d_lock);
 			}
@@ -2223,7 +2245,7 @@ static int afs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 	 */
 	spin_lock(&old_dentry->d_lock);
 	write_seqcount_invalidate(&old_dentry->d_seq);
-	old_dentry->d_fsdata = AFS_FSDATA_BLOCKED;
+	old_dentry->d_flags |= DCACHE_BLOCKED;
 	spin_unlock(&old_dentry->d_lock);
 
 	ret = afs_do_sync_operation(op);
