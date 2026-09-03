@@ -42,6 +42,13 @@ static inline unsigned long cifs_get_time(struct dentry *dentry)
 	return dentry->d_time;
 }
 
+/* This is set to block d_revalidate on a file dentry that is being
+ * removed - the target of unlink or rename.  This causes any open
+ * attempt to block.  There may be existing opens but they can be
+ * detected by checking d_count() under ->d_lock.
+ */
+#define DCACHE_BLOCKED DCACHE_PRIVATE
+
 extern struct file_system_type cifs_fs_type, smb3_fs_type;
 extern const struct address_space_operations cifs_addr_ops;
 extern const struct address_space_operations cifs_addr_ops_smallbuf;
