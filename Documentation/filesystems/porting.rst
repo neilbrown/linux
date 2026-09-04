@@ -1462,3 +1462,13 @@ than inode_lock() on the inode.  This both locks the inode and waits for
 any child dentrys which are locked, to be unlocked.  rmdir_unlock() is
 then called after %S_DEAD has been set, or after it has been decided not
 to set it.
+
+---
+
+**mandatory**
+
+d_time and d_fsdata cannot both be used at the same time as they are
+now in a union.
+
+d_version also in the union is always 64bits and might sometimes be
+more useful than d_time.

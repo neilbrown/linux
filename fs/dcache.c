@@ -1705,7 +1705,7 @@ static void __d_init(struct dentry *dentry, struct super_block *sb)
 	dentry->d_sb = sb;
 	dentry->d_op = sb->__s_d_op;
 	dentry->d_flags = sb->s_d_flags;
-	dentry->d_fsdata = NULL;
+	dentry->d_version = 0; // also d_time and d_fsdata
 	INIT_HLIST_NULLS_NODE(&dentry->d_hash);
 	INIT_LIST_HEAD(&dentry->d_lru);
 	INIT_HLIST_HEAD(&dentry->d_children);

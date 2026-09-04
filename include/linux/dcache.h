@@ -109,8 +109,11 @@ struct dentry {
 	/* Ref lookup also touches following */
 	const struct dentry_operations *d_op;
 	struct super_block *d_sb;	/* The root of the dentry tree */
-	unsigned long d_time;		/* used by d_revalidate */
-	void *d_fsdata;			/* fs-specific data */
+	union {
+		unsigned long d_time;		/* used by d_revalidate */
+		u64 d_version;			/* like d_time but more precise */
+		void *d_fsdata;			/* fs-specific data */
+	};
 	/* --- cacheline 2 boundary (128 bytes) --- */
 	struct lockref d_lockref;	/* per-dentry lock and refcount
 					 * keep separate from RCU lookup area if
