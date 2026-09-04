@@ -1430,7 +1430,8 @@ static bool nfs_test_verifier_delegated(unsigned long verf)
 
 static bool nfs_verifier_is_delegated(struct dentry *dentry)
 {
-	return nfs_test_verifier_delegated(dentry->d_time);
+	return !(dentry->d_flags & DCACHE_NFSFS_RENAMED) &&
+		nfs_test_verifier_delegated(dentry->d_time);
 }
 
 static void nfs_set_verifier_locked(struct dentry *dentry, unsigned long verf)
@@ -1438,6 +1439,9 @@ static void nfs_set_verifier_locked(struct dentry *dentry, unsigned long verf)
 	struct inode *inode = d_inode(dentry);
 	struct inode *dir = d_inode_rcu(dentry->d_parent);
 
+	if (dentry->d_flags & DCACHE_NFSFS_RENAMED)
+		/* d_time not available */
+		return;
 	if (!dir || !nfs_verify_change_attribute(dir, verf))
 		return;
 	if (NFS_PROTO(dir)->have_delegation(dir, FMODE_READ, 0) ||
@@ -1475,7 +1479,7 @@ static void nfs_clear_verifier_file(struct inode *inode)
 	for_each_alias(alias, inode) {
 		spin_lock(&alias->d_lock);
 		dir = d_inode_rcu(alias->d_parent);
-		if (!dir ||
+		if (!dir || (alias->d_flags & DCACHE_NFSFS_RENAMED) ||
 		    !NFS_PROTO(dir)->have_delegation(dir, FMODE_READ, 0))
 			nfs_unset_verifier_delegated(&alias->d_time);
 		spin_unlock(&alias->d_lock);
@@ -1494,11 +1498,14 @@ static void nfs_clear_verifier_directory(struct inode *dir)
 		return;
 
 	spin_lock(&this_parent->d_lock);
-	nfs_unset_verifier_delegated(&this_parent->d_time);
+	if (!(this_parent->d_flags & DCACHE_NFSFS_RENAMED))
+		nfs_unset_verifier_delegated(&this_parent->d_time);
 	spin_unlock(&this_parent->d_lock);
 
 	d_for_each_positive_child(dentry, this_parent) {
 		inode = d_inode_rcu(dentry);
+		if (dentry->d_flags & DCACHE_NFSFS_RENAMED)
+			continue;
 		if (inode &&
 		    NFS_PROTO(inode)->have_delegation(inode, FMODE_READ, 0))
 			continue;
@@ -1533,6 +1540,8 @@ EXPORT_SYMBOL_GPL(nfs_clear_verifier_delegated);
 
 static int nfs_dentry_verify_change(struct inode *dir, struct dentry *dentry)
 {
+	if (dentry->d_flags & DCACHE_NFSFS_RENAMED)
+		return 0;
 	if (nfs_server_capable(dir, NFS_CAP_CASE_INSENSITIVE) &&
 	    d_really_is_negative(dentry))
 		return dentry->d_time == inode_peek_iversion_raw(dir);
