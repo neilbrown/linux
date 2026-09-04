@@ -294,11 +294,6 @@ int afs_silly_iput(struct dentry *dentry, struct inode *inode)
 		return ret;
 	}
 
-	/* "alias" is never hashed so d_time doesn't really matter,
-	 * but safest to initialise it anyway
-	 */
-	alias->d_time = 0;
-
 	/* Stop lock-release from complaining. */
 	spin_lock(&vnode->lock);
 	vnode->lock_state = AFS_VNODE_LOCK_DELETED;

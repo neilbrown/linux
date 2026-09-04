@@ -49,7 +49,7 @@ static int afs_dir_writepages(struct address_space *mapping,
 
 /*
  * This is set to stop d_revalidate looking at, and possibly changing,
- * ->d_time on a dentry which is being moved between directories, and to
+ * ->d_version on a dentry which is being moved between directories, and to
  * block lookup for dentry that is being removed without silly-rename.
  */
 #define DCACHE_BLOCKED DCACHE_PRIVATE
@@ -811,7 +811,7 @@ static struct inode *afs_do_lookup(struct inode *dir, struct dentry *dentry)
 		afs_dir_iterate(dir, &cookie->ctx, NULL, &data_version);
 	}
 
-	dentry->d_time = (unsigned long)data_version;
+	dentry->d_version = data_version;
 
 	/* Check to see if we already have an inode for the primary fid. */
 	inode = ilookup5(dir->i_sb, cookie->fids[1].vnode,
@@ -898,9 +898,9 @@ out_op:
 	}
 
 	if (op->file[0].scb.have_status)
-		dentry->d_time = (unsigned long)op->file[0].scb.status.data_version;
+		dentry->d_version = op->file[0].scb.status.data_version;
 	else
-		dentry->d_time = (unsigned long)op->file[0].dv_before;
+		dentry->d_version = op->file[0].dv_before;
 	ret = afs_put_operation(op);
 out:
 	kfree(cookie);
@@ -1024,7 +1024,7 @@ struct dentry *afs_lookup(struct inode *dir, struct dentry *dentry,
 	_debug("splice %p", dentry->d_inode);
 	d = d_splice_alias(inode, dentry);
 	if (!IS_ERR_OR_NULL(d)) {
-		d->d_time = dentry->d_time;
+		d->d_version = dentry->d_version;
 		trace_afs_lookup(dvnode, &d->d_name, &fid);
 	} else {
 		trace_afs_lookup(dvnode, &dentry->d_name, &fid);
@@ -1038,7 +1038,7 @@ struct dentry *afs_lookup(struct inode *dir, struct dentry *dentry,
  */
 static int afs_d_revalidate_rcu(struct afs_vnode *dvnode, struct dentry *dentry)
 {
-	long dir_version, de_version;
+	s64 dir_version, de_version;
 
 	_enter("%p", dentry);
 
@@ -1057,8 +1057,8 @@ static int afs_d_revalidate_rcu(struct afs_vnode *dvnode, struct dentry *dentry)
 	 * on a 32-bit system, we only have 32 bits in the dentry to store the
 	 * version.
 	 */
-	dir_version = (long)READ_ONCE(dvnode->status.data_version);
-	de_version = (long)READ_ONCE(dentry->d_time);
+	dir_version = (s64)READ_ONCE(dvnode->status.data_version);
+	de_version = (s64)READ_ONCE(dentry->d_version);
 	if (de_version != dir_version) {
 		dir_version = (long)READ_ONCE(dvnode->invalid_before);
 		if (de_version - dir_version < 0)
@@ -1081,7 +1081,7 @@ static int afs_d_revalidate(struct inode *parent_dir, const struct qstr *name,
 	struct inode *inode;
 	struct key *key;
 	afs_dataversion_t dir_version, invalid_before;
-	long de_version;
+	s64 de_version;
 	int ret;
 
 	if (flags & LOOKUP_RCU)
@@ -1122,12 +1122,12 @@ wait_for_rename:
 	 * version.
 	 */
 	dir_version = dir->status.data_version;
-	de_version = (long)dentry->d_time;
-	if (de_version == (long)dir_version)
+	de_version = (s64)dentry->d_version;
+	if (de_version == (s64)dir_version)
 		goto out_valid_noupdate;
 
 	invalid_before = dir->invalid_before;
-	if (de_version - (long)invalid_before >= 0)
+	if (de_version - (s64)invalid_before >= 0)
 		goto out_valid;
 
 	_debug("dir modified");
@@ -1188,7 +1188,7 @@ out_valid:
 		spin_unlock(&dentry->d_lock);
 		goto wait_for_rename;
 	}
-	dentry->d_time = (unsigned long)dir_version;
+	dentry->d_version = dir_version;
 	spin_unlock(&dentry->d_lock);
 out_valid_noupdate:
 	key_put(key);
@@ -1976,7 +1976,7 @@ static void afs_rename_edit_dir(struct afs_operation *op)
 		spin_unlock(&new_inode->i_lock);
 	}
 
-	/* Now we can update d_time on the dentries to reflect their
+	/* Now we can update d_version on the dentries to reflect their
 	 * new parent's data_version.
 	 */
 	afs_update_dentry_version(op, new_dvp, op->dentry);
@@ -2040,7 +2040,7 @@ static void afs_rename_exchange_edit_dir(struct afs_operation *op)
 			afs_edit_dir_update(new_vnode, &dotdot_name, orig_dvnode,
 					    afs_edit_dir_for_rename_sub);
 
-		/* Now we can update d_time on the dentries to reflect their
+		/* Now we can update d_version on the dentries to reflect their
 		 * new parents' data_version.
 		 */
 		afs_update_dentry_version(op, new_dvp, old_dentry);
@@ -2212,8 +2212,6 @@ static int afs_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 					afs_op_nomem(op);
 					goto error;
 				}
-				/* d_alloc doesn't initialise d_time */
-				op->rename.tmp->d_time = 0;
 
 				ret = afs_sillyrename(new_dvnode,
 						      AFS_FS_I(d_inode(new_dentry)),
